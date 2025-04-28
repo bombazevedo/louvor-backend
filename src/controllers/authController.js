@@ -1,96 +1,73 @@
-const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-// Registrar um novo usuário
+const JWT_SECRET = process.env.JWT_SECRET || 'seusegredotop';
+
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, role, functions } = req.body;
-    
-    // Verificar se o usuário já existe
-    let user = await User.findOne({ email });
-    if (user) {
-      return res.status(400).json({ message: 'Usuário já existe' });
+    const { name, email, password, role } = req.body;
+
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ message: 'Preencha todos os campos.' });
     }
-    
-    // Criar novo usuário
-    user = new User({
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Email já registrado.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = new User({
       name,
       email,
-      password,
-      role: role || 'membro',
-      functions: functions || []
+      password: hashedPassword,
+      role
     });
-    
-    // Salvar usuário
+
     await user.save();
-    
-    // Gerar token
-    const token = user.generateAuthToken();
-    
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        functions: user.functions
-      }
-    });
+
+    res.status(201).json({ message: 'Usuário registrado com sucesso!' });
   } catch (error) {
-    console.error('Erro ao registrar usuário:', error);
-    res.status(500).json({ message: 'Erro ao registrar usuário', error: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Erro no servidor.' });
   }
 };
 
-// Login de usuário
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    
-    // Verificar se o usuário existe
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Preencha todos os campos.' });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: 'Credenciais inválidas' });
+      return res.status(400).json({ message: 'Usuário não encontrado.' });
     }
-    
-    // Verificar senha
-    const isMatch = await user.comparePassword(password);
+
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Credenciais inválidas' });
+      return res.status(400).json({ message: 'Senha incorreta.' });
     }
-    
-    // Gerar token
-    const token = user.generateAuthToken();
-    
+
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, {
+      expiresIn: '7d',
+    });
+
     res.json({
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
-        functions: user.functions
+        role: user.role
       }
     });
   } catch (error) {
-    console.error('Erro ao fazer login:', error);
-    res.status(500).json({ message: 'Erro ao fazer login', error: error.message });
-  }
-};
-
-// Obter usuário atual
-exports.getCurrentUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) {
-      return res.status(404).json({ message: 'Usuário não encontrado' });
-    }
-    
-    res.json(user);
-  } catch (error) {
-    console.error('Erro ao obter usuário atual:', error);
-    res.status(500).json({ message: 'Erro ao obter usuário atual', error: error.message });
+    console.error(error);
+    res.status(500).json({ message: 'Erro no servidor.' });
   }
 };
