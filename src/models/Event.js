@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const EventSchema = new mongoose.Schema({
@@ -19,7 +20,6 @@ const EventSchema = new mongoose.Schema({
   },
   location: {
     type: String,
-    required: true,
     trim: true
   },
   type: {
@@ -29,8 +29,7 @@ const EventSchema = new mongoose.Schema({
   },
   leader: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
   status: {
     type: String,
@@ -43,9 +42,16 @@ const EventSchema = new mongoose.Schema({
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
+  minister: {
+    type: String,
+    trim: true
+  },
+  escala: [{
+    type: String,
+    trim: true
+  }],
   createdAt: {
     type: Date,
     default: Date.now
