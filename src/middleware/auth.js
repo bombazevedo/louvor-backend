@@ -1,9 +1,8 @@
-
 const jwt = require('jsonwebtoken');
 
-exports.auth = (req, res, next) => {
+// Middleware de autenticação JWT
+function authMiddleware(req, res, next) {
   const token = req.header('Authorization');
-
   if (!token) {
     return res.status(401).json({ message: 'Acesso negado. Token ausente.' });
   }
@@ -13,6 +12,8 @@ exports.auth = (req, res, next) => {
     req.user = decoded.user;
     next();
   } catch (err) {
-    res.status(401).json({ message: 'Token inválido.' });
+    return res.status(401).json({ message: 'Token inválido.' });
   }
-};
+}
+
+module.exports = authMiddleware;

@@ -1,4 +1,3 @@
-
 const Event = require("../models/Event");
 const User = require("../models/User");
 const Scale = require("../models/Scale");
@@ -14,7 +13,7 @@ const checkEventReadPermission = async (eventId, userId, userRole) => {
   if (userRole === "DM" && event.leader.toString() === userId) return true;
 
   const scale = await Scale.findOne({ event: eventId }).select("members.userId");
-  if (scale && scale.members.some((member) => member.userId.toString() === userId)) return true;
+  if (scale && scale.members.some(member => member.userId.toString() === userId)) return true;
 
   return false;
 };
@@ -64,7 +63,7 @@ const createEvent = async (req, res) => {
       leader: finalLeader,
       status,
       notes,
-      createdBy,
+      createdBy
     });
 
     const savedEvent = await newEvent.save();
@@ -131,7 +130,7 @@ const updateEvent = async (req, res) => {
     const hasPermission = await checkEventWritePermission(eventId, userId, userRole);
     if (!hasPermission) {
       const exists = await Event.findById(eventId).select("_id");
-      if (!exists) return res.status(404).json({ message: "Evento não encontrado." });
+      if (!exists) return res.status(404).json({ message: "Evento não encontrado para atualização." });
       return res.status(403).json({ message: "Sem permissão para atualizar este evento." });
     }
 
