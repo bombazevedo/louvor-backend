@@ -22,6 +22,10 @@ exports.importXLS = async (req, res) => {
 
       if (!dateCell) continue;
 
+      const parsedDate = typeof dateCell === 'number'
+        ? new Date((dateCell - 25569) * 86400 * 1000)
+        : new Date(dateCell);
+
       const members = [];
       for (let row = 4; row < data.length; row++) {
         const name = data[row]?.[col];
@@ -30,7 +34,7 @@ exports.importXLS = async (req, res) => {
 
       const evento = new Event({
         title: `Culto ${weekdayCell || 'sem dia'}`,
-        date: new Date(dateCell),
+        date: parsedDate,
         escala: members,
         minister,
         createdFromImport: true,
