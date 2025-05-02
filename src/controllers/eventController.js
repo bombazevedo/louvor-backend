@@ -1,3 +1,4 @@
+
 const Event = require("../models/Event");
 const User = require("../models/User");
 const Scale = require("../models/Scale");
@@ -29,7 +30,7 @@ const checkEventWritePermission = async (eventId, userId, userRole) => {
   return false;
 };
 
-exports.createEvent = async (req, res) => {
+const createEvent = async (req, res) => {
   try {
     const { title, description, date, endDate, location, type, leader, status, notes } = req.body;
     const createdBy = req.user.id;
@@ -54,36 +55,45 @@ exports.createEvent = async (req, res) => {
     }
 
     const newEvent = new Event({
-      title, description, date, endDate, location, type,
-      leader: finalLeader, status, notes, createdBy
+      title,
+      description,
+      date,
+      endDate,
+      location,
+      type,
+      leader: finalLeader,
+      status,
+      notes,
+      createdBy,
     });
 
     const savedEvent = await newEvent.save();
     const populatedEvent = await Event.findById(savedEvent._id)
-      .populate('leader', 'name')
-      .populate('createdBy', 'name');
+      .populate("leader", "name")
+      .populate("createdBy", "name");
 
     res.status(201).json(populatedEvent);
   } catch (error) {
-    console.error('Erro ao criar evento:', error);
-    res.status(500).json({ message: 'Erro interno ao criar evento.' });
+    console.error("Erro ao criar evento:", error);
+    res.status(500).json({ message: "Erro interno ao criar evento." });
   }
 };
 
-exports.getAllEvents = async (req, res) => {
+const getAllEvents = async (req, res) => {
   try {
     const events = await Event.find()
-      .populate('leader', 'name')
-      .populate('createdBy', 'name')
+      .populate("leader", "name")
+      .populate("createdBy", "name")
       .sort({ date: 1 });
+
     res.status(200).json(events);
   } catch (error) {
-    console.error('Erro ao buscar eventos:', error);
-    res.status(500).json({ message: 'Erro interno ao buscar eventos.' });
+    console.error("Erro ao buscar eventos:", error);
+    res.status(500).json({ message: "Erro interno ao buscar eventos." });
   }
 };
 
-exports.getEventById = async (req, res) => {
+const getEventById = async (req, res) => {
   try {
     const eventId = req.params.id;
     const userId = req.user.id;
@@ -91,28 +101,28 @@ exports.getEventById = async (req, res) => {
 
     const hasPermission = await checkEventReadPermission(eventId, userId, userRole);
     if (!hasPermission) {
-      const exists = await Event.findById(eventId).select('_id');
-      if (!exists) return res.status(404).json({ message: 'Evento não encontrado.' });
-      return res.status(403).json({ message: 'Sem permissão para acessar este evento.' });
+      const exists = await Event.findById(eventId).select("_id");
+      if (!exists) return res.status(404).json({ message: "Evento não encontrado." });
+      return res.status(403).json({ message: "Sem permissão para acessar este evento." });
     }
 
     const event = await Event.findById(eventId)
-      .populate('leader', 'name email')
-      .populate('createdBy', 'name email');
+      .populate("leader", "name email")
+      .populate("createdBy", "name email");
 
-    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
+    if (!event) return res.status(404).json({ message: "Evento não encontrado." });
 
     res.status(200).json(event);
   } catch (error) {
-    console.error('Erro ao buscar evento por ID:', error);
-    if (error.kind === 'ObjectId') {
-      return res.status(400).json({ message: 'ID inválido.' });
+    console.error("Erro ao buscar evento por ID:", error);
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({ message: "ID inválido." });
     }
-    res.status(500).json({ message: 'Erro interno ao buscar evento.' });
+    res.status(500).json({ message: "Erro interno ao buscar evento." });
   }
 };
 
-exports.updateEvent = async (req, res) => {
+const updateEvent = async (req, res) => {
   try {
     const eventId = req.params.id;
     const userId = req.user.id;
@@ -120,16 +130,16 @@ exports.updateEvent = async (req, res) => {
 
     const hasPermission = await checkEventWritePermission(eventId, userId, userRole);
     if (!hasPermission) {
-      const exists = await Event.findById(eventId).select('_id');
-      if (!exists) return res.status(404).json({ message: 'Evento não encontrado.' });
-      return res.status(403).json({ message: 'Sem permissão para atualizar este evento.' });
+      const exists = await Event.findById(eventId).select("_id");
+      if (!exists) return res.status(404).json({ message: "Evento não encontrado." });
+      return res.status(403).json({ message: "Sem permissão para atualizar este evento." });
     }
 
     const updateData = { ...req.body };
     delete updateData.createdBy;
 
-    if (userRole !== 'Coordenador' && updateData.leader && updateData.leader !== userId) {
-      return res.status(403).json({ message: 'DMs só podem se definir como líderes.' });
+    if (userRole !== "Coordenador" && updateData.leader && updateData.leader !== userId) {
+      return res.status(403).json({ message: "DMs só podem se definir como líderes." });
     }
 
     updateData.updatedAt = Date.now();
@@ -138,23 +148,25 @@ exports.updateEvent = async (req, res) => {
       eventId,
       { $set: updateData },
       { new: true, runValidators: true }
-    ).populate('leader', 'name').populate('createdBy', 'name');
+    )
+      .populate("leader", "name")
+      .populate("createdBy", "name");
 
     if (!updatedEvent) {
-      return res.status(404).json({ message: 'Evento não encontrado para atualização.' });
+      return res.status(404).json({ message: "Evento não encontrado para atualização." });
     }
 
     res.status(200).json(updatedEvent);
   } catch (error) {
-    console.error('Erro ao atualizar evento:', error);
-    if (error.kind === 'ObjectId') {
-      return res.status(400).json({ message: 'ID inválido.' });
+    console.error("Erro ao atualizar evento:", error);
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({ message: "ID inválido." });
     }
-    res.status(500).json({ message: 'Erro interno ao atualizar evento.' });
+    res.status(500).json({ message: "Erro interno ao atualizar evento." });
   }
 };
 
-exports.deleteEvent = async (req, res) => {
+const deleteEvent = async (req, res) => {
   try {
     const eventId = req.params.id;
     const userId = req.user.id;
@@ -162,24 +174,32 @@ exports.deleteEvent = async (req, res) => {
 
     const hasPermission = await checkEventWritePermission(eventId, userId, userRole);
     if (!hasPermission) {
-      const exists = await Event.findById(eventId).select('_id');
-      if (!exists) return res.status(404).json({ message: 'Evento não encontrado.' });
-      return res.status(403).json({ message: 'Sem permissão para excluir este evento.' });
+      const exists = await Event.findById(eventId).select("_id");
+      if (!exists) return res.status(404).json({ message: "Evento não encontrado." });
+      return res.status(403).json({ message: "Sem permissão para excluir este evento." });
     }
 
     const deletedEvent = await Event.findByIdAndDelete(eventId);
-    if (!deletedEvent) return res.status(404).json({ message: 'Evento não encontrado.' });
+    if (!deletedEvent) return res.status(404).json({ message: "Evento não encontrado." });
 
     await Scale.deleteOne({ event: eventId });
     await Repertoire.deleteOne({ event: eventId });
     await Chat.deleteMany({ event: eventId });
 
-    res.status(200).json({ message: 'Evento e dados associados excluídos com sucesso.' });
+    res.status(200).json({ message: "Evento e dados associados excluídos com sucesso." });
   } catch (error) {
-    console.error('Erro ao excluir evento:', error);
-    if (error.kind === 'ObjectId') {
-      return res.status(400).json({ message: 'ID inválido.' });
+    console.error("Erro ao excluir evento:", error);
+    if (error.kind === "ObjectId") {
+      return res.status(400).json({ message: "ID inválido." });
     }
-    res.status(500).json({ message: 'Erro interno ao excluir evento.' });
+    res.status(500).json({ message: "Erro interno ao excluir evento." });
   }
+};
+
+module.exports = {
+  createEvent,
+  getAllEvents,
+  getEventById,
+  updateEvent,
+  deleteEvent,
 };
