@@ -44,3 +44,4 @@ mongoose.connect(process.env.MONGODB_URI, {
   app.listen(PORT, () => console.log(`🚀 Servidor ouvindo em http://localhost:${PORT}`));
 })
 .catch((err) => console.error('❌ Erro ao conectar ao MongoDB:', err.message));
+ECHO est� ativado.
