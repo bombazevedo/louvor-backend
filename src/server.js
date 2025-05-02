@@ -1,47 +1,37 @@
-// src/server.js atualizado completo
-
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 
-// Importar Rotas
-const songRoutes = require('./routes/songRoutes');
-const authRoutes = require('./routes/authRoutes'); // <-- Novo
-
+// Carregar variáveis de ambiente
 dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middlewares
+// Middlewares globais
 app.use(cors());
 app.use(express.json());
 
+// Importação de rotas
+const authRoutes = require('./routes/authRoutes');
+const songRoutes = require('./routes/songRoutes');
+const eventRoutes = require('./routes/eventRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const scaleRoutes = require('./routes/scaleRoutes');
+const repertoireRoutes = require('./routes/repertoireRoutes');
+
 // Rotas principais
-app.use('/auth', authRoutes); // <-- Novo
+app.use('/api/auth', authRoutes);
 app.use('/api/songs', songRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/scales', scaleRoutes);
+app.use('/api/repertoires', repertoireRoutes);
 
-// Mock de eventos
-const events = [
-  { id: '1', title: 'Culto de Louvor', date: '2024-05-01', location: 'Igreja Central' },
-  { id: '2', title: 'Ensaio', date: '2024-05-05', location: 'Salão B' }
-];
-
+// Teste de rota raiz
 app.get('/', (req, res) => {
-  res.send('Servidor rodando! ✅');
-});
-
-app.get('/api/events', (req, res) => {
-  res.status(200).json(events);
-});
-
-app.get('/api/events/:id', (req, res) => {
-  const event = events.find(e => e.id === req.params.id);
-  if (event) {
-    res.json(event);
-  } else {
-    res.status(404).json({ message: 'Evento não encontrado' });
-  }
+  res.send('🎵 Servidor de Louvor Rodando com Sucesso!');
 });
 
 // Conexão MongoDB
@@ -50,7 +40,7 @@ mongoose.connect(process.env.MONGODB_URI, {
   useUnifiedTopology: true
 })
 .then(() => {
-  console.log('✅ Connected to MongoDB Atlas');
-  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+  console.log('✅ Conectado ao MongoDB Atlas');
+  app.listen(PORT, () => console.log(`🚀 Servidor ouvindo em http://localhost:${PORT}`));
 })
-.catch((err) => console.error('❌ MongoDB connection error:', err.message));
+.catch((err) => console.error('❌ Erro ao conectar ao MongoDB:', err.message));

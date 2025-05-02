@@ -1,42 +1,33 @@
 const jwt = require('jsonwebtoken');
-const config = require('../config');
+const User = require('../models/User');
 
-// Middleware para verificar token de autenticação
-const auth = (req, res, next) => {
-  // Obter token do cabeçalho
-  const token = req.header('x-auth-token');
-  
-  // Verificar se o token existe
-  if (!token) {
-    return res.status(401).json({ message: 'Acesso negado. Token não fornecido.' });
+module.exports = async function (req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Token não fornecido.' });
   }
-  
+
+  const token = authHeader.split(' ')[1];
+
   try {
-    // Verificar token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Adicionar usuário ao objeto de requisição
-    req.user = decoded;
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      return res.status(401).json({ message: 'Usuário não encontrado.' });
+    }
+
+    req.user = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role
+    };
+
     next();
-  } catch (error) {
-    res.status(401).json({ message: 'Token inválido.' });
+  } catch (err) {
+    console.error('[authMiddleware] Erro ao verificar token:', err);
+    return res.status(401).json({ message: 'Token inválido ou expirado.' });
   }
 };
-
-// Middleware para verificar permissões de admin
-const admin = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Acesso negado. Permissão de administrador necessária.' });
-  }
-  next();
-};
-
-// Middleware para verificar permissões de líder ou admin
-const leader = (req, res, next) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'líder') {
-    return res.status(403).json({ message: 'Acesso negado. Permissão de líder necessária.' });
-  }
-  next();
-};
-
-module.exports = { auth, admin, leader };
