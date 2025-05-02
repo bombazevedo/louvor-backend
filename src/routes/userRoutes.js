@@ -1,8 +1,6 @@
-
-// Ajuste para forçar redeploy com conteúdo completo
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const auth = require('../middleware/auth');
 const User = require('../models/User');
 
 // @route   GET api/users
@@ -57,7 +55,6 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     const { name, email, phone, instruments, roles } = req.body;
-
     const userFields = {};
     if (name) userFields.name = name;
     if (email) userFields.email = email;
@@ -66,7 +63,6 @@ router.put('/:id', auth, async (req, res) => {
     if (roles) userFields.roles = roles;
 
     let user = await User.findById(req.params.id);
-
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
@@ -94,13 +90,11 @@ router.delete('/:id', auth, async (req, res) => {
     }
 
     const user = await User.findById(req.params.id);
-
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
     await User.findByIdAndRemove(req.params.id);
-
     res.json({ message: 'Usuário removido' });
   } catch (err) {
     console.error(err.message);
