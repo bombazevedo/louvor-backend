@@ -1,4 +1,5 @@
-// Ajuste para forçar redeploy
+
+// Ajuste para forçar redeploy com conteúdo completo
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
