@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -21,7 +21,7 @@ exports.loginUser = async (req, res) => {
 exports.registerUser = async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
-    let user = await User.findOne({ email });
+    let user = await User.findOne({ email: email.toLowerCase().trim() });
     if (user) return res.status(400).json({ message: 'Email já cadastrado' });
 
     const hashed = await bcrypt.hash(password, 10);
