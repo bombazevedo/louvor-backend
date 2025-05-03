@@ -1,4 +1,4 @@
-
+// backend/controllers/importController.js
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
@@ -22,9 +22,17 @@ exports.importXLS = async (req, res) => {
 
       if (!dateCell) continue;
 
-      const parsedDate = typeof dateCell === 'number'
-        ? new Date((dateCell - 25569) * 86400 * 1000)
-        : new Date(dateCell);
+      let parsedDate;
+      if (typeof dateCell === 'number') {
+        parsedDate = new Date(Math.round((dateCell - 25569) * 86400 * 1000));
+      } else {
+        parsedDate = new Date(dateCell);
+      }
+
+      if (isNaN(parsedDate.getTime())) {
+        console.warn(`⚠️ Data inválida ignorada: ${dateCell}`);
+        continue;
+      }
 
       const members = [];
       for (let row = 4; row < data.length; row++) {
@@ -38,20 +46,22 @@ exports.importXLS = async (req, res) => {
         escala: members,
         minister,
         createdFromImport: true,
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
 
       await evento.save();
       eventosCriados.push(evento);
     }
 
-    fs.unlinkSync(filePath); // remover arquivo temp
+    fs.unlinkSync(filePath);
 
     res.status(201).json({
       message: 'Importação concluída',
-      eventos: eventosCriados,
+      eventos: eventosCriados
     });
   } catch (error) {
-    console.error('Erro na importação XLS:', error);
+    console.error('❌ Erro na importação XLS:', error);
     res.status(500).json({ message: 'Erro ao processar planilha' });
   }
 };
