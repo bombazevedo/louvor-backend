@@ -202,3 +202,14 @@ module.exports = {
   updateEvent,
   deleteEvent,
 };
+
+
+exports.getAllEvents = async (req, res) => {
+  try {
+    const events = await Event.find().sort({ date: 1 });
+    res.status(200).json(events);
+  } catch (err) {
+    console.error('Erro ao buscar eventos:', err);
+    res.status(500).json({ message: 'Erro ao buscar eventos' });
+  }
+};
