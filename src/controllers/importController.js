@@ -11,56 +11,37 @@ exports.importXLS = async (req, res) => {
     const filePath = path.resolve(req.file.path);
     const workbook = xlsx.readFile(filePath);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+    const rawData = xlsx.utils.sheet_to_json(sheet);
+
+    const groupedEvents = {};
+
+    rawData.forEach((row) => {
+      const { nome, email, funcao, data, evento } = row;
+      if (!nome || !funcao || !data) return;
+
+      const eventKey = `${evento}-${data}`;
+      if (!groupedEvents[eventKey]) {
+        groupedEvents[eventKey] = {
+          title: evento || `Culto ${data}`,
+          date: new Date(data),
+          type: 'culto',
+          status: 'agendado',
+          minister: '',
+          escala: [],
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+      }
+
+      groupedEvents[eventKey].escala.push(nome);
+    });
 
     const eventosCriados = [];
 
-    for (let col = 2; col < data[1].length; col++) {
-      const dateCell = data[1][col];
-      const weekdayCell = data[2]?.[col];
-      const ministerCandidate = data[3]?.[col];
-
-      if (!dateCell) continue;
-
-      let parsedDate;
-      if (typeof dateCell === 'number') {
-        parsedDate = new Date(Math.round((dateCell - 25569) * 86400 * 1000));
-      } else {
-        parsedDate = new Date(dateCell);
-      }
-
-      if (isNaN(parsedDate.getTime())) {
-        console.warn(`⚠️ Data inválida ignorada: ${dateCell}`);
-        continue;
-      }
-
-      // Definir ministro apenas se for uma string válida
-      const minister = typeof ministerCandidate === 'string' && isNaN(Date.parse(ministerCandidate))
-        ? ministerCandidate
-        : '';
-
-      const members = [];
-      for (let row = 4; row < data.length; row++) {
-        const name = data[row]?.[col];
-        if (name && typeof name === 'string' && isNaN(Date.parse(name))) {
-          members.push(name);
-        }
-      }
-
-      const evento = new Event({
-        title: `Culto ${weekdayCell || 'sem dia'}`,
-        date: parsedDate,
-        escala: members,
-        minister,
-        createdFromImport: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        status: 'agendado',
-        type: 'culto'
-      });
-
-      await evento.save();
-      eventosCriados.push(evento);
+    for (const key in groupedEvents) {
+      const event = new Event(groupedEvents[key]);
+      await event.save();
+      eventosCriados.push(event);
     }
 
     fs.unlinkSync(filePath);
