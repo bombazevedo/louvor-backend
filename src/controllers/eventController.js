@@ -1,3 +1,4 @@
+// backend/controllers/eventController.js
 const Event = require("../models/Event");
 const User = require("../models/User");
 const Scale = require("../models/Scale");
@@ -13,8 +14,8 @@ const checkEventReadPermission = async (eventId, userId, userRole) => {
 
   if (role === "dm" && event.leader.toString() === userId) return true;
 
-  const scale = await Scale.findOne({ event: eventId }).select("members.userId");
-  if (scale && scale.members.some(member => member.userId.toString() === userId)) return true;
+  const scale = await Scale.findOne({ event: eventId }).select("members.user");
+  if (scale && scale.members.some(member => member.user.toString() === userId)) return true;
 
   return false;
 };
@@ -82,10 +83,30 @@ const createEvent = async (req, res) => {
 
 const getAllEvents = async (req, res) => {
   try {
-    const events = await Event.find()
-      .populate("leader", "name")
-      .populate("createdBy", "name")
-      .sort({ date: 1 });
+    const userId = req.user.id;
+    const userRole = req.user.role.toLowerCase();
+
+    let events;
+
+    if (userRole === "coordenador") {
+      events = await Event.find()
+        .populate("leader", "name")
+        .populate("createdBy", "name")
+        .sort({ date: 1 });
+    } else if (userRole === "dm") {
+      events = await Event.find({ leader: userId })
+        .populate("leader", "name")
+        .populate("createdBy", "name")
+        .sort({ date: 1 });
+    } else {
+      const scaleEvents = await Scale.find({ "members.user": userId }).select("event");
+      const eventIds = scaleEvents.map(s => s.event);
+
+      events = await Event.find({ _id: { $in: eventIds } })
+        .populate("leader", "name")
+        .populate("createdBy", "name")
+        .sort({ date: 1 });
+    }
 
     res.status(200).json(events);
   } catch (error) {

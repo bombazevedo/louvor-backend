@@ -1,3 +1,4 @@
+// backend/models/Scale.js
 const mongoose = require('mongoose');
 
 const ScaleSchema = new mongoose.Schema({
@@ -7,7 +8,7 @@ const ScaleSchema = new mongoose.Schema({
     required: true
   },
   members: [{
-    userId: {
+    user: { // renomeado de userId para compatibilidade com controller
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true
@@ -15,7 +16,10 @@ const ScaleSchema = new mongoose.Schema({
     function: {
       type: String,
       required: true,
-      enum: ['vocal', 'guitarra', 'violão', 'baixo', 'bateria', 'teclado', 'piano', 'violino', 'flauta', 'saxofone', 'trompete', 'técnico de som', 'projeção', 'outro']
+      enum: [
+        'vocal', 'guitarra', 'violão', 'baixo', 'bateria', 'teclado', 'piano',
+        'violino', 'flauta', 'saxofone', 'trompete', 'técnico de som', 'projeção', 'outro'
+      ]
     },
     confirmed: {
       type: Boolean,
