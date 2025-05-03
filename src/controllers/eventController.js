@@ -5,12 +5,13 @@ const Repertoire = require("../models/Repertoire");
 const Chat = require("../models/Chat");
 
 const checkEventReadPermission = async (eventId, userId, userRole) => {
-  if (userRole === "Coordenador") return true;
+  const role = userRole.toLowerCase();
+  if (role === "coordenador") return true;
 
   const event = await Event.findById(eventId).select("leader");
   if (!event) return false;
 
-  if (userRole === "DM" && event.leader.toString() === userId) return true;
+  if (role === "dm" && event.leader.toString() === userId) return true;
 
   const scale = await Scale.findOne({ event: eventId }).select("members.userId");
   if (scale && scale.members.some(member => member.userId.toString() === userId)) return true;
@@ -19,12 +20,13 @@ const checkEventReadPermission = async (eventId, userId, userRole) => {
 };
 
 const checkEventWritePermission = async (eventId, userId, userRole) => {
-  if (userRole === "Coordenador") return true;
+  const role = userRole.toLowerCase();
+  if (role === "coordenador") return true;
 
   const event = await Event.findById(eventId).select("leader");
   if (!event) return false;
 
-  if (userRole === "DM" && event.leader.toString() === userId) return true;
+  if (role === "dm" && event.leader.toString() === userId) return true;
 
   return false;
 };
@@ -33,14 +35,14 @@ const createEvent = async (req, res) => {
   try {
     const { title, description, date, endDate, location, type, leader, status, notes } = req.body;
     const createdBy = req.user.id;
-    const userRole = req.user.role;
+    const userRole = req.user.role.toLowerCase();
 
-    if (userRole !== "Coordenador" && userRole !== "DM") {
+    if (userRole !== "coordenador" && userRole !== "dm") {
       return res.status(403).json({ message: "Apenas Coordenadores ou DMs podem criar eventos." });
     }
 
     let finalLeader = leader;
-    if (userRole === "DM" && leader !== createdBy) {
+    if (userRole === "dm" && leader !== createdBy) {
       return res.status(400).json({ message: "DMs só podem criar eventos onde são os líderes." });
     }
 
@@ -137,7 +139,7 @@ const updateEvent = async (req, res) => {
     const updateData = { ...req.body };
     delete updateData.createdBy;
 
-    if (userRole !== "Coordenador" && updateData.leader && updateData.leader !== userId) {
+    if (userRole.toLowerCase() !== "coordenador" && updateData.leader && updateData.leader !== userId) {
       return res.status(403).json({ message: "DMs só podem se definir como líderes." });
     }
 
