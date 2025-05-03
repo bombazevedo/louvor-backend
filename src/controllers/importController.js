@@ -18,7 +18,7 @@ exports.importXLS = async (req, res) => {
     for (let col = 2; col < data[1].length; col++) {
       const dateCell = data[1][col];
       const weekdayCell = data[2]?.[col];
-      const minister = data[3]?.[col];
+      const ministerCandidate = data[3]?.[col];
 
       if (!dateCell) continue;
 
@@ -34,10 +34,17 @@ exports.importXLS = async (req, res) => {
         continue;
       }
 
+      // Definir ministro apenas se for uma string válida
+      const minister = typeof ministerCandidate === 'string' && isNaN(Date.parse(ministerCandidate))
+        ? ministerCandidate
+        : '';
+
       const members = [];
       for (let row = 4; row < data.length; row++) {
         const name = data[row]?.[col];
-        if (name) members.push(name);
+        if (name && typeof name === 'string' && isNaN(Date.parse(name))) {
+          members.push(name);
+        }
       }
 
       const evento = new Event({
@@ -47,7 +54,9 @@ exports.importXLS = async (req, res) => {
         minister,
         createdFromImport: true,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        status: 'agendado',
+        type: 'culto'
       });
 
       await evento.save();
