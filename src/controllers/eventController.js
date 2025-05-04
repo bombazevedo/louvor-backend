@@ -9,11 +9,6 @@ const checkEventReadPermission = async (eventId, userId, userRole) => {
   const role = userRole.toLowerCase();
   if (role === "coordenador") return true;
 
-  const event = await Event.findById(eventId).select("leader");
-  if (!event) return false;
-
-  if (role === "dm" && event.leader.toString() === userId) return true;
-
   const scale = await Scale.findOne({ event: eventId }).select("members.user");
   if (scale && scale.members.some(member => member.user.toString() === userId)) return true;
 
@@ -24,17 +19,15 @@ const checkEventWritePermission = async (eventId, userId, userRole) => {
   const role = userRole.toLowerCase();
   if (role === "coordenador") return true;
 
-  const event = await Event.findById(eventId).select("leader");
-  if (!event) return false;
-
-  if (role === "dm" && event.leader.toString() === userId) return true;
+  const scale = await Scale.findOne({ event: eventId }).select("members.user");
+  if (role === "dm" && scale && scale.members.some(member => member.user.toString() === userId)) return true;
 
   return false;
 };
 
 const createEvent = async (req, res) => {
   try {
-    const { title, description, date, endDate, location, type, leader, status, notes } = req.body;
+    const { title, description, date, endDate, location, type, status, notes } = req.body;
     const createdBy = req.user.id;
     const userRole = req.user.role.toLowerCase();
 
@@ -42,18 +35,8 @@ const createEvent = async (req, res) => {
       return res.status(403).json({ message: "Apenas Coordenadores ou DMs podem criar eventos." });
     }
 
-    let finalLeader = leader;
-    if (userRole === "dm" && leader !== createdBy) {
-      return res.status(400).json({ message: "DMs só podem criar eventos onde são os líderes." });
-    }
-
-    if (!title || !date || !location || !finalLeader) {
+    if (!title || !date || !location) {
       return res.status(400).json({ message: "Campos obrigatórios não fornecidos." });
-    }
-
-    const leaderExists = await User.findById(finalLeader);
-    if (!leaderExists) {
-      return res.status(404).json({ message: "Líder não encontrado." });
     }
 
     const newEvent = new Event({
@@ -63,7 +46,6 @@ const createEvent = async (req, res) => {
       endDate,
       location,
       type,
-      leader: finalLeader,
       status,
       notes,
       createdBy
@@ -71,7 +53,6 @@ const createEvent = async (req, res) => {
 
     const savedEvent = await newEvent.save();
     const populatedEvent = await Event.findById(savedEvent._id)
-      .populate("leader", "name")
       .populate("createdBy", "name");
 
     res.status(201).json(populatedEvent);
@@ -90,12 +71,6 @@ const getAllEvents = async (req, res) => {
 
     if (userRole === "coordenador") {
       events = await Event.find()
-        .populate("leader", "name")
-        .populate("createdBy", "name")
-        .sort({ date: 1 });
-    } else if (userRole === "dm") {
-      events = await Event.find({ leader: userId })
-        .populate("leader", "name")
         .populate("createdBy", "name")
         .sort({ date: 1 });
     } else {
@@ -103,7 +78,6 @@ const getAllEvents = async (req, res) => {
       const eventIds = scaleEvents.map(s => s.event);
 
       events = await Event.find({ _id: { $in: eventIds } })
-        .populate("leader", "name")
         .populate("createdBy", "name")
         .sort({ date: 1 });
     }
@@ -129,7 +103,6 @@ const getEventById = async (req, res) => {
     }
 
     const event = await Event.findById(eventId)
-      .populate("leader", "name email")
       .populate("createdBy", "name email");
 
     if (!event) return res.status(404).json({ message: "Evento não encontrado." });
@@ -160,19 +133,13 @@ const updateEvent = async (req, res) => {
     const updateData = { ...req.body };
     delete updateData.createdBy;
 
-    if (userRole.toLowerCase() !== "coordenador" && updateData.leader && updateData.leader !== userId) {
-      return res.status(403).json({ message: "DMs só podem se definir como líderes." });
-    }
-
     updateData.updatedAt = Date.now();
 
     const updatedEvent = await Event.findByIdAndUpdate(
       eventId,
       { $set: updateData },
       { new: true, runValidators: true }
-    )
-      .populate("leader", "name")
-      .populate("createdBy", "name");
+    ).populate("createdBy", "name");
 
     if (!updatedEvent) {
       return res.status(404).json({ message: "Evento não encontrado para atualização." });
