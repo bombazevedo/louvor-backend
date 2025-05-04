@@ -44,14 +44,6 @@ const EventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  minister: {
-    type: String,
-    trim: true
-  },
-  escala: [{
-    type: String,
-    trim: true
-  }],
   createdAt: {
     type: Date,
     default: Date.now
