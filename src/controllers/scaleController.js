@@ -1,76 +1,57 @@
-// scaleController.js
 const Scale = require("../models/Scale");
 const Event = require("../models/Event");
 const User = require("../models/User");
 
-// --- Funções Auxiliares de Permissão ---
-const checkReadPermission = async (eventId, userId, userRole) => {
-  if (userRole === 'Coordenador') return true;
-  const scale = await Scale.findOne({ event: eventId }).select('members.userId');
-  return scale && scale.members.some(m => m.userId.toString() === userId);
-};
-
-const checkWritePermission = async (eventId, userId, userRole) => {
-  if (userRole === 'Coordenador') return true;
-  const scale = await Scale.findOne({ event: eventId }).select('members.userId');
-  return scale && scale.members.some(m => m.userId.toString() === userId);
-};
-
-// --- Nova Função: Criação de Evento + Escala via Seleção ---
-exports.createFromSelection = async (req, res) => {
+// Criar nova escala
+exports.createScale = async (req, res) => {
   try {
-    const { title, date, type, status, members, notes } = req.body;
+    const { eventId, members, notes } = req.body;
     const createdBy = req.user.id;
+    const userRole = req.user.role;
 
-    if (!title || !date || !members || members.length === 0) {
-      return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
+    if (userRole !== 'coordenador') {
+      return res.status(403).json({ message: "Apenas coordenadores podem criar escalas." });
     }
 
-    const resolvedMembers = [];
-    for (const m of members) {
-      const user = await User.findOne({ email: m.email });
+    if (!eventId || !members || !Array.isArray(members)) {
+      return res.status(400).json({ message: "Dados inválidos. 'eventId' e 'members[]' são obrigatórios." });
+    }
+
+    const validatedMembers = [];
+    for (const item of members) {
+      const user = await User.findById(item.userId);
       if (!user) {
-        console.warn(`Usuário com email ${m.email} não encontrado. Ignorado.`);
-        continue;
+        return res.status(404).json({ message: `Usuário não encontrado: ${item.userId}` });
       }
-      resolvedMembers.push({ userId: user._id, function: m.function });
+
+      validatedMembers.push({
+        userId: user._id,
+        function: item.function,
+        confirmed: false,
+      });
     }
 
-    if (resolvedMembers.length === 0) {
-      return res.status(400).json({ message: 'Nenhum membro válido encontrado na escala.' });
+    const existing = await Scale.findOne({ event: eventId });
+    if (existing) {
+      return res.status(409).json({ message: "Já existe uma escala para este evento." });
     }
 
-    const newEvent = new Event({
-      title,
-      date,
-      type: type || 'culto',
-      status: status || 'agendado',
+    const newScale = new Scale({
+      event: eventId,
+      members: validatedMembers,
       notes,
       createdBy
     });
-    const savedEvent = await newEvent.save();
 
-    const newScale = new Scale({
-      event: savedEvent._id,
-      members: resolvedMembers,
-      createdBy
-    });
-    await newScale.save();
+    const saved = await newScale.save();
+    const result = await Scale.findById(saved._id)
+      .populate("event", "title date")
+      .populate("members.userId", "name email")
+      .populate("createdBy", "name");
 
-    res.status(201).json({
-      message: 'Evento e escala criados com sucesso.',
-      event: savedEvent,
-      scale: newScale
-    });
+    res.status(201).json(result);
   } catch (error) {
-    console.error("Erro ao criar evento/escala via selecao:", error);
-    res.status(500).json({ message: "Erro interno ao criar evento e escala." });
+    console.error("Erro ao criar escala:", error);
+    res.status(500).json({ message: "Erro ao criar escala." });
   }
 };
-
-// 🔁 Suas outras funções continuam abaixo: createScale, getAllScales, getScaleById,
-// getScaleByEventId, updateScale, deleteScale
-
-// (mantenha todas essas como estavam no seu código original)
-
-// ✅ Esse bloco acima adiciona a nova função e mantém todo o resto intacto.
