@@ -1,4 +1,3 @@
-
 const Event = require("../models/Event");
 const User = require("../models/User");
 const Scale = require("../models/Scale");
@@ -78,7 +77,7 @@ const createEvent = async (req, res) => {
         }
 
         validatedMembers.push({
-          userId: item.userId,
+          user: item.userId, // Corrigido de userId para user
           function: item.function,
           confirmed: false,
         });
@@ -138,12 +137,11 @@ const getEventById = async (req, res) => {
     const hasPermission = await checkEventReadPermission(eventId, userId, userRole);
     if (!hasPermission) {
       const exists = await Event.findById(eventId).select("_id");
-      if (!exists) return res.status(404).json({ message: "Evento não encontrado." });
-      return res.status(403).json({ message: "Sem permissão para acessar este evento." });
+      if (exists) return res.status(403).json({ message: "Sem permissão para acessar este evento." });
+      return res.status(404).json({ message: "Evento não encontrado." });
     }
 
-    const event = await Event.findById(eventId)
-      .populate("createdBy", "name email");
+    const event = await Event.findById(eventId).populate("createdBy", "name email");
 
     if (!event) return res.status(404).json({ message: "Evento não encontrado." });
 

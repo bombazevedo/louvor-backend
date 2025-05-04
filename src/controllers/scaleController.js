@@ -9,7 +9,7 @@ exports.createScale = async (req, res) => {
     const createdBy = req.user.id;
     const userRole = req.user.role;
 
-    if (userRole !== 'coordenador') {
+    if (userRole.toLowerCase() !== 'coordenador') {
       return res.status(403).json({ message: "Apenas coordenadores podem criar escalas." });
     }
 
@@ -25,9 +25,10 @@ exports.createScale = async (req, res) => {
       }
 
       validatedMembers.push({
-        userId: user._id,
+        user: user._id,  // <-- AQUI está a correção
         function: item.function,
         confirmed: false,
+        notes: item.notes || ''
       });
     }
 
@@ -46,7 +47,7 @@ exports.createScale = async (req, res) => {
     const saved = await newScale.save();
     const result = await Scale.findById(saved._id)
       .populate("event", "title date")
-      .populate("members.userId", "name email")
+      .populate("members.user", "name email")
       .populate("createdBy", "name");
 
     res.status(201).json(result);
