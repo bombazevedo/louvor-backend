@@ -1,4 +1,4 @@
-// backend/controllers/eventController.js
+
 const Event = require("../models/Event");
 const User = require("../models/User");
 const Scale = require("../models/Scale");
@@ -27,12 +27,23 @@ const checkEventWritePermission = async (eventId, userId, userRole) => {
 
 const createEvent = async (req, res) => {
   try {
-    const { title, description, date, endDate, location, type, status, notes } = req.body;
+    const {
+      title,
+      description,
+      date,
+      endDate,
+      location,
+      type,
+      status,
+      notes,
+      members = []
+    } = req.body;
+
     const createdBy = req.user.id;
     const userRole = req.user.role.toLowerCase();
 
-    if (userRole !== "coordenador" && userRole !== "dm") {
-      return res.status(403).json({ message: "Apenas Coordenadores ou DMs podem criar eventos." });
+    if (userRole !== "coordenador") {
+      return res.status(403).json({ message: "Apenas Coordenadores podem criar eventos." });
     }
 
     if (!title || !date || !location) {
@@ -52,8 +63,37 @@ const createEvent = async (req, res) => {
     });
 
     const savedEvent = await newEvent.save();
-    const populatedEvent = await Event.findById(savedEvent._id)
-      .populate("createdBy", "name");
+
+    if (Array.isArray(members) && members.length > 0) {
+      const validatedMembers = [];
+
+      for (const item of members) {
+        if (!item.userId || !item.function) {
+          return res.status(400).json({ message: "Cada membro precisa de userId e function." });
+        }
+
+        const userExists = await User.findById(item.userId);
+        if (!userExists) {
+          return res.status(404).json({ message: `Usuário com ID ${item.userId} não encontrado.` });
+        }
+
+        validatedMembers.push({
+          userId: item.userId,
+          function: item.function,
+          confirmed: false,
+        });
+      }
+
+      const newScale = new Scale({
+        event: savedEvent._id,
+        members: validatedMembers,
+        createdBy
+      });
+
+      await newScale.save();
+    }
+
+    const populatedEvent = await Event.findById(savedEvent._id).populate("createdBy", "name");
 
     res.status(201).json(populatedEvent);
   } catch (error) {
