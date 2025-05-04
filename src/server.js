@@ -3,9 +3,11 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+
 const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const importRoutes = require('./routes/importRoutes');
+const userRoutes = require('./routes/userRoutes'); // ✅ NOVO
 
 // Carrega variáveis de ambiente do .env
 dotenv.config();
@@ -31,6 +33,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/import', importRoutes);
+app.use('/api/users', userRoutes); // ✅ ADICIONADO
 
 // Rota de teste
 app.get('/', (req, res) => {

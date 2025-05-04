@@ -4,15 +4,16 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 
 // @route   GET api/users
-// @desc    Obter todos os usuários
-// @access  Private/Admin
+// @desc    Obter todos os usuários (coordenador e admin)
+// @access  Private
 router.get('/', auth, async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ message: 'Acesso negado. Permissão de administrador necessária.' });
+    const allowedRoles = ['coordenador', 'admin'];
+    if (!allowedRoles.includes(req.user.role.toLowerCase())) {
+      return res.status(403).json({ message: 'Acesso negado. Permissão insuficiente.' });
     }
 
-    const users = await User.find().select('-password');
+    const users = await User.find().select('name email role');
     res.json(users);
   } catch (err) {
     console.error(err.message);
@@ -26,7 +27,6 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
-
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
