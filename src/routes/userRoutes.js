@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth');
 const User = require('../models/User');
 
 // @route   GET api/users
 // @desc    Obter todos os usuários (coordenador e admin)
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const allowedRoles = ['coordenador', 'admin'];
     if (!allowedRoles.includes(req.user.role.toLowerCase())) {
@@ -24,7 +24,7 @@ router.get('/', auth, async (req, res) => {
 // @route   GET api/users/:id
 // @desc    Obter usuário por ID
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
     if (!user) {
@@ -48,7 +48,7 @@ router.get('/:id', auth, async (req, res) => {
 // @route   PUT api/users/:id
 // @desc    Atualizar usuário
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Acesso negado' });
@@ -83,7 +83,7 @@ router.put('/:id', auth, async (req, res) => {
 // @route   DELETE api/users/:id
 // @desc    Excluir usuário
 // @access  Private/Admin
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Acesso negado' });
