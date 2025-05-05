@@ -1,139 +1,104 @@
-const Scale = require("../models/Scale");
-const Event = require("../models/Event");
-const User = require("../models/User");
+const Scale = require('../models/Scale');
+const User = require('../models/User');
 
-// Criar nova escala
 exports.createScale = async (req, res) => {
   try {
     const { eventId, members, notes } = req.body;
-    const createdBy = req.user.id;
-    const userRole = req.user.role;
+    const role = req.user?.role;
 
-    if (userRole.toLowerCase() !== 'coordenador') {
-      return res.status(403).json({ message: "Apenas coordenadores podem criar escalas." });
+    if (role !== 'coordenador') {
+      return res.status(403).json({ message: 'Apenas coordenadores podem criar escalas.' });
     }
 
     if (!eventId || !Array.isArray(members)) {
-      return res.status(400).json({ message: "Dados inválidos. 'eventId' e 'members[]' são obrigatórios." });
+      return res.status(400).json({ message: 'Dados inválidos. É necessário eventId e lista de membros.' });
     }
 
-    const validatedMembers = [];
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        return {
+          user: m.user,
+          function: m.function || '',
+          confirmed: m.confirmed || false
+        };
+      })
+    );
 
-    for (const item of members) {
-      if (!item.user || !item.function) {
-        return res.status(400).json({ message: "Cada membro precisa de 'user' e 'function'." });
-      }
-
-      const user = await User.findById(item.user);
-      if (!user) {
-        return res.status(404).json({ message: `Usuário não encontrado: ${item.user}` });
-      }
-
-      validatedMembers.push({
-        user: user._id,
-        function: item.function,
-        confirmed: item.confirmed || false,
-        notes: item.notes || ''
-      });
-    }
-
-    const existing = await Scale.findOne({ event: eventId });
-    if (existing) {
-      return res.status(409).json({ message: "Já existe uma escala para este evento." });
-    }
-
-    const newScale = new Scale({
-      event: eventId,
+    const scale = new Scale({
+      eventId,
       members: validatedMembers,
-      notes,
-      createdBy
+      notes: notes || ''
     });
 
-    const saved = await newScale.save();
-
-    const result = await Scale.findById(saved._id)
-      .populate("event", "title date")
-      .populate("members.user", "name email")
-      .populate("createdBy", "name");
-
-    res.status(201).json(result);
+    const savedScale = await scale.save();
+    res.status(201).json(savedScale);
   } catch (error) {
-    console.error("Erro ao criar escala:", error);
-    res.status(500).json({ message: "Erro ao criar escala." });
+    console.error('Erro ao criar escala:', error);
+    res.status(500).json({ message: 'Erro ao criar escala.', error: error.message });
   }
 };
 
-// Buscar escala pelo ID do Evento
-exports.getScaleByEventId = async (req, res) => {
-  try {
-    const { eventId } = req.params;
-
-    const scale = await Scale.findOne({ event: eventId })
-      .populate("event", "title date")
-      .populate("members.user", "name email")
-      .populate("createdBy", "name");
-
-    if (!scale) {
-      return res.status(404).json({ message: "Escala não encontrada para este evento." });
-    }
-
-    res.status(200).json(scale);
-  } catch (err) {
-    console.error("Erro ao buscar escala por evento:", err);
-    res.status(500).json({ message: "Erro ao buscar escala." });
-  }
-};
-
-// Atualizar escala
 exports.updateScale = async (req, res) => {
   try {
     const scaleId = req.params.id;
     const { members, notes } = req.body;
 
     if (!Array.isArray(members)) {
-      return res.status(400).json({ message: "'members[]' obrigatório para atualizar escala." });
+      return res.status(400).json({ message: 'Lista de membros inválida.' });
     }
 
-    const validatedMembers = [];
-
-    for (const item of members) {
-      if (!item.user || !item.function) {
-        return res.status(400).json({ message: "Cada membro precisa de 'user' e 'function'." });
-      }
-
-      const user = await User.findById(item.user);
-      if (!user) {
-        return res.status(404).json({ message: `Usuário não encontrado: ${item.user}` });
-      }
-
-      validatedMembers.push({
-        user: user._id,
-        function: item.function,
-        confirmed: item.confirmed || false,
-        notes: item.notes || ''
-      });
-    }
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        return {
+          user: m.user,
+          function: m.function || '',
+          confirmed: m.confirmed || false
+        };
+      })
+    );
 
     const updated = await Scale.findByIdAndUpdate(
       scaleId,
       {
         members: validatedMembers,
-        notes,
+        notes: notes || '',
         updatedAt: Date.now()
       },
       { new: true }
-    )
-      .populate("event", "title date")
-      .populate("members.user", "name email")
-      .populate("createdBy", "name");
+    );
 
     if (!updated) {
-      return res.status(404).json({ message: "Escala não encontrada para atualizar." });
+      return res.status(404).json({ message: 'Escala não encontrada.' });
     }
 
     res.status(200).json(updated);
   } catch (error) {
-    console.error("Erro ao atualizar escala:", error);
-    res.status(500).json({ message: "Erro ao atualizar escala." });
+    console.error('Erro ao atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao atualizar escala.', error: error.message });
+  }
+};
+
+exports.getScaleByEventId = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+
+    if (!eventId) {
+      return res.status(400).json({ message: 'ID do evento é obrigatório.' });
+    }
+
+    const scale = await Scale.findOne({ eventId });
+
+    if (!scale) {
+      return res.status(404).json({ message: 'Escala não encontrada para este evento.' });
+    }
+
+    return res.status(200).json(scale);
+  } catch (error) {
+    console.error('Erro ao buscar escala por evento:', error);
+    return res.status(500).json({ message: 'Erro interno do servidor.' });
   }
 };
