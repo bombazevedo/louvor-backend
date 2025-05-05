@@ -8,7 +8,7 @@ const ScaleSchema = new mongoose.Schema({
     required: true
   },
   members: [{
-    user: { // renomeado de userId para compatibilidade com controller
+    user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true
