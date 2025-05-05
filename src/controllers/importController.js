@@ -1,4 +1,3 @@
-// backend/controllers/importController.js
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
@@ -6,7 +5,7 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const Scale = require('../models/Scale');
 
-exports.importXLS = async (req, res) => {
+const importEventsFromExcel = async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'Arquivo não enviado.' });
 
@@ -51,7 +50,7 @@ exports.importXLS = async (req, res) => {
     }
 
     if (members.length > 0) {
-      const escala = new Scale({ event: savedEvent._id, members });
+      const escala = new Scale({ eventId: savedEvent._id, members });
       await escala.save();
     }
 
@@ -62,4 +61,8 @@ exports.importXLS = async (req, res) => {
     console.error('Erro ao importar XLS:', error);
     res.status(500).json({ message: 'Erro ao processar planilha' });
   }
+};
+
+module.exports = {
+  importEventsFromExcel
 };

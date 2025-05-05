@@ -1,11 +1,8 @@
 const express = require('express');
-const multer = require('multer');
-const importController = require('../controllers/importController');
-const authMiddleware = require('../middleware/auth');
-
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
+const { importEventsFromExcel } = require('../controllers/importController');
+const { authenticate } = require('../middleware/auth');
 
-router.post('/xls', authMiddleware, upload.single('file'), importController.importXLS);
+router.post('/upload', authenticate, importEventsFromExcel);
 
 module.exports = router;
