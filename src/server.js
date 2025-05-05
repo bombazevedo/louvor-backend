@@ -1,4 +1,3 @@
-// backend/server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -7,19 +6,17 @@ const dotenv = require('dotenv');
 const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const importRoutes = require('./routes/importRoutes');
-const userRoutes = require('./routes/userRoutes'); // ✅ NOVO
-const scaleRoutes = require('./routes/scaleRoutes'); // ✅ IMPORTADO
+const userRoutes = require('./routes/userRoutes');
+const scaleRoutes = require('./routes/scaleRoutes');
+const repertoireRoutes = require('./routes/repertoireRoutes');
 
-// Carrega variáveis de ambiente do .env
 dotenv.config();
 
 const app = express();
 
-// Middlewares essenciais
 app.use(cors());
 app.use(express.json());
 
-// Conectar ao MongoDB Atlas
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -34,15 +31,15 @@ mongoose.connect(process.env.MONGODB_URI, {
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/import', importRoutes);
-app.use('/api/users', userRoutes); // ✅ ADICIONADO
-app.use('/api/scales', scaleRoutes); // ✅ CORRIGIDO
+app.use('/api/users', userRoutes);
+app.use('/api/scales', scaleRoutes);
+app.use('/api/repertoire', repertoireRoutes);
 
-// Rota de teste
+// Test route
 app.get('/', (req, res) => {
   res.send('API do Louvor está rodando.');
 });
 
-// Inicializa o servidor
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
