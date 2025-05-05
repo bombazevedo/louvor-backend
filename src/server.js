@@ -8,6 +8,7 @@ const authRoutes = require('./routes/authRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const importRoutes = require('./routes/importRoutes');
 const userRoutes = require('./routes/userRoutes'); // ✅ NOVO
+const scaleRoutes = require('./routes/scaleRoutes'); // ✅ IMPORTADO
 
 // Carrega variáveis de ambiente do .env
 dotenv.config();
@@ -34,6 +35,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/users', userRoutes); // ✅ ADICIONADO
+app.use('/api/scales', scaleRoutes); // ✅ CORRIGIDO
 
 // Rota de teste
 app.get('/', (req, res) => {
