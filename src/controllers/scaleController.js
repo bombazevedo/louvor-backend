@@ -102,3 +102,45 @@ exports.getScaleByEventId = async (req, res) => {
     return res.status(500).json({ message: 'Erro interno do servidor.' });
   }
 };
+
+exports.getAllScales = async (req, res) => {
+  try {
+    const scales = await Scale.find().populate('members.user', 'name email');
+    res.status(200).json(scales);
+  } catch (error) {
+    console.error('Erro ao listar escalas:', error);
+    res.status(500).json({ message: 'Erro ao buscar escalas.' });
+  }
+};
+
+exports.getScaleById = async (req, res) => {
+  try {
+    const scaleId = req.params.id;
+    const scale = await Scale.findById(scaleId).populate('members.user', 'name email');
+
+    if (!scale) {
+      return res.status(404).json({ message: 'Escala não encontrada.' });
+    }
+
+    res.status(200).json(scale);
+  } catch (error) {
+    console.error('Erro ao buscar escala:', error);
+    res.status(500).json({ message: 'Erro interno ao buscar escala.' });
+  }
+};
+
+exports.deleteScale = async (req, res) => {
+  try {
+    const scaleId = req.params.id;
+    const deleted = await Scale.findByIdAndDelete(scaleId);
+
+    if (!deleted) {
+      return res.status(404).json({ message: 'Escala não encontrada para exclusão.' });
+    }
+
+    res.status(200).json({ message: 'Escala excluída com sucesso.' });
+  } catch (error) {
+    console.error('Erro ao deletar escala:', error);
+    res.status(500).json({ message: 'Erro ao deletar escala.' });
+  }
+};
