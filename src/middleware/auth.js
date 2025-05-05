@@ -35,4 +35,4 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-module.exports = authMiddleware;
+exports.authenticate = authMiddleware;
