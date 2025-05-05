@@ -13,12 +13,17 @@ exports.createScale = async (req, res) => {
       return res.status(403).json({ message: "Apenas coordenadores podem criar escalas." });
     }
 
-    if (!eventId || !members || !Array.isArray(members)) {
+    if (!eventId || !Array.isArray(members)) {
       return res.status(400).json({ message: "Dados inválidos. 'eventId' e 'members[]' são obrigatórios." });
     }
 
     const validatedMembers = [];
+
     for (const item of members) {
+      if (!item.user || !item.function) {
+        return res.status(400).json({ message: "Cada membro precisa de 'user' e 'function'." });
+      }
+
       const user = await User.findById(item.user);
       if (!user) {
         return res.status(404).json({ message: `Usuário não encontrado: ${item.user}` });
@@ -27,7 +32,7 @@ exports.createScale = async (req, res) => {
       validatedMembers.push({
         user: user._id,
         function: item.function,
-        confirmed: false,
+        confirmed: item.confirmed || false,
         notes: item.notes || ''
       });
     }
@@ -45,6 +50,7 @@ exports.createScale = async (req, res) => {
     });
 
     const saved = await newScale.save();
+
     const result = await Scale.findById(saved._id)
       .populate("event", "title date")
       .populate("members.user", "name email")
@@ -57,10 +63,11 @@ exports.createScale = async (req, res) => {
   }
 };
 
-// Buscar escala por ID do evento
+// Buscar escala pelo ID do Evento
 exports.getScaleByEventId = async (req, res) => {
-  const { eventId } = req.params;
   try {
+    const { eventId } = req.params;
+
     const scale = await Scale.findOne({ event: eventId })
       .populate("event", "title date")
       .populate("members.user", "name email")
@@ -77,48 +84,23 @@ exports.getScaleByEventId = async (req, res) => {
   }
 };
 
-// Buscar escala por ID da escala
-exports.getScaleById = async (req, res) => {
-  try {
-    const scale = await Scale.findById(req.params.id)
-      .populate("event", "title date")
-      .populate("members.user", "name email")
-      .populate("createdBy", "name");
-
-    if (!scale) {
-      return res.status(404).json({ message: "Escala não encontrada." });
-    }
-
-    res.status(200).json(scale);
-  } catch (error) {
-    console.error("Erro ao buscar escala:", error);
-    res.status(500).json({ message: "Erro ao buscar escala." });
-  }
-};
-
-// Listar todas as escalas
-exports.getAllScales = async (req, res) => {
-  try {
-    const scales = await Scale.find()
-      .populate("event", "title date")
-      .populate("members.user", "name email")
-      .populate("createdBy", "name");
-
-    res.status(200).json(scales);
-  } catch (error) {
-    console.error("Erro ao listar escalas:", error);
-    res.status(500).json({ message: "Erro ao listar escalas." });
-  }
-};
-
 // Atualizar escala
 exports.updateScale = async (req, res) => {
   try {
     const scaleId = req.params.id;
     const { members, notes } = req.body;
 
+    if (!Array.isArray(members)) {
+      return res.status(400).json({ message: "'members[]' obrigatório para atualizar escala." });
+    }
+
     const validatedMembers = [];
+
     for (const item of members) {
+      if (!item.user || !item.function) {
+        return res.status(400).json({ message: "Cada membro precisa de 'user' e 'function'." });
+      }
+
       const user = await User.findById(item.user);
       if (!user) {
         return res.status(404).json({ message: `Usuário não encontrado: ${item.user}` });
@@ -132,7 +114,7 @@ exports.updateScale = async (req, res) => {
       });
     }
 
-    const updatedScale = await Scale.findByIdAndUpdate(
+    const updated = await Scale.findByIdAndUpdate(
       scaleId,
       {
         members: validatedMembers,
@@ -145,28 +127,13 @@ exports.updateScale = async (req, res) => {
       .populate("members.user", "name email")
       .populate("createdBy", "name");
 
-    if (!updatedScale) {
+    if (!updated) {
       return res.status(404).json({ message: "Escala não encontrada para atualizar." });
     }
 
-    res.status(200).json(updatedScale);
+    res.status(200).json(updated);
   } catch (error) {
     console.error("Erro ao atualizar escala:", error);
     res.status(500).json({ message: "Erro ao atualizar escala." });
-  }
-};
-
-// Deletar escala
-exports.deleteScale = async (req, res) => {
-  try {
-    const deleted = await Scale.findByIdAndDelete(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ message: "Escala não encontrada para exclusão." });
-    }
-
-    res.status(200).json({ message: "Escala excluída com sucesso." });
-  } catch (error) {
-    console.error("Erro ao deletar escala:", error);
-    res.status(500).json({ message: "Erro ao deletar escala." });
   }
 };
