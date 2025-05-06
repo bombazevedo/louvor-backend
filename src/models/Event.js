@@ -1,61 +1,39 @@
-
+// backend/models/Event.js
 const mongoose = require('mongoose');
 
-const EventSchema = new mongoose.Schema({
+const eventSchema = new mongoose.Schema({
   title: {
     type: String,
     required: true,
-    trim: true
   },
-  description: {
-    type: String,
-    trim: true
-  },
+  description: String,
   date: {
     type: Date,
-    required: true
+    required: true,
   },
-  endDate: {
-    type: Date
-  },
-  location: {
-    type: String,
-    trim: true
-  },
+  location: String,
   type: {
     type: String,
-    enum: ['culto', 'ensaio', 'evento especial', 'outro'],
-    default: 'culto'
-  },
-  leader: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    enum: ['culto', 'ensaio', 'especial'],
+    default: 'culto',
   },
   status: {
     type: String,
-    enum: ['agendado', 'cancelado', 'concluído'],
-    default: 'agendado'
-  },
-  notes: {
-    type: String,
-    trim: true
+    enum: ['agendado', 'cancelado', 'concluido'],
+    default: 'agendado',
   },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
+    required: false,
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  minister: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
   }
 }, {
-  timestamps: true
+  timestamps: true,
 });
 
-const Event = mongoose.model('Event', EventSchema);
-
-module.exports = Event;
+module.exports = mongoose.model('Event', eventSchema);

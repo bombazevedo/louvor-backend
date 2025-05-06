@@ -1,6 +1,7 @@
+// backend/routes/eventRoutes.js
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth'); // Corrigido para refletir seu middleware real
+const auth = require('../middleware/auth'); // Corrigido aqui: nome correto da importação
 
 const {
   getEvents,
