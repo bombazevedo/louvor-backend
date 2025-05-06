@@ -1,10 +1,14 @@
+// backend/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
+const User = require('../models/User');
 
 // GET /api/events
 const getEvents = async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: 1 });
+    const events = await Event.find()
+      .populate('minister', 'name email') // <- Popula aqui
+      .sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(events.map(async event => {
       const scale = await Scale.findOne({ eventId: event._id })
@@ -26,7 +30,7 @@ const getEvents = async (req, res) => {
 // PATCH /api/events/:id
 const updateEvent = async (req, res) => {
   try {
-    const { title, description, date } = req.body;
+    const { title, description, date, minister } = req.body;
     const eventId = req.params.id;
 
     const updated = await Event.findByIdAndUpdate(
@@ -35,10 +39,11 @@ const updateEvent = async (req, res) => {
         ...(title && { title }),
         ...(description && { description }),
         ...(date && { date }),
+        ...(minister && { minister }),
         updatedAt: Date.now()
       },
       { new: true }
-    );
+    ).populate('minister', 'name email');
 
     if (!updated) {
       return res.status(404).json({ message: 'Evento não encontrado.' });

@@ -1,24 +1,23 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const auth = require('../middleware/auth');
 const {
   createScale,
   updateScale,
   getScaleByEventId,
-  getScaleById,
+  deleteScale,
   getAllScales,
-  deleteScale
+  getScaleById
 } = require('../controllers/scaleController');
 
-// Middleware de autenticação
-router.use(authenticate);
+router.use(auth);
 
-// Escalas
+// Rotas da escala
+router.get('/', getAllScales);
+router.get('/:id', getScaleById);
+router.get('/event/:eventId', getScaleByEventId);
 router.post('/', createScale);
 router.patch('/:id', updateScale);
-router.get('/event/:eventId', getScaleByEventId);
-router.get('/:id', getScaleById);
-router.get('/', getAllScales);
 router.delete('/:id', deleteScale);
 
 module.exports = router;

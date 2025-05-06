@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const auth = require('../middleware/auth'); // Corrigido para refletir seu middleware real
+
 const {
   getEvents,
   updateEvent,
@@ -8,12 +9,12 @@ const {
 } = require('../controllers/eventController');
 
 // GET todos eventos
-router.get('/', authenticate, getEvents);
+router.get('/', auth, getEvents);
 
 // PATCH atualizar evento
-router.patch('/:id', authenticate, updateEvent);
+router.patch('/:id', auth, updateEvent);
 
 // DELETE remover evento
-router.delete('/:id', authenticate, deleteEvent);
+router.delete('/:id', auth, deleteEvent);
 
 module.exports = router;
