@@ -1,16 +1,15 @@
-// src/routes/eventRoutes.js
-const express = require('express');
-const router = express.Router();
-const authenticate = require('../middleware/auth');
 
+const express = require("express");
+const router = express.Router();
+const { authenticate } = require("../middleware/auth");
 const {
   getEvents,
   updateEvent,
   deleteEvent
-} = require('../controllers/eventController');
+} = require("../controllers/eventController");
 
-router.get('/', authenticate, getEvents);
-router.patch('/:id', authenticate, updateEvent);
-router.delete('/:id', authenticate, deleteEvent);
+router.get("/", authenticate, getEvents);
+router.patch("/:id", authenticate, updateEvent);
+router.delete("/:id", authenticate, deleteEvent);
 
 module.exports = router;
