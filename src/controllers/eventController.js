@@ -6,9 +6,7 @@ const User = require('../models/User');
 // GET /api/events
 const getEvents = async (req, res) => {
   try {
-    const events = await Event.find()
-      .populate('minister', 'name email') // <- Popula aqui
-      .sort({ date: 1 });
+    const events = await Event.find().sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(events.map(async event => {
       const scale = await Scale.findOne({ eventId: event._id })
