@@ -1,23 +1,30 @@
 // src/routes/importRoutes.js
 const express = require('express');
 const router = express.Router();
-const multer = require('multer');
 const path = require('path');
+const multer = require('multer');
 const { authenticate } = require('../middleware/auth');
-const importController = require('../controllers/importController');
+const { importEventsFromExcel } = require('../controllers/importController');
 
-// Configuração do multer para upload
+// Configuração do multer
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, './uploads/'); // Certifique-se que essa pasta exista
+    cb(null, './uploads/');
   },
   filename: (req, file, cb) => {
     cb(null, `${Date.now()}-${file.originalname}`);
   }
 });
-const upload = multer({ storage });
+const fileFilter = (req, file, cb) => {
+  const allowed = /xlsx|xls/;
+  const ext = allowed.test(path.extname(file.originalname).toLowerCase());
+  if (ext) return cb(null, true);
+  cb(new Error('Apenas arquivos Excel são permitidos'));
+};
 
-// POST /api/import/upload
-router.post('/upload', authenticate, upload.single('file'), importController.importEventsFromExcel);
+const upload = multer({ storage, fileFilter });
+
+// Rota de upload
+router.post('/upload', authenticate, upload.single('file'), importEventsFromExcel);
 
 module.exports = router;
