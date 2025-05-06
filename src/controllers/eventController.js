@@ -1,21 +1,23 @@
+// backend/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
-const User = require('../models/User');
 
 // GET /api/events
 const getEvents = async (req, res) => {
   try {
     const events = await Event.find().sort({ date: 1 });
 
-    const eventsWithScales = await Promise.all(events.map(async event => {
-      const scale = await Scale.findOne({ eventId: event._id })
-        .populate('members.user', 'name email');
+    const eventsWithScales = await Promise.all(
+      events.map(async (event) => {
+        const scale = await Scale.findOne({ eventId: event._id })
+          .populate('members.user', 'name email');
 
-      return {
-        ...event.toObject(),
-        members: scale?.members || []
-      };
-    }));
+        return {
+          ...event.toObject(),
+          members: scale?.members || []
+        };
+      })
+    );
 
     res.status(200).json(eventsWithScales);
   } catch (error) {
@@ -36,7 +38,7 @@ const updateEvent = async (req, res) => {
         ...(title && { title }),
         ...(description && { description }),
         ...(date && { date }),
-        ...(minister && { minister }), // isso ainda pode ficar se for tratado como string ou ID simples
+        ...(minister && { minister }),
         updatedAt: Date.now()
       },
       { new: true }
