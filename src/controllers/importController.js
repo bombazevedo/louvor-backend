@@ -1,3 +1,4 @@
+// src/controllers/importController.js
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
@@ -5,9 +6,11 @@ const Event = require('../models/Event');
 const User = require('../models/User');
 const Scale = require('../models/Scale');
 
-const importEventsFromExcel = async (req, res) => {
+const importXLS = async (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'Arquivo não enviado.' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'Arquivo não enviado.' });
+    }
 
     const userRole = req.user.role.toLowerCase();
     const createdBy = req.user.id;
@@ -64,5 +67,5 @@ const importEventsFromExcel = async (req, res) => {
 };
 
 module.exports = {
-  importEventsFromExcel
+  importXLS
 };
