@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth'); // ✅ Corrigido
+const authenticate = require('../middleware/auth'); // ✅ Corrigido
 const Chat = require('../models/Chat');
 
 // @route   GET api/chats/event/:eventId
