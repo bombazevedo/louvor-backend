@@ -10,8 +10,8 @@ const authMiddleware = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
     const user = await User.findById(decoded.id).select("id name email role");
 
     if (!user) {
@@ -35,4 +35,4 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-exports.authenticate = authMiddleware;
+module.exports = authMiddleware;
