@@ -1,7 +1,7 @@
-// backend/routes/eventRoutes.js
+// src/routes/eventRoutes.js
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth'); // Corrigido aqui: nome correto da importação
+const authenticate = require('../middleware/auth');
 
 const {
   getEvents,
@@ -9,13 +9,8 @@ const {
   deleteEvent
 } = require('../controllers/eventController');
 
-// GET todos eventos
-router.get('/', auth, getEvents);
-
-// PATCH atualizar evento
-router.patch('/:id', auth, updateEvent);
-
-// DELETE remover evento
-router.delete('/:id', auth, deleteEvent);
+router.get('/', authenticate, getEvents);
+router.patch('/:id', authenticate, updateEvent);
+router.delete('/:id', authenticate, deleteEvent);
 
 module.exports = router;

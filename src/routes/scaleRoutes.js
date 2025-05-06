@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
+const authenticate = require('../middleware/auth');
 const {
   createScale,
   updateScale,
@@ -10,9 +10,7 @@ const {
   getScaleById
 } = require('../controllers/scaleController');
 
-router.use(auth);
-
-// Rotas da escala
+router.use(authenticate);
 router.get('/', getAllScales);
 router.get('/:id', getScaleById);
 router.get('/event/:eventId', getScaleByEventId);

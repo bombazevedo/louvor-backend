@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const authenticate = require('../middleware/auth');
 const { importEventsFromExcel } = require('../controllers/importController');
-const { authenticate } = require('../middleware/auth');
 
 router.post('/upload', authenticate, importEventsFromExcel);
 

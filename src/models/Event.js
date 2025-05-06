@@ -2,15 +2,9 @@
 const mongoose = require('mongoose');
 
 const eventSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-  },
+  title: { type: String, required: true },
   description: String,
-  date: {
-    type: Date,
-    required: true,
-  },
+  date: { type: Date, required: true },
   location: String,
   type: {
     type: String,
@@ -23,11 +17,6 @@ const eventSchema = new mongoose.Schema({
     default: 'agendado',
   },
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: false,
-  },
-  minister: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: false,
