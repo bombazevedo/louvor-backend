@@ -1,4 +1,3 @@
-// backend/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
@@ -37,11 +36,11 @@ const updateEvent = async (req, res) => {
         ...(title && { title }),
         ...(description && { description }),
         ...(date && { date }),
-        ...(minister && { minister }),
+        ...(minister && { minister }), // isso ainda pode ficar se for tratado como string ou ID simples
         updatedAt: Date.now()
       },
       { new: true }
-    ).populate('minister', 'name email');
+    );
 
     if (!updated) {
       return res.status(404).json({ message: 'Evento não encontrado.' });
