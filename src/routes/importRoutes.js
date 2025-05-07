@@ -24,6 +24,7 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({ storage, fileFilter });
 
 // POST /api/import/upload
+console.log("🚧 DEBUG upload.single:", typeof upload.single); // deve ser "function"
 console.log("importEventsFromExcel:", importEventsFromExcel);
 router.post('/upload', authenticate, upload.single('file'), importEventsFromExcel);
 
