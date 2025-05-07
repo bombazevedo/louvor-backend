@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const authenticate = require("../middleware/auth"); // <- Corrigido aqui
-
+const { authenticate } = require("../middleware/auth");
 const {
   getEvents,
   updateEvent,
