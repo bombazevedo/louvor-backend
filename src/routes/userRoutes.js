@@ -1,9 +1,10 @@
-
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
+const { getUserById, updateUserRole } = require("../controllers/authController");
 const User = require("../models/User");
 
+// Listar todos os usuários (somente coordenador/admin)
 router.get("/", authenticate, async (req, res) => {
   try {
     const allowedRoles = ["coordenador", "admin"];
@@ -19,24 +20,13 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-router.get("/:id", authenticate, async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select("-password");
-    if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado" });
-    }
+// Buscar usuário por ID
+router.get("/:id", authenticate, getUserById);
 
-    if (req.user.id !== req.params.id && req.user.role !== "admin") {
-      return res.status(403).json({ message: "Acesso negado" });
-    }
+// Atualizar apenas a função do usuário (PATCH)
+router.patch("/:id", authenticate, updateUserRole);
 
-    res.json(user);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Erro no servidor");
-  }
-});
-
+// Atualização completa de perfil (PUT)
 router.put("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -51,7 +41,7 @@ router.put("/:id", authenticate, async (req, res) => {
     if (instruments) userFields.instruments = instruments;
     if (roles) userFields.roles = roles;
 
-    let user = await User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
       req.params.id,
       { $set: userFields },
       { new: true }
@@ -64,6 +54,7 @@ router.put("/:id", authenticate, async (req, res) => {
   }
 });
 
+// Deletar usuário
 router.delete("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -84,6 +75,3 @@ router.delete("/:id", authenticate, async (req, res) => {
 });
 
 module.exports = router;
-
-router.get('/:id', getUserById);
-router.patch('/:id', updateUserRole);

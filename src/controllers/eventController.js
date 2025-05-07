@@ -1,3 +1,4 @@
+
 // backend/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
@@ -23,6 +24,18 @@ const getEvents = async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar eventos:', error);
     res.status(500).json({ message: 'Erro ao buscar eventos.' });
+  }
+};
+
+// GET /api/events/:id
+const getEventById = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
+    res.status(200).json(event);
+  } catch (error) {
+    console.error('Erro ao buscar evento:', error);
+    res.status(500).json({ message: 'Erro ao buscar evento.' });
   }
 };
 
@@ -76,20 +89,7 @@ const deleteEvent = async (req, res) => {
 
 module.exports = {
   getEvents,
+  getEventById,
   updateEvent,
   deleteEvent
 };
-
-// GET /api/events/:id
-const getEventById = async (req, res) => {
-  try {
-    const event = await Event.findById(req.params.id);
-    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
-    res.status(200).json(event);
-  } catch (error) {
-    console.error('Erro ao buscar evento:', error);
-    res.status(500).json({ message: 'Erro ao buscar evento.' });
-  }
-};
-
-module.exports.getEventById = getEventById;
