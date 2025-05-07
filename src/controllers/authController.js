@@ -33,3 +33,30 @@ exports.registerUser = async (req, res) => {
     res.status(500).json({ message: 'Erro interno ao registrar usuário' });
   }
 };
+
+// GET /api/users/:id
+exports.getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao buscar usuário' });
+  }
+};
+
+// PATCH /api/users/:id
+exports.updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    ).select('-password');
+    if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.status(200).json(updatedUser);
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
+  }
+};

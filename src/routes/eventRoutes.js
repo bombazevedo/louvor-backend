@@ -12,3 +12,5 @@ router.patch("/:id", authenticate, updateEvent);
 router.delete("/:id", authenticate, deleteEvent);
 
 module.exports = router;
+
+router.get('/:id', getEventById);
