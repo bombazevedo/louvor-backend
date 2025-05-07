@@ -1,3 +1,4 @@
+// src/controllers/importController.js
 const XLSX = require('xlsx');
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
@@ -52,4 +53,6 @@ const importEventsFromExcel = async (req, res) => {
   }
 };
 
-module.exports = { importEventsFromExcel };
+module.exports = {
+  importEventsFromExcel
+};
