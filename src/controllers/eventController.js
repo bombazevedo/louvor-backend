@@ -1,95 +1,95 @@
 
-// backend/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 
-// GET /api/events
+// Buscar todos os eventos
 const getEvents = async (req, res) => {
   try {
     const events = await Event.find().sort({ date: 1 });
-
-    const eventsWithScales = await Promise.all(
-      events.map(async (event) => {
-        const scale = await Scale.findOne({ eventId: event._id })
-          .populate('members.user', 'name email');
-
-        return {
-          ...event.toObject(),
-          members: scale?.members || []
-        };
-      })
-    );
-
-    res.status(200).json(eventsWithScales);
+    res.status(200).json(events);
   } catch (error) {
     console.error('Erro ao buscar eventos:', error);
     res.status(500).json({ message: 'Erro ao buscar eventos.' });
   }
 };
 
-// GET /api/events/:id
+// Buscar evento por ID com escala populada
 const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
-    res.status(200).json(event);
+
+    const scale = await Scale.findOne({ eventId: event._id }).populate('members.user', 'name email');
+
+    const eventWithMembers = {
+      ...event.toObject(),
+      members: scale?.members || []
+    };
+
+    res.status(200).json(eventWithMembers);
   } catch (error) {
     console.error('Erro ao buscar evento:', error);
     res.status(500).json({ message: 'Erro ao buscar evento.' });
   }
 };
 
-// PATCH /api/events/:id
+// Criar novo evento
+const createEvent = async (req, res) => {
+  try {
+    const newEvent = new Event(req.body);
+    await newEvent.save();
+    res.status(201).json(newEvent);
+  } catch (error) {
+    console.error('Erro ao criar evento:', error);
+    res.status(500).json({ message: 'Erro ao criar evento.' });
+  }
+};
+
+// Atualizar evento e escala relacionada
 const updateEvent = async (req, res) => {
   try {
-    const { title, description, date, minister } = req.body;
-    const eventId = req.params.id;
+    const { musicLinks, attachments, members, ...eventData } = req.body;
 
-    const updated = await Event.findByIdAndUpdate(
-      eventId,
+    const updatedEvent = await Event.findByIdAndUpdate(
+      req.params.id,
       {
-        ...(title && { title }),
-        ...(description && { description }),
-        ...(date && { date }),
-        ...(minister && { minister }),
-        updatedAt: Date.now()
+        ...eventData,
+        musicLinks,
+        attachments,
       },
       { new: true }
     );
 
-    if (!updated) {
-      return res.status(404).json({ message: 'Evento não encontrado.' });
-    }
+    // Atualiza ou cria a escala vinculada
+    await Scale.findOneAndUpdate(
+      { eventId: req.params.id },
+      { eventId: req.params.id, members },
+      { upsert: true, new: true }
+    );
 
-    res.status(200).json(updated);
+    res.status(200).json(updatedEvent);
   } catch (error) {
-    console.error('Erro ao atualizar evento:', error);
-    res.status(500).json({ message: 'Erro ao atualizar evento.' });
+    console.error('Erro ao atualizar evento e escala:', error);
+    res.status(500).json({ message: 'Erro ao atualizar evento e escala.' });
   }
 };
 
-// DELETE /api/events/:id
+// Deletar evento
 const deleteEvent = async (req, res) => {
   try {
-    const eventId = req.params.id;
-
-    const deletedEvent = await Event.findByIdAndDelete(eventId);
-    if (!deletedEvent) {
-      return res.status(404).json({ message: 'Evento não encontrado.' });
-    }
-
-    await Scale.deleteOne({ eventId });
-
-    res.status(200).json({ message: 'Evento e escala associada excluídos com sucesso.' });
+    await Event.findByIdAndDelete(req.params.id);
+    await Scale.deleteOne({ eventId: req.params.id }); // opcional: limpar escala
+    res.status(200).json({ message: 'Evento e escala deletados com sucesso.' });
   } catch (error) {
-    console.error('Erro ao excluir evento:', error);
-    res.status(500).json({ message: 'Erro ao excluir evento.' });
+    console.error('Erro ao deletar evento:', error);
+    res.status(500).json({ message: 'Erro ao deletar evento.' });
   }
 };
 
 module.exports = {
   getEvents,
   getEventById,
+  createEvent,
   updateEvent,
   deleteEvent
 };
