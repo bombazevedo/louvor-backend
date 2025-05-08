@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 
 // ✅ Corrigido o caminho e exportações esperadas
-const { authenticate, isCoordinator } = require('../middlewares/auth');
+const { authenticate, isCoordinator } = require('../middleware/auth');
 
 const Event = require('../models/Event');
 
