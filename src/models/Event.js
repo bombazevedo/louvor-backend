@@ -1,4 +1,4 @@
-// backend/models/Event.js
+
 const mongoose = require('mongoose');
 
 const eventSchema = new mongoose.Schema({
@@ -20,7 +20,12 @@ const eventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: false,
-  }
+  },
+  musicLinks: [String],
+  attachments: [{
+    name: String,
+    uri: String
+  }]
 }, {
   timestamps: true,
 });
