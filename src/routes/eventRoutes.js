@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { authMiddleware, isCoordinator } = require('../middlewares/authMiddleware');
+
+// ✅ Corrigido o caminho e exportações esperadas
+const { authenticate, isCoordinator } = require('../middlewares/auth');
+
 const Event = require('../models/Event');
 
 // Criar evento
-router.post('/', authMiddleware, isCoordinator, async (req, res) => {
+router.post('/', authenticate, isCoordinator, async (req, res) => {
   try {
     const event = new Event(req.body);
     await event.save();
@@ -16,7 +19,7 @@ router.post('/', authMiddleware, isCoordinator, async (req, res) => {
 });
 
 // Buscar todos os eventos
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const events = await Event.find().populate('members.user');
     res.json(events);
@@ -27,7 +30,7 @@ router.get('/', authMiddleware, async (req, res) => {
 });
 
 // Buscar evento por ID
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id).populate('members.user');
     if (!event) return res.status(404).json({ error: 'Evento não encontrado' });
@@ -39,7 +42,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // Atualizar evento
-router.patch('/:id', authMiddleware, isCoordinator, async (req, res) => {
+router.patch('/:id', authenticate, isCoordinator, async (req, res) => {
   try {
     const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
     res.json(updatedEvent);
@@ -50,7 +53,7 @@ router.patch('/:id', authMiddleware, isCoordinator, async (req, res) => {
 });
 
 // Deletar evento
-router.delete('/:id', authMiddleware, isCoordinator, async (req, res) => {
+router.delete('/:id', authenticate, isCoordinator, async (req, res) => {
   try {
     await Event.findByIdAndDelete(req.params.id);
     res.status(204).end();

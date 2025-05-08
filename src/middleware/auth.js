@@ -1,8 +1,7 @@
-// ✅ middleware/auth.js
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Middleware principal padronizado
+// Middleware principal: autenticação via JWT
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -35,5 +34,14 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Exporta padronizadamente para uso com destructuring
+// Middleware adicional: apenas coordenadores
+const isCoordinator = (req, res, next) => {
+  if (req.user?.role === "coordenador") {
+    return next();
+  }
+  return res.status(403).json({ message: "Acesso restrito a coordenadores." });
+};
+
+// Exportação padronizada
 exports.authenticate = authenticate;
+exports.isCoordinator = isCoordinator;
