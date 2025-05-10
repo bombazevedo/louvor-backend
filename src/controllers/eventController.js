@@ -1,6 +1,7 @@
-const Event = require('../models/eventModel');
 
-// GET /events
+const Event = require('../models/Event');
+
+// GET /events (aplicado via rota, não é usado diretamente)
 const getEvents = async (req, res) => {
   try {
     const events = await Event.find().populate('members.user');
@@ -16,6 +17,12 @@ const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id).populate('members.user');
     if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
+
+    const isMember = event.members.some(m => m.user.toString() === req.user.id);
+    if (req.user.role !== 'coordenador' && !isMember) {
+      return res.status(403).json({ message: 'Acesso negado a este evento.' });
+    }
+
     res.json(event);
   } catch (error) {
     console.error('Erro ao obter evento:', error);
@@ -26,14 +33,8 @@ const getEventById = async (req, res) => {
 // POST /events
 const createEvent = async (req, res) => {
   try {
-    const { title, location, date, type, status, notes } = req.body;
-    if (!title || !location || !date) {
-      return res.status(400).json({ message: 'Campos obrigatórios ausentes.' });
-    }
-
-    const event = new Event({ title, location, date, type, status, notes });
+    const event = new Event(req.body);
     const savedEvent = await event.save();
-
     res.status(201).json(savedEvent);
   } catch (error) {
     console.error('Erro ao criar evento:', error);
@@ -44,12 +45,19 @@ const createEvent = async (req, res) => {
 // PATCH /events/:id
 const updateEvent = async (req, res) => {
   try {
-    const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, {
-      new: true
-    }).populate('members.user');
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
 
-    if (!updatedEvent) return res.status(404).json({ message: 'Evento não encontrado.' });
-    res.json(updatedEvent);
+    const isMember = event.members.some(m => m.user.toString() === req.user.id);
+
+    if (req.user.role === 'coordenador' || (req.user.role === 'dm' && isMember)) {
+      const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, {
+        new: true
+      }).populate('members.user');
+      return res.json(updatedEvent);
+    }
+
+    return res.status(403).json({ message: 'Permissão negada para editar este evento.' });
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);
     res.status(500).json({ message: 'Erro ao atualizar evento.' });
@@ -71,7 +79,7 @@ const deleteEvent = async (req, res) => {
 module.exports = {
   getEvents,
   getEventById,
-  createEvent, // ✅ agora incluído
+  createEvent,
   updateEvent,
   deleteEvent
 };

@@ -21,6 +21,19 @@ const eventSchema = new mongoose.Schema({
     ref: 'User',
     required: false,
   },
+  members: [
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      bandaRole: {
+        type: String,
+        required: true
+      }
+    }
+  ],
   musicLinks: [String],
   attachments: [{
     name: String,
