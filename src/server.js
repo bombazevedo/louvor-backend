@@ -9,6 +9,7 @@ const importRoutes = require('./routes/importRoutes');
 const userRoutes = require('./routes/userRoutes');
 const scaleRoutes = require('./routes/scaleRoutes');
 const repertoireRoutes = require('./routes/repertoireRoutes');
+const bandRolesRoutes = require('./routes/bandRolesRoutes'); // ✅ ADICIONADA
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/api/import', importRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/scales', scaleRoutes);
 app.use('/api/repertoire', repertoireRoutes);
+app.use('/api/band-roles', bandRolesRoutes); // ✅ NOVA ROTA USADA
 
 // Test route
 app.get('/', (req, res) => {
