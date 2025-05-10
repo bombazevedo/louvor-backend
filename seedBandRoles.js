@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const BandRole = require('./models/BandRole');
+const BandRole = require('./src/models/BandRole');
 
 dotenv.config();
 
