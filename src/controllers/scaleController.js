@@ -1,3 +1,4 @@
+
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 
@@ -20,7 +21,7 @@ exports.createScale = async (req, res) => {
         if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
         return {
           user: m.user,
-          function: m.function || '',
+          bandaRole: m.bandaRole || '',
           confirmed: m.confirmed || false
         };
       })
@@ -55,7 +56,7 @@ exports.updateScale = async (req, res) => {
         if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
         return {
           user: m.user,
-          function: m.function || '',
+          bandaRole: m.bandaRole || '',
           confirmed: m.confirmed || false
         };
       })
@@ -90,7 +91,7 @@ exports.getScaleByEventId = async (req, res) => {
       return res.status(400).json({ message: 'ID do evento é obrigatório.' });
     }
 
-    const scale = await Scale.findOne({ eventId });
+    const scale = await Scale.findOne({ eventId }).populate('members.user', 'name email');
 
     if (!scale) {
       return res.status(404).json({ message: 'Escala não encontrada para este evento.' });
