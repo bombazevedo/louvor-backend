@@ -5,17 +5,16 @@ const {
   createScale,
   updateScale,
   getScaleByEventId,
-  deleteScale,
   getAllScales,
-  getScaleById
+  getScaleById,
+  deleteScale
 } = require('../controllers/scaleController');
 
-router.use(authenticate);
-router.get('/', getAllScales);
-router.get('/:id', getScaleById);
-router.get('/event/:eventId', getScaleByEventId);
-router.post('/', createScale);
-router.patch('/:id', updateScale);
-router.delete('/:id', deleteScale);
+router.get('/', authenticate, getAllScales);
+router.get('/event/:eventId', authenticate, getScaleByEventId);
+router.get('/:id', authenticate, getScaleById);
+router.post('/', authenticate, createScale);
+router.patch('/:id', authenticate, updateScale);
+router.delete('/:id', authenticate, deleteScale);
 
 module.exports = router;

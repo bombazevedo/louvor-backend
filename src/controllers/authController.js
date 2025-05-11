@@ -2,6 +2,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
+// Login
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -18,6 +19,7 @@ exports.loginUser = async (req, res) => {
   }
 };
 
+// Registro
 exports.registerUser = async (req, res) => {
   const { name, email, password, role } = req.body;
   try {
@@ -34,7 +36,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-// GET /api/users/:id
+// Buscar usuário por ID
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
@@ -45,17 +47,23 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// PATCH /api/users/:id
+// Atualizar função do usuário (somente coordenador)
 exports.updateUserRole = async (req, res) => {
   try {
+    if (req.user.role !== 'coordenador') {
+      return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
+    }
+
     const { role } = req.body;
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       { role },
       { new: true }
     ).select('-password');
+
     if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
-    res.status(200).json(updatedUser);
+
+    res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
   } catch (err) {
     res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
   }
