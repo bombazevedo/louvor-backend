@@ -4,19 +4,21 @@ const { authenticate } = require("../middleware/auth");
 const { getUserById, updateUserRole } = require("../controllers/authController");
 const User = require("../models/User");
 
-// Listar todos os usuários (somente coordenador/admin)
+// Listar todos os usuários (acesso controlado por papel)
 router.get("/", authenticate, async (req, res) => {
   try {
-    const allowedRoles = ["coordenador", "admin"];
-    if (!allowedRoles.includes(req.user.role.toLowerCase())) {
-      return res.status(403).json({ message: "Acesso negado. Permissão insuficiente." });
+    let users;
+
+    if (req.user.role === 'coordenador') {
+      users = await User.find().select('-password');
+    } else {
+      users = await User.find().select('name _id');
     }
 
-    const users = await User.find().select("name email role");
-    res.json(users);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send("Erro no servidor");
+    res.status(200).json(users);
+  } catch (error) {
+    console.error('Erro ao buscar usuários:', error.message);
+    res.status(500).json({ message: 'Erro ao buscar usuários.' });
   }
 });
 
