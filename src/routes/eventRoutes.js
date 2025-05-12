@@ -4,7 +4,7 @@ const { authenticate, isCoordinator } = require('../middleware/auth');
 const { getEventsWithScales } = require('../controllers/eventController');
 const Event = require('../models/Event');
 
-// Listar eventos com escalas visíveis conforme permissão
+// Listar eventos com escalas visíveis conforme permissão (qualquer usuário autenticado)
 router.get('/', authenticate, getEventsWithScales);
 
 // Criar evento (somente coordenador)
