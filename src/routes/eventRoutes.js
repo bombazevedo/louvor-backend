@@ -1,10 +1,13 @@
-
 const express = require('express');
 const router = express.Router();
 const { authenticate, isCoordinator } = require('../middleware/auth');
+const { getEventsWithScales } = require('../controllers/eventController');
 const Event = require('../models/Event');
 
-// Criar evento
+// Listar eventos com escalas visíveis conforme permissão
+router.get('/', authenticate, getEventsWithScales);
+
+// Criar evento (somente coordenador)
 router.post('/', authenticate, isCoordinator, async (req, res) => {
   try {
     const event = new Event(req.body);
@@ -16,32 +19,14 @@ router.post('/', authenticate, isCoordinator, async (req, res) => {
   }
 });
 
-// Buscar todos os eventos (restrito por role)
-router.get('/', authenticate, async (req, res) => {
-  try {
-    let events = [];
-
-    if (req.user.role === 'coordenador') {
-      events = await Event.find().populate('members.user');
-    } else {
-      events = await Event.find({ 'members.user': req.user.id }).populate('members.user');
-    }
-
-    res.json(events);
-  } catch (error) {
-    console.error('Erro ao buscar eventos:', error);
-    res.status(500).json({ error: 'Erro ao buscar eventos' });
-  }
-});
-
-// Buscar evento por ID (restrito por escala)
+// Buscar evento por ID com validação de permissão
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id).populate('members.user');
     if (!event) return res.status(404).json({ error: 'Evento não encontrado' });
 
     if (req.user.role !== 'coordenador') {
-      const isMember = event.members.some(m => m.user._id.toString() === req.user.id);
+      const isMember = event.members?.some(m => m.user._id?.toString() === req.user.id);
       if (!isMember) return res.status(403).json({ error: 'Acesso negado a este evento' });
     }
 
@@ -58,7 +43,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Evento não encontrado' });
 
-    const isMember = event.members.some(m => m.user.toString() === req.user.id);
+    const isMember = event.members?.some(m => m.user.toString() === req.user.id);
 
     if (req.user.role === 'coordenador' || (req.user.role === 'dm' && isMember)) {
       const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('members.user');
