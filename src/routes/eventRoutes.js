@@ -4,10 +4,10 @@ const { authenticate, isCoordinator } = require('../middleware/auth');
 const { getEventsWithScales } = require('../controllers/eventController');
 const Event = require('../models/Event');
 
-// Listar eventos com escalas visíveis conforme permissão (qualquer usuário autenticado)
+// ✅ Listar eventos visíveis com escala (coordenador vê tudo, outros só onde está escalado)
 router.get('/', authenticate, getEventsWithScales);
 
-// Criar evento (somente coordenador)
+// ✅ Criar evento (somente coordenador)
 router.post('/', authenticate, isCoordinator, async (req, res) => {
   try {
     const event = new Event(req.body);
@@ -19,7 +19,7 @@ router.post('/', authenticate, isCoordinator, async (req, res) => {
   }
 });
 
-// Buscar evento por ID com validação de permissão
+// ✅ Buscar evento por ID (somente se tiver permissão)
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id).populate('members.user');
@@ -37,7 +37,7 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Atualizar evento (coordenador ou DM escalado)
+// ✅ Atualizar evento (coordenador ou DM escalado)
 router.patch('/:id', authenticate, async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -46,8 +46,8 @@ router.patch('/:id', authenticate, async (req, res) => {
     const isMember = event.members?.some(m => m.user.toString() === req.user.id);
 
     if (req.user.role === 'coordenador' || (req.user.role === 'dm' && isMember)) {
-      const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('members.user');
-      return res.json(updatedEvent);
+      const updated = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('members.user');
+      return res.json(updated);
     }
 
     return res.status(403).json({ error: 'Permissão negada para editar este evento' });
@@ -57,7 +57,7 @@ router.patch('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Deletar evento (apenas coordenador)
+// ✅ Deletar evento (somente coordenador)
 router.delete('/:id', authenticate, isCoordinator, async (req, res) => {
   try {
     await Event.findByIdAndDelete(req.params.id);
