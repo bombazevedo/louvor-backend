@@ -42,11 +42,13 @@ exports.createScale = async (req, res) => {
       scale.members = validatedMembers;
       scale.notes = notes || '';
       await scale.save();
-      return res.status(200).json(scale);
+      const populated = await Scale.findById(scale._id).populate('members.user', 'name email');
+      return res.status(200).json(populated);
     } else {
       scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
       const savedScale = await scale.save();
-      return res.status(201).json(savedScale);
+      const populated = await Scale.findById(savedScale._id).populate('members.user', 'name email');
+      return res.status(201).json(populated);
     }
   } catch (error) {
     console.error('Erro ao criar/atualizar escala:', error);
@@ -89,11 +91,13 @@ exports.updateScale = async (req, res) => {
       }
     }
 
-    const updated = await Scale.findByIdAndUpdate(
+    await Scale.findByIdAndUpdate(
       scaleId,
       { members: validatedMembers, notes: notes || '', updatedAt: Date.now() },
       { new: true }
     );
+
+    const updated = await Scale.findById(scaleId).populate('members.user', 'name email');
 
     if (!updated) return res.status(404).json({ message: 'Escala não encontrada.' });
 
@@ -101,52 +105,5 @@ exports.updateScale = async (req, res) => {
   } catch (error) {
     console.error('Erro ao atualizar escala:', error);
     res.status(500).json({ message: 'Erro ao atualizar escala.', error: error.message });
-  }
-};
-
-// Buscar escala por evento
-exports.getScaleByEventId = async (req, res) => {
-  try {
-    const scale = await Scale.findOne({ eventId: req.params.eventId }).populate('members.user', 'name email');
-    if (!scale) return res.status(404).json({ message: 'Escala não encontrada para este evento.' });
-    res.status(200).json(scale);
-  } catch (err) {
-    console.error('Erro ao buscar escala por evento:', err.message);
-    res.status(500).json({ message: 'Erro interno do servidor.' });
-  }
-};
-
-// Buscar todas as escalas
-exports.getAllScales = async (req, res) => {
-  try {
-    const scales = await Scale.find().populate('members.user', 'name email');
-    res.status(200).json(scales);
-  } catch (err) {
-    console.error('Erro ao buscar escalas:', err.message);
-    res.status(500).json({ message: 'Erro ao buscar escalas.' });
-  }
-};
-
-// Buscar escala por ID
-exports.getScaleById = async (req, res) => {
-  try {
-    const scale = await Scale.findById(req.params.id).populate('members.user', 'name email');
-    if (!scale) return res.status(404).json({ message: 'Escala não encontrada.' });
-    res.status(200).json(scale);
-  } catch (err) {
-    console.error('Erro ao buscar escala por ID:', err.message);
-    res.status(500).json({ message: 'Erro interno ao buscar escala.' });
-  }
-};
-
-// Deletar escala
-exports.deleteScale = async (req, res) => {
-  try {
-    const deleted = await Scale.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ message: 'Escala não encontrada para exclusão.' });
-    res.status(200).json({ message: 'Escala excluída com sucesso.' });
-  } catch (err) {
-    console.error('Erro ao deletar escala:', err.message);
-    res.status(500).json({ message: 'Erro ao deletar escala.' });
   }
 };
