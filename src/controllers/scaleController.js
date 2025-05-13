@@ -1,7 +1,8 @@
+
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 
-// Criar escala
+// Criar ou atualizar escala (inteligente)
 exports.createScale = async (req, res) => {
   try {
     const { eventId, members, notes } = req.body;
@@ -35,12 +36,21 @@ exports.createScale = async (req, res) => {
       }
     }
 
-    const scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
-    const savedScale = await scale.save();
-    res.status(201).json(savedScale);
+    let scale = await Scale.findOne({ eventId });
+
+    if (scale) {
+      scale.members = validatedMembers;
+      scale.notes = notes || '';
+      await scale.save();
+      return res.status(200).json(scale);
+    } else {
+      scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
+      const savedScale = await scale.save();
+      return res.status(201).json(savedScale);
+    }
   } catch (error) {
-    console.error('Erro ao criar escala:', error);
-    res.status(500).json({ message: 'Erro ao criar escala.', error: error.message });
+    console.error('Erro ao criar/atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao salvar escala.', error: error.message });
   }
 };
 
