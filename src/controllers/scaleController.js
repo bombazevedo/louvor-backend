@@ -1,3 +1,4 @@
+
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 
@@ -106,7 +107,6 @@ exports.updateScale = async (req, res) => {
   }
 };
 
-// Adicionando os métodos faltantes:
 exports.getScaleByEventId = async (req, res) => {
   try {
     const scale = await Scale.findOne({ eventId: req.params.eventId }).populate('members.user', 'name email');
