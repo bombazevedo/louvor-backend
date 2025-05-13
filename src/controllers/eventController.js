@@ -10,7 +10,6 @@ exports.getEventsWithScales = async (req, res) => {
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
-        // Busca a escala associada ao evento e popula os dados do usuário
         const scale = await Scale.findOne({ eventId: event._id })
           .populate('members.user', 'name email');
 
@@ -18,9 +17,8 @@ exports.getEventsWithScales = async (req, res) => {
         if (userRole === 'coordenador') {
           podeVer = true;
         } else {
-          // Valida se o usuário está escalado, considerando que os dados do usuário podem estar em formato Object ou string
-          const escalado = scale?.members?.some(m => 
-            (m.user?._id ? m.user._id.toString() : m.user.toString()) === userId
+          const escalado = scale?.members?.some(m =>
+            (m.user?._id?.toString?.() || m.user?.toString?.()) === userId
           );
           podeVer = escalado;
         }
@@ -28,8 +26,9 @@ exports.getEventsWithScales = async (req, res) => {
         if (!podeVer) return null;
 
         const eventObj = event.toObject();
-        // Em vez de sobrescrever eventObj.members, atribuímos a propriedade scale com os dados obtidos
-        eventObj.scale = scale || null;
+        delete eventObj.members; // Remover membros antigos
+        eventObj.scale = scale || { members: [] }; // Garantir estrutura mesmo que sem escala
+
         return eventObj;
       })
     );
