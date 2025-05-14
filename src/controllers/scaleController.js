@@ -1,4 +1,3 @@
-
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 
