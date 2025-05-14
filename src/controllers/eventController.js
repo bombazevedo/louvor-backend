@@ -26,8 +26,15 @@ exports.getEventsWithScales = async (req, res) => {
         if (!podeVer) return null;
 
         const eventObj = event.toObject();
-        delete eventObj.members; // Remover membros antigos
-        eventObj.scale = scale || { members: [] }; // Garantir estrutura mesmo que sem escala
+
+        // ⚠️ Apagar membros antigos, mas manter compatibilidade
+        delete eventObj.members;
+
+        // ✅ Inclui o campo 'scale'
+        eventObj.scale = scale || { members: [] };
+
+        // ✅ Para compatibilidade: adiciona 'members' espelhando a escala
+        eventObj.members = scale?.members || [];
 
         return eventObj;
       })
