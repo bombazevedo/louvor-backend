@@ -8,8 +8,7 @@ exports.getEventsWithScales = async (req, res) => {
 
     const events = await Event.find()
     .populate({
-      path: 'scale',
-      populate: [
+      path: 'scale', options: { strictPopulate: false }, populate: [
         { path: 'members.user', select: 'name email' },
         { path: 'members.role', select: 'name' }
       ]
