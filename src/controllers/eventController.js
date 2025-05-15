@@ -9,9 +9,9 @@ exports.getEventsWithScales = async (req, res) => {
     const events = await Event.find()
     .populate({
       path: 'scale', options: { strictPopulate: false }, populate: [
-        { path: 'members.user', select: 'name email' },
-        { path: 'members.role', select: 'name' }
-      ]
+      { path: 'members.user', select: 'name email', options: { strictPopulate: false } },
+      { path: 'members.role', select: 'name', options: { strictPopulate: false } }
+    ]
     }).sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(
