@@ -6,7 +6,14 @@ exports.getEventsWithScales = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const events = await Event.find().sort({ date: 1 });
+    const events = await Event.find()
+    .populate({
+      path: 'scale',
+      populate: [
+        { path: 'members.user', select: 'name email' },
+        { path: 'members.role', select: 'name' }
+      ]
+    }).sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
