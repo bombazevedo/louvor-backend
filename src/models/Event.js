@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 const eventSchema = new mongoose.Schema({
@@ -21,19 +20,10 @@ const eventSchema = new mongoose.Schema({
     ref: 'User',
     required: false,
   },
-  members: [
-    {
-      user: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-      },
-      bandaRole: {
-        type: String,
-        required: true
-      }
-    }
-  ],
+  scale: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Scale'
+  },
   musicLinks: [String],
   attachments: [{
     name: String,
