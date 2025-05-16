@@ -20,7 +20,11 @@ exports.getEventsWithScales = async (req, res) => {
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
         const scale = await Scale.findOne({ eventId: event._id })
-          .populate('members.user', 'name email');
+          .populate({
+            path: 'members.user',
+            select: 'name email',
+            options: { strictPopulate: false }
+          });
 
         let podeVer = false;
         if (userRole === 'coordenador') {
@@ -68,7 +72,11 @@ exports.getEventById = async (req, res) => {
     }
 
     const scale = await Scale.findOne({ eventId: event._id })
-      .populate('members.user', 'name email');
+      .populate({
+        path: 'members.user',
+        select: 'name email',
+        options: { strictPopulate: false }
+      });
 
     const eventObj = event.toObject();
     delete eventObj.members;
