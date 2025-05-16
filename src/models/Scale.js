@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema({
@@ -7,7 +6,7 @@ const memberSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  role: {
+  function: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'BandRole',
     required: true
