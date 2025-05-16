@@ -62,21 +62,26 @@ exports.getEventById = async (req, res) => {
       .populate({
         path: 'scale',
         options: { strictPopulate: false },
-        populate: [
-          { path: 'members.user', select: 'name email', options: { strictPopulate: false } }
-        ]
+        populate: {
+          path: 'members.user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        }
       });
 
     if (!event) {
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
-    const scale = await Scale.findOne({ eventId: event._id })
-      .populate({
-        path: 'members.user',
-        select: 'name email',
-        options: { strictPopulate: false }
-      });
+    let scale = null;
+    if (event.scale?._id) {
+      scale = await Scale.findOne({ eventId: event._id })
+        .populate({
+          path: 'members.user',
+          select: 'name email',
+          options: { strictPopulate: false }
+        });
+    }
 
     const eventObj = event.toObject();
     delete eventObj.members;
