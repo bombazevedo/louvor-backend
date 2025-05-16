@@ -7,32 +7,43 @@ const morgan = require('morgan');
 
 dotenv.config();
 
+console.log('🧪 process.env.PORT:', process.env.PORT);
+console.log('🧪 process.env.MONGODB_URI exists:', !!process.env.MONGODB_URI);
+console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
-app.use(morgan('dev'));
 
-// Importação de rotas
-const eventRoutes = require('./routes/eventRoutes');
-const authRoutes = require('./routes/authRoutes');
-const userRoutes = require('./routes/userRoutes');
-const scaleRoutes = require('./routes/scaleRoutes');
-const bandRolesRoutes = require('./routes/bandRolesRoutes');
-const repertoireRoutes = require('./routes/repertoireRoutes');
-const songRoutes = require('./routes/songRoutes');
+try {
+  app.use(morgan('dev'));
+} catch (err) {
+  console.error('❌ Erro ao configurar Morgan:', err.message);
+}
 
-// Montagem de rotas
-app.use('/api/events', eventRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/scales', scaleRoutes);
-app.use('/api/band-roles', bandRolesRoutes);
-app.use('/api/repertoires', repertoireRoutes);
-app.use('/api/songs', songRoutes);
+// Rota de teste
+app.get('/ping', (req, res) => {
+  console.log('✅ /ping recebido');
+  res.send('pong');
+});
+
+// Importação de rotas com log defensivo
+try {
+  app.use('/api/events', require('./routes/eventRoutes'));
+  app.use('/api/auth', require('./routes/authRoutes'));
+  app.use('/api/users', require('./routes/userRoutes'));
+  app.use('/api/scales', require('./routes/scaleRoutes'));
+  app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
+  app.use('/api/repertoires', require('./routes/repertoireRoutes'));
+  app.use('/api/songs', require('./routes/songRoutes'));
+} catch (err) {
+  console.error('❌ Erro ao montar rotas:', err.message);
+}
 
 // Conexão com MongoDB
+console.log('🔄 Tentando conectar ao MongoDB...');
 mongoose.connect(process.env.MONGODB_URI || '', {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -44,5 +55,5 @@ mongoose.connect(process.env.MONGODB_URI || '', {
   });
 })
 .catch((err) => {
-  console.error('❌ Erro ao conectar no MongoDB:', err.message);
+  console.error('❌ Falha ao conectar no MongoDB:', err.message);
 });
