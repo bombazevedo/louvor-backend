@@ -8,14 +8,7 @@ exports.getEventsWithScales = async (req, res) => {
     const userId = req.user.id;
     const userRole = req.user.role;
 
-    const events = await Event.find()
-      .populate({
-        path: 'scale',
-        options: { strictPopulate: false },
-        populate: [
-          { path: 'members.user', select: 'name email', options: { strictPopulate: false } }
-        ]
-      }).sort({ date: 1 });
+    const events = await Event.find().sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
@@ -58,30 +51,18 @@ exports.getEventsWithScales = async (req, res) => {
 // GET /api/events/:id
 exports.getEventById = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id)
-      .populate({
-        path: 'scale',
-        options: { strictPopulate: false },
-        populate: {
-          path: 'members.user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        }
-      });
+    const event = await Event.findById(req.params.id);
 
     if (!event) {
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
-    let scale = null;
-    if (event.scale?._id) {
-      scale = await Scale.findOne({ eventId: event._id })
-        .populate({
-          path: 'members.user',
-          select: 'name email',
-          options: { strictPopulate: false }
-        });
-    }
+    const scale = await Scale.findOne({ eventId: event._id })
+      .populate({
+        path: 'members.user',
+        select: 'name email',
+        options: { strictPopulate: false }
+      });
 
     const eventObj = event.toObject();
     delete eventObj.members;
