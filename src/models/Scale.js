@@ -1,4 +1,4 @@
-// src/models/Scale.js
+   // src/models/Scale.js
 const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema({
