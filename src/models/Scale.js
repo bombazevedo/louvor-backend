@@ -7,8 +7,9 @@ const memberSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  function: {
-    type: String,
+  role: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'BandRole',
     required: true
   },
   confirmed: {
@@ -32,4 +33,4 @@ const scaleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.models.Scale || mongoose.model('Scale', scaleSchema);
+module.exports = mongoose.model('Scale', scaleSchema);
