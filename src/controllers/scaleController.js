@@ -7,7 +7,7 @@ const BandRole = require('../models/BandRole');
 exports.createScale = async (req, res) => {
   try {
     const { eventId, members, notes } = req.body;
-    const role = req.user?.role;
+    const role = req.user?.function;
     const userId = req.user?.id;
 
     if (!eventId || !Array.isArray(members)) {
@@ -17,9 +17,9 @@ exports.createScale = async (req, res) => {
     const validatedMembers = await Promise.all(
       members.map(async m => {
         const userExists = await User.findById(m.user);
-        const roleDoc = await BandRole.findById(m.role);
+        const roleDoc = await BandRole.findById(m.function);
         if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
-        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.role}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
         return {
           user: m.user,
           function: roleDoc.name,
@@ -63,7 +63,7 @@ exports.updateScale = async (req, res) => {
   try {
     const scaleId = req.params.id;
     const { members, notes } = req.body;
-    const role = req.user?.role;
+    const role = req.user?.function;
     const userId = req.user?.id;
 
     if (!Array.isArray(members)) {
@@ -73,9 +73,9 @@ exports.updateScale = async (req, res) => {
     const validatedMembers = await Promise.all(
       members.map(async m => {
         const userExists = await User.findById(m.user);
-        const roleDoc = await BandRole.findById(m.role);
+        const roleDoc = await BandRole.findById(m.function);
         if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
-        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.role}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
         return {
           user: m.user,
           function: roleDoc.name,
