@@ -1,6 +1,7 @@
 
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
+const User = require('../models/User');
 
 // GET /api/events
 exports.getEventsWithScales = async (req, res) => {
@@ -12,12 +13,15 @@ exports.getEventsWithScales = async (req, res) => {
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
-        const scale = await Scale.findOne({ eventId: event._id })
-          .populate({
-            path: 'members.user',
-            select: 'name email',
-            options: { strictPopulate: false }
-          });
+        const scale = await Scale.findOne({ eventId: event._id }).lean();
+
+        if (scale && scale.members && scale.members.length > 0) {
+          const populatedMembers = await Promise.all(scale.members.map(async (member) => {
+            const user = await User.findById(member.user).select('name email');
+            return { ...member, user: user || null };
+          }));
+          scale.members = populatedMembers;
+        }
 
         let podeVer = false;
         if (userRole === 'coordenador') {
@@ -43,8 +47,8 @@ exports.getEventsWithScales = async (req, res) => {
     const filtered = eventsWithScales.filter(e => e !== null);
     res.status(200).json(filtered);
   } catch (err) {
-    console.error('🔥 Erro getEventsWithScales:', err.message);
-    console.error('🔥 Stack:', err.stack);
+    console.error('🔥 ERRO getEventsWithScales:', err.message);
+    console.error(err.stack);
     res.status(500).json({ message: 'Erro ao buscar eventos.' });
   }
 };
@@ -54,21 +58,21 @@ exports.getEventById = async (req, res) => {
   try {
     console.log('📡 Buscando evento por ID:', req.params.id);
     const event = await Event.findById(req.params.id);
-    console.log('✅ Evento encontrado:', event);
 
     if (!event) {
       console.warn('⚠️ Evento não encontrado');
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
-    const scale = await Scale.findOne({ eventId: event._id })
-      .populate({
-        path: 'members.user',
-        select: 'name email',
-        options: { strictPopulate: false }
-      });
+    const scale = await Scale.findOne({ eventId: event._id }).lean();
 
-    console.log('✅ Escala encontrada:', scale);
+    if (scale && scale.members && scale.members.length > 0) {
+      const populatedMembers = await Promise.all(scale.members.map(async (member) => {
+        const user = await User.findById(member.user).select('name email');
+        return { ...member, user: user || null };
+      }));
+      scale.members = populatedMembers;
+    }
 
     const eventObj = event.toObject();
     delete eventObj.members;
@@ -77,8 +81,8 @@ exports.getEventById = async (req, res) => {
 
     res.status(200).json(eventObj);
   } catch (err) {
-    console.error('🔥 Erro getEventById:', err.message);
-    console.error('🔥 Stack:', err.stack);
+    console.error('🔥 ERRO getEventById:', err.message);
+    console.error(err.stack);
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };
