@@ -1,4 +1,4 @@
-// src/models/Scale.js
+
 const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema({
@@ -32,4 +32,4 @@ const scaleSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('Scale', scaleSchema);
+module.exports = mongoose.models.Scale || mongoose.model('Scale', scaleSchema);
