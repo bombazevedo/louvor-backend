@@ -20,7 +20,7 @@ router.post('/', authenticate, isCoordinator, async (req, res) => {
 
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id).populate('members.user');
+    const event = await Event.findById(req.params.id).// populate('members.user') // REMOVIDO;
     if (!event) return res.status(404).json({ error: 'Evento não encontrado' });
 
     if (req.user.role !== 'coordenador') {
@@ -43,7 +43,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     const isMember = event.members?.some(m => m.user.toString() === req.user.id);
 
     if (req.user.role === 'coordenador' || (req.user.role === 'dm' && isMember)) {
-      const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('members.user');
+      const updatedEvent = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true }).// populate('members.user') // REMOVIDO;
       return res.json(updatedEvent);
     }
 
