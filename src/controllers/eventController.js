@@ -43,7 +43,8 @@ exports.getEventsWithScales = async (req, res) => {
     const filtered = eventsWithScales.filter(e => e !== null);
     res.status(200).json(filtered);
   } catch (err) {
-    console.error('Erro ao buscar eventos com escalas:', err.message);
+    console.error('🔥 Erro getEventsWithScales:', err.message);
+    console.error('🔥 Stack:', err.stack);
     res.status(500).json({ message: 'Erro ao buscar eventos.' });
   }
 };
@@ -51,9 +52,12 @@ exports.getEventsWithScales = async (req, res) => {
 // GET /api/events/:id
 exports.getEventById = async (req, res) => {
   try {
+    console.log('📡 Buscando evento por ID:', req.params.id);
     const event = await Event.findById(req.params.id);
+    console.log('✅ Evento encontrado:', event);
 
     if (!event) {
+      console.warn('⚠️ Evento não encontrado');
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
@@ -64,6 +68,8 @@ exports.getEventById = async (req, res) => {
         options: { strictPopulate: false }
       });
 
+    console.log('✅ Escala encontrada:', scale);
+
     const eventObj = event.toObject();
     delete eventObj.members;
     eventObj.scale = scale || { members: [] };
@@ -71,7 +77,8 @@ exports.getEventById = async (req, res) => {
 
     res.status(200).json(eventObj);
   } catch (err) {
-    console.error('Erro ao buscar evento por ID:', err.message, err.stack);
+    console.error('🔥 Erro getEventById:', err.message);
+    console.error('🔥 Stack:', err.stack);
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };
