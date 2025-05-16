@@ -1,48 +1,36 @@
+
 const express = require('express');
 const mongoose = require('mongoose');
-const cors = require('cors');
 const dotenv = require('dotenv');
-
-const authRoutes = require('./routes/authRoutes');
-const eventRoutes = require('./routes/eventRoutes');
-const importRoutes = require('./routes/importRoutes');
-const userRoutes = require('./routes/userRoutes');
-const scaleRoutes = require('./routes/scaleRoutes');
-const repertoireRoutes = require('./routes/repertoireRoutes');
-const bandRolesRoutes = require('./routes/bandRolesRoutes'); // ✅ ADICIONADA
+const cors = require('cors');
+const morgan = require('morgan');
+const eventRoutes = require('./routes/eventRoutes'); // rota principal
 
 dotenv.config();
 
 const app = express();
+const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
+app.use(morgan('dev'));
 
-mongoose.connect(process.env.MONGODB_URI, {
+// Rotas
+app.use('/api/events', eventRoutes);
+
+// Conexão MongoDB
+mongoose.connect(process.env.MONGODB_URI || '', {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
-.then(() => console.log('✅ MongoDB conectado com sucesso'))
-.catch(err => {
-  console.error('❌ Erro ao conectar com MongoDB:', err);
-  process.exit(1);
-});
+.then(() => {
+  console.log('✅ MongoDB conectado com sucesso');
 
-// Rotas da API
-app.use('/api/auth', authRoutes);
-app.use('/api/events', eventRoutes);
-app.use('/api/import', importRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/scales', scaleRoutes);
-app.use('/api/repertoire', repertoireRoutes);
-app.use('/api/band-roles', bandRolesRoutes); // ✅ NOVA ROTA USADA
-
-// Test route
-app.get('/', (req, res) => {
-  res.send('API do Louvor está rodando.');
-});
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  // Inicia servidor após conexão
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  });
+})
+.catch((err) => {
+  console.error('❌ Erro ao conectar no MongoDB:', err.message);
 });
