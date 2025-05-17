@@ -64,20 +64,28 @@ exports.getEventById = async (req, res) => {
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
-    const scale = await Scale.findOne({ eventId: event._id }).lean();
+    let scale = await Scale.findOne({ eventId: event._id }).lean();
 
-    if (scale && scale.members && scale.members.length > 0) {
-      const populatedMembers = await Promise.all(scale.members.map(async (member) => {
-        const user = await User.findById(member.user).select('name email');
-        return { ...member, user: user || null };
-      }));
+    if (scale?.members?.length > 0) {
+      const populatedMembers = await Promise.all(
+        scale.members.map(async (member) => {
+          try {
+            const user = await User.findById(member.user).select('name email');
+            return { ...member, user: user || null };
+          } catch {
+            return { ...member, user: null };
+          }
+        })
+      );
       scale.members = populatedMembers;
+    } else {
+      scale = { members: [] };
     }
 
     const eventObj = event.toObject();
     delete eventObj.members;
-    eventObj.scale = scale || { members: [] };
-    eventObj.members = scale?.members || [];
+    eventObj.scale = scale;
+    eventObj.members = scale.members;
 
     res.status(200).json(eventObj);
   } catch (err) {
