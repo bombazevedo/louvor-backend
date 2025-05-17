@@ -45,7 +45,7 @@ exports.getEventsWithScales = async (req, res) => {
     );
 
     const filtered = eventsWithScales.filter(e => e !== null);
-    res.status(200).json(filtered);
+    res.status(200).json(filtered); // <-- RETORNO CORRETO
   } catch (err) {
     console.error('🔥 ERRO getEventsWithScales:', err.message);
     console.error(err.stack);
