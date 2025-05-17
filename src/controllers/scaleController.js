@@ -1,4 +1,3 @@
-
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const BandRole = require('../models/BandRole');
@@ -109,5 +108,20 @@ exports.updateScale = async (req, res) => {
   } catch (error) {
     console.error('Erro ao atualizar escala:', error);
     res.status(500).json({ message: 'Erro ao atualizar escala.', error: error.message });
+  }
+};
+
+// GET /scales/event/:eventId
+exports.getScaleByEventId = async (req, res) => {
+  try {
+    const scale = await Scale.findOne({ eventId: req.params.eventId })
+      .populate('members.user', 'name email');
+
+    if (!scale) return res.status(404).json({ error: 'Escala não encontrada' });
+
+    res.json(scale);
+  } catch (err) {
+    console.error('Erro em getScaleByEventId:', err);
+    res.status(500).json({ error: 'Erro ao buscar escala' });
   }
 };
