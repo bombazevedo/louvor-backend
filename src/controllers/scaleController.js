@@ -1,91 +1,113 @@
-// src/controllers/scaleController.js
+
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const BandRole = require('../models/BandRole');
 
-// POST /api/scales
+// Criar ou atualizar escala (inteligente)
 exports.createScale = async (req, res) => {
   try {
-    const { eventId, members = [], notes = '' } = req.body;
+    const { eventId, members, notes } = req.body;
+    const role = req.user?.function;
+    const userId = req.user?.id;
 
-    const validatedMembers = await Promise.all(members.map(async (member) => {
-      const userExists = await User.findById(member.user);
-      const roleExists = await BandRole.findById(member.role);
-      if (!userExists || !roleExists) return null;
+    if (!eventId || !Array.isArray(members)) {
+      return res.status(400).json({ message: 'Dados inválidos. É necessário eventId e lista de membros.' });
+    }
 
-      return {
-        user: userExists._id,
-        function: roleExists.name,
-        confirmed: member.confirmed || false
-      };
-    }));
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        const roleDoc = await BandRole.findById(m.function);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
+        return {
+          user: m.user,
+          function: roleDoc.name,
+          confirmed: m.confirmed || false
+        };
+      })
+    );
 
-    const filtered = validatedMembers.filter(m => m !== null);
+    if (role === 'usuario') {
+      return res.status(403).json({ message: 'Usuário comum não pode criar escalas.' });
+    }
 
-    const scale = new Scale({ eventId, members: filtered, notes });
-    await scale.save();
-    res.status(201).json(scale);
+    if (role === 'dm') {
+      const escalado = validatedMembers.some(m => m.user.toString() === userId);
+      if (!escalado) {
+        return res.status(403).json({ message: 'DM só pode criar ou editar escalas onde está escalado.' });
+      }
+    }
+
+    let scale = await Scale.findOne({ eventId });
+
+    if (scale) {
+      scale.members = validatedMembers;
+      scale.notes = notes || '';
+      await scale.save();
+      const populated = await Scale.findById(scale._id).populate('members.user', 'name email');
+      return res.status(200).json(populated);
+    } else {
+      scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
+      const savedScale = await scale.save();
+      const populated = await Scale.findById(savedScale._id).populate('members.user', 'name email');
+      return res.status(201).json(populated);
+    }
   } catch (error) {
-    console.error('❌ Erro ao criar escala:', error);
-    res.status(500).json({ error: 'Erro ao criar escala' });
+    console.error('Erro ao criar/atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao salvar escala.', error: error.message });
   }
 };
 
-// GET /api/scales/event/:eventId
-exports.getScaleByEventId = async (req, res) => {
-  try {
-    const scale = await Scale.findOne({ eventId: req.params.eventId })
-      .populate('members.user', 'name email');
-
-    if (!scale) return res.status(404).json({ error: 'Escala não encontrada' });
-    res.json(scale);
-  } catch (error) {
-    console.error('❌ Erro ao buscar escala:', error);
-    res.status(500).json({ error: 'Erro ao buscar escala' });
-  }
-};
-
-// PATCH /api/scales/:id
 exports.updateScale = async (req, res) => {
   try {
-    const { members = [], notes = '' } = req.body;
+    const scaleId = req.params.id;
+    const { members, notes } = req.body;
+    const role = req.user?.function;
+    const userId = req.user?.id;
 
-    const validatedMembers = await Promise.all(members.map(async (member) => {
-      const userExists = await User.findById(member.user);
-      const roleExists = await BandRole.findById(member.role);
-      if (!userExists || !roleExists) return null;
+    if (!Array.isArray(members)) {
+      return res.status(400).json({ message: 'Lista de membros inválida.' });
+    }
 
-      return {
-        user: userExists._id,
-        function: roleExists.name,
-        confirmed: member.confirmed || false
-      };
-    }));
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        const roleDoc = await BandRole.findById(m.function);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
+        return {
+          user: m.user,
+          function: roleDoc.name,
+          confirmed: m.confirmed || false
+        };
+      })
+    );
 
-    const filtered = validatedMembers.filter(m => m !== null);
+    if (role === 'usuario') {
+      return res.status(403).json({ message: 'Usuário comum não pode editar escalas.' });
+    }
 
-    const updatedScale = await Scale.findByIdAndUpdate(
-      req.params.id,
-      { members: filtered, notes },
+    if (role === 'dm') {
+      const escalado = validatedMembers.some(m => m.user.toString() === userId);
+      if (!escalado) {
+        return res.status(403).json({ message: 'DM só pode editar escalas onde está escalado.' });
+      }
+    }
+
+    await Scale.findByIdAndUpdate(
+      scaleId,
+      { members: validatedMembers, notes: notes || '', updatedAt: Date.now() },
       { new: true }
     );
 
-    if (!updatedScale) return res.status(404).json({ error: 'Escala não encontrada' });
-    res.json(updatedScale);
-  } catch (error) {
-    console.error('❌ Erro ao atualizar escala:', error);
-    res.status(500).json({ error: 'Erro ao atualizar escala' });
-  }
-};
+    const updated = await Scale.findById(scaleId).populate('members.user', 'name email');
 
-// DELETE /api/scales/:id
-exports.deleteScale = async (req, res) => {
-  try {
-    const deleted = await Scale.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Escala não encontrada' });
-    res.status(204).end();
+    if (!updated) return res.status(404).json({ message: 'Escala não encontrada.' });
+
+    res.status(200).json(updated);
   } catch (error) {
-    console.error('❌ Erro ao deletar escala:', error);
-    res.status(500).json({ error: 'Erro ao deletar escala' });
+    console.error('Erro ao atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao atualizar escala.', error: error.message });
   }
 };

@@ -1,4 +1,4 @@
-// src/controllers/eventController.js
+
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
@@ -18,10 +18,7 @@ exports.getEventsWithScales = async (req, res) => {
         if (scale && scale.members && scale.members.length > 0) {
           const populatedMembers = await Promise.all(scale.members.map(async (member) => {
             const user = await User.findById(member.user).select('name email');
-            return {
-              ...member,
-              user: user || null,
-            };
+            return { ...member, user: user || null };
           }));
           scale.members = populatedMembers;
         }
@@ -30,18 +27,18 @@ exports.getEventsWithScales = async (req, res) => {
         if (userRole === 'coordenador') {
           podeVer = true;
         } else {
-          const escalado = scale?.members?.some(m => {
-            const userIdStr = typeof m.user === 'string' ? m.user : m.user?._id?.toString();
-            return userIdStr === userId;
-          });
+          const escalado = scale?.members?.some(m =>
+            (m.user?._id?.toString?.() || m.user?.toString?.()) === userId
+          );
           podeVer = escalado;
         }
 
         if (!podeVer) return null;
 
         const eventObj = event.toObject();
+        delete eventObj.members;
         eventObj.scale = scale || { members: [] };
-        eventObj.members = scale?.members || []; // compatibilidade
+        eventObj.members = scale?.members || [];
 
         return eventObj;
       })
@@ -51,6 +48,7 @@ exports.getEventsWithScales = async (req, res) => {
     res.status(200).json(filtered);
   } catch (err) {
     console.error('🔥 ERRO getEventsWithScales:', err.message);
+    console.error(err.stack);
     res.status(500).json({ message: 'Erro ao buscar eventos.' });
   }
 };
@@ -62,6 +60,7 @@ exports.getEventById = async (req, res) => {
     const event = await Event.findById(req.params.id);
 
     if (!event) {
+      console.warn('⚠️ Evento não encontrado');
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
@@ -70,21 +69,20 @@ exports.getEventById = async (req, res) => {
     if (scale && scale.members && scale.members.length > 0) {
       const populatedMembers = await Promise.all(scale.members.map(async (member) => {
         const user = await User.findById(member.user).select('name email');
-        return {
-          ...member,
-          user: user || null,
-        };
+        return { ...member, user: user || null };
       }));
       scale.members = populatedMembers;
     }
 
     const eventObj = event.toObject();
+    delete eventObj.members;
     eventObj.scale = scale || { members: [] };
     eventObj.members = scale?.members || [];
 
     res.status(200).json(eventObj);
   } catch (err) {
     console.error('🔥 ERRO getEventById:', err.message);
+    console.error(err.stack);
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };

@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema({
@@ -7,8 +8,7 @@ const memberSchema = new mongoose.Schema({
     required: true
   },
   function: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'BandRole',
+    type: String,
     required: true
   },
   confirmed: {
