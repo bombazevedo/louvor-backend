@@ -1,3 +1,4 @@
+console.log("🛠️ server.js iniciado - hash de controle 2501");
 
 const express = require('express');
 const mongoose = require('mongoose');
