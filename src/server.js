@@ -34,8 +34,8 @@ try {
   app.use('/api/events', require('./routes/eventRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
   app.use('/api/users', require('./routes/userRoutes'));
-  app.use('/api/scales', require('./routes/scaleRoutes')); // só esta ativa
-  app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
+  app.use('/api/scales', require('./routes/scaleRoutes'));
+  app.use('/api/band-roles', require('./routes/bandRolesRoutes')); // só esta ativa
   app.use('/api/repertoires', require('./routes/repertoireRoutes'));
   app.use('/api/songs', require('./routes/songRoutes'));
 } catch (err) {
