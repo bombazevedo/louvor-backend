@@ -94,3 +94,5 @@ exports.getEventById = async (req, res) => {
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };
+// alteração forçada para commit
+
