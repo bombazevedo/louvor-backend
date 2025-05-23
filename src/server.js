@@ -36,8 +36,8 @@ try {
   app.use('/api/users', require('./routes/userRoutes'));
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
-  app.use('/api/repertoires', require('./routes/repertoireRoutes')); // só esta ativa
-  app.use('/api/songs', require('./routes/songRoutes'));
+  app.use('/api/repertoires', require('./routes/repertoireRoutes'));
+  app.use('/api/songs', require('./routes/songRoutes')); // só esta ativa
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
 }
