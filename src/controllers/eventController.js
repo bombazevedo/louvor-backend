@@ -38,7 +38,7 @@ exports.getEventsWithScales = async (req, res) => {
         const eventObj = event.toObject();
         delete eventObj.members;
         eventObj.scale = scale || { members: [] };
-        eventObj.members = scale?.members || [];
+        eventObj.members = scale && scale.members ? scale.members : [];
 
         return eventObj;
       })
