@@ -3,8 +3,8 @@ const router = express.Router();
 const { authenticate, isCoordinator } = require('../middleware/auth');
 const BandRole = require('../models/BandRole');
 
-// Listar funções do banco
-router.get('/', authenticate, async (req, res) => {
+// 🔓 Torne pública para que o app consiga carregar as funções sem estar logado
+router.get('/', async (req, res) => {
   try {
     const roles = await BandRole.find().sort({ name: 1 });
     res.status(200).json(roles);
@@ -13,7 +13,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Criar nova função de banda
+// 🔐 Rotas protegidas
 router.post('/', authenticate, isCoordinator, async (req, res) => {
   const { name } = req.body;
   if (!name || name.trim() === '') {
