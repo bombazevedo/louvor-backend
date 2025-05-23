@@ -1,3 +1,4 @@
+
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const BandRole = require('../models/BandRole');
@@ -6,8 +7,8 @@ const BandRole = require('../models/BandRole');
 exports.createScale = async (req, res) => {
   try {
     const { eventId, members, notes } = req.body;
-    const role = req.user?.function;
-    const userId = req.user?.id;
+    const role = req.user && req.user.function;
+    const userId = req.user && req.user.id;
 
     if (!eventId || !Array.isArray(members)) {
       return res.status(400).json({ message: 'Dados inválidos. É necessário eventId e lista de membros.' });
@@ -43,17 +44,19 @@ exports.createScale = async (req, res) => {
     if (scale) {
       scale.members = validatedMembers;
       scale.notes = notes || '';
-      await scaleconst populated = await scale.populate([
-  { path: 'members.user', select: 'name email' },
-  { path: 'members.function', select: 'name' }
-])
+      await scale.save();
+      const populated = await scale.populate([
+        { path: 'members.user', select: 'name email' },
+        { path: 'members.function', select: 'name' }
+      ]);
       return res.status(200).json(populated);
     } else {
       scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
-      const savedScale = await scaleconst populated = await scale.populate([
-  { path: 'members.user', select: 'name email' },
-  { path: 'members.function', select: 'name' }
-])
+      const savedScale = await scale.save();
+      const populated = await savedScale.populate([
+        { path: 'members.user', select: 'name email' },
+        { path: 'members.function', select: 'name' }
+      ]);
       return res.status(201).json(populated);
     }
   } catch (error) {
@@ -66,8 +69,8 @@ exports.updateScale = async (req, res) => {
   try {
     const scaleId = req.params.id;
     const { members, notes } = req.body;
-    const role = req.user?.function;
-    const userId = req.user?.id;
+    const role = req.user && req.user.function;
+    const userId = req.user && req.user.id;
 
     if (!Array.isArray(members)) {
       return res.status(400).json({ message: 'Lista de membros inválida.' });
@@ -102,12 +105,10 @@ exports.updateScale = async (req, res) => {
       scaleId,
       { members: validatedMembers, notes: notes || '', updatedAt: Date.now() },
       { new: true }
-    );
-
-.populate([
-  { path: 'members.user', select: 'name email' },
-  { path: 'members.function', select: 'name' }
-])
+    ).populate([
+      { path: 'members.user', select: 'name email' },
+      { path: 'members.function', select: 'name' }
+    ]);
 
     if (!updated) return res.status(404).json({ message: 'Escala não encontrada.' });
 
@@ -121,11 +122,10 @@ exports.updateScale = async (req, res) => {
 // GET /scales/event/:eventId
 exports.getScaleByEventId = async (req, res) => {
   try {
-    const scale = await Scale.findOne({ eventId: req.params.eventId })
-.populate([
-  { path: 'members.user', select: 'name email' },
-  { path: 'members.function', select: 'name' }
-])
+    const scale = await Scale.findOne({ eventId: req.params.eventId }).populate([
+      { path: 'members.user', select: 'name email' },
+      { path: 'members.function', select: 'name' }
+    ]);
 
     if (!scale) return res.status(404).json({ error: 'Escala não encontrada' });
 
