@@ -44,12 +44,18 @@ exports.createScale = async (req, res) => {
       scale.members = validatedMembers;
       scale.notes = notes || '';
       await scale.save();
-      const populated = await Scale.findById(scale._id).populate('members.user', 'name email');
+.populate([
+  { path: 'members.user', select: 'name email' },
+  { path: 'members.function', select: 'name' }
+])
       return res.status(200).json(populated);
     } else {
       scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
       const savedScale = await scale.save();
-      const populated = await Scale.findById(savedScale._id).populate('members.user', 'name email');
+.populate([
+  { path: 'members.user', select: 'name email' },
+  { path: 'members.function', select: 'name' }
+])
       return res.status(201).json(populated);
     }
   } catch (error) {
@@ -100,7 +106,10 @@ exports.updateScale = async (req, res) => {
       { new: true }
     );
 
-    const updated = await Scale.findById(scaleId).populate('members.user', 'name email');
+.populate([
+  { path: 'members.user', select: 'name email' },
+  { path: 'members.function', select: 'name' }
+])
 
     if (!updated) return res.status(404).json({ message: 'Escala não encontrada.' });
 
@@ -115,7 +124,10 @@ exports.updateScale = async (req, res) => {
 exports.getScaleByEventId = async (req, res) => {
   try {
     const scale = await Scale.findOne({ eventId: req.params.eventId })
-      .populate('members.user', 'name email');
+.populate([
+  { path: 'members.user', select: 'name email' },
+  { path: 'members.function', select: 'name' }
+])
 
     if (!scale) return res.status(404).json({ error: 'Escala não encontrada' });
 
