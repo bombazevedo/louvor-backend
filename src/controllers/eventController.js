@@ -2,6 +2,7 @@
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
+const BandRole = require('../models/BandRole'); // ✅ Novo import
 
 // GET /api/events
 exports.getEventsWithScales = async (req, res) => {
@@ -18,7 +19,8 @@ exports.getEventsWithScales = async (req, res) => {
         if (scale && scale.members && scale.members.length > 0) {
           const populatedMembers = await Promise.all(scale.members.map(async (member) => {
             const user = await User.findById(member.user).select('name email');
-            return { ...member, user: user || null };
+            const func = await BandRole.findById(member.function).select('name');
+            return { ...member, user: user || null, function: func || null };
           }));
           scale.members = populatedMembers;
         }
@@ -45,7 +47,7 @@ exports.getEventsWithScales = async (req, res) => {
     );
 
     const filtered = eventsWithScales.filter(e => e !== null);
-    res.status(200).json(filtered); // <-- RETORNO CORRETO
+    res.status(200).json(filtered);
   } catch (err) {
     console.error('🔥 ERRO getEventsWithScales:', err.message);
     console.error(err.stack);
@@ -71,9 +73,10 @@ exports.getEventById = async (req, res) => {
         scale.members.map(async (member) => {
           try {
             const user = await User.findById(member.user).select('name email');
-            return { ...member, user: user || null };
+            const func = await BandRole.findById(member.function).select('name');
+            return { ...member, user: user || null, function: func || null };
           } catch {
-            return { ...member, user: null };
+            return { ...member, user: null, function: null };
           }
         })
       );
@@ -94,5 +97,3 @@ exports.getEventById = async (req, res) => {
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };
-// alteração forçada para commit
-

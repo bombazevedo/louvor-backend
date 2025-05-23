@@ -1,4 +1,4 @@
-
+// Scale.js ✅ CORRETO
 const mongoose = require('mongoose');
 
 const memberSchema = new mongoose.Schema({
@@ -8,7 +8,8 @@ const memberSchema = new mongoose.Schema({
     required: true
   },
   function: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId, // ← ESSA LINHA FOI CORRIGIDA
+    ref: 'BandRole',
     required: true
   },
   confirmed: {
