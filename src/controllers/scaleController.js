@@ -43,16 +43,14 @@ exports.createScale = async (req, res) => {
     if (scale) {
       scale.members = validatedMembers;
       scale.notes = notes || '';
-      await scale.save();
-.populate([
+      await scaleconst populated = await scale.populate([
   { path: 'members.user', select: 'name email' },
   { path: 'members.function', select: 'name' }
 ])
       return res.status(200).json(populated);
     } else {
       scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
-      const savedScale = await scale.save();
-.populate([
+      const savedScale = await scaleconst populated = await scale.populate([
   { path: 'members.user', select: 'name email' },
   { path: 'members.function', select: 'name' }
 ])
@@ -100,7 +98,7 @@ exports.updateScale = async (req, res) => {
       }
     }
 
-    await Scale.findByIdAndUpdate(
+    const updated = await Scale.findByIdAndUpdate(
       scaleId,
       { members: validatedMembers, notes: notes || '', updatedAt: Date.now() },
       { new: true }
