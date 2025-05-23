@@ -27,8 +27,8 @@ exports.getEventsWithScales = async (req, res) => {
         if (userRole === 'coordenador') {
           podeVer = true;
         } else {
-          const escalado = scale?.members?.some(m =>
-            (m.user?._id?.toString?.() || m.user?.toString?.()) === userId
+          const escalado = scale && scale.members && scale.members.some(m =>
+            ((m.user && m.user._id && m.user._id.toString && m.user._id.toString()) || (m.user && m.user.toString && m.user.toString())) === userId
           );
           podeVer = escalado;
         }
@@ -66,7 +66,7 @@ exports.getEventById = async (req, res) => {
 
     let scale = await Scale.findOne({ eventId: event._id }).lean();
 
-    if (scale?.members?.length > 0) {
+    if (scale && scale.members && scale.members.length > 0) {
       const populatedMembers = await Promise.all(
         scale.members.map(async (member) => {
           try {
