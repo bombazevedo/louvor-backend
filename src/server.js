@@ -41,6 +41,7 @@ try {
   app.use('/api/songs', require('./routes/songRoutes')); // só esta ativa
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
+  console.error(err);
 }
 
 // Conexão com MongoDB
