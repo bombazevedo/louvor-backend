@@ -31,7 +31,7 @@ app.get('/ping', (req, res) => {
 
 // Importação de rotas com log defensivo
 try {
-  app.use('/api/events', require('./routes/eventRoutes'));
+  app.use('/api/events', require('./routes/eventRoutes')); // só esta ativa
   app.use('/api/auth', require('./routes/authRoutes'));
   app.use('/api/users', require('./routes/userRoutes'));
   app.use('/api/scales', require('./routes/scaleRoutes'));
