@@ -21,7 +21,7 @@ exports.createScale = async (req, res) => {
         if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
         return {
           user: m.user,
-          function: roleDoc.name,
+          function: m.function,
           confirmed: m.confirmed || false
         };
       })
@@ -77,7 +77,7 @@ exports.updateScale = async (req, res) => {
         if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
         return {
           user: m.user,
-          function: roleDoc.name,
+          function: m.function,
           confirmed: m.confirmed || false
         };
       })
