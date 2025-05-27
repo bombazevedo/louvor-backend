@@ -24,7 +24,12 @@ const eventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Scale'
   },
-  musicLinks: [String],
+  musicLinks: [{
+    name: String,
+    artist: String,
+    platform: String,
+    url: String
+  }],
   attachments: [{
     name: String,
     uri: String
