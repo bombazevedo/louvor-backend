@@ -32,7 +32,7 @@ const eventSchema = new mongoose.Schema({
   }],
   attachments: [{
     name: String,
-    uri: String
+    url: String // <- corrigido aqui (antes era 'uri')
   }]
 }, {
   timestamps: true,
