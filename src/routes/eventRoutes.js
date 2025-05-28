@@ -21,7 +21,7 @@ router.get('/:id', authenticate, getEventById);
 
 router.patch('/:id', authenticate, async (req, res) => {
   try {
-    const { musicLinks, ...rest } = req.body;
+    const { musicLinks, attachments, ...rest } = req.body;
 
     if (musicLinks && !Array.isArray(musicLinks)) {
       return res.status(400).json({ error: 'musicLinks deve ser um array' });
@@ -31,9 +31,23 @@ router.patch('/:id', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Cada item em musicLinks deve ser um objeto com pelo menos a propriedade url' });
     }
 
+    if (attachments && !Array.isArray(attachments)) {
+      return res.status(400).json({ error: 'attachments deve ser um array' });
+    }
+
+    if (attachments && attachments.some(att => typeof att !== 'object' || !att.url || !att.name)) {
+      return res.status(400).json({ error: 'Cada item em attachments deve conter "name" e "url"' });
+    }
+
+    const updateFields = {
+      ...rest,
+      ...(musicLinks ? { musicLinks } : {}),
+      ...(attachments ? { attachments } : {})
+    };
+
     const event = await Event.findByIdAndUpdate(
       req.params.id,
-      { ...rest, ...(musicLinks ? { musicLinks } : {}) },
+      updateFields,
       { new: true }
     );
 
