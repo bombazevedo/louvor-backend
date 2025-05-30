@@ -1,70 +1,106 @@
 const User = require('../models/User');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-// Login
+// Gerar token JWT
+const generateToken = (user) => {
+  return jwt.sign(
+    { id: user._id, email: user.email, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+};
+
+// 📌 REGISTRO
+exports.registerUser = async (req, res) => {
+  const { name, email, password, phone } = req.body;
+  try {
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ message: 'Usuário já existe.' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    user = new User({ name, email, password: hashedPassword, phone });
+    await user.save();
+
+    const token = generateToken(user);
+    res.status(201).json({ user: { ...user._doc, password: undefined }, token });
+  } catch (err) {
+    console.error('Erro no registro:', err.message);
+    res.status(500).json({ message: 'Erro ao registrar usuário.' });
+  }
+};
+
+// 🔐 LOGIN
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ message: 'Credenciais inválidas.' });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Senha incorreta' });
+    if (!isMatch) return res.status(401).json({ message: 'Credenciais inválidas.' });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+    const token = generateToken(user);
+    res.json({ user: { ...user._doc, password: undefined }, token });
   } catch (err) {
-    res.status(500).json({ message: 'Erro interno ao fazer login' });
+    console.error('Erro no login:', err.message);
+    res.status(500).json({ message: 'Erro ao fazer login.' });
   }
 };
 
-// Registro
-exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
-  try {
-    let user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (user) return res.status(400).json({ message: 'Email já cadastrado' });
-
-    const hashed = await bcrypt.hash(password, 10);
-    user = new User({ name, email, password: hashed, role: role || 'Membro' });
-    await user.save();
-
-    res.status(201).json({ message: 'Usuário registrado com sucesso' });
-  } catch (err) {
-    res.status(500).json({ message: 'Erro interno ao registrar usuário' });
-  }
-};
-
-// Buscar usuário por ID
+// 🧑 Obter perfil por ID
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-    res.status(200).json(user);
+    if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+    res.json(user);
   } catch (err) {
-    res.status(500).json({ message: 'Erro ao buscar usuário' });
+    console.error('Erro ao buscar usuário:', err.message);
+    res.status(500).json({ error: 'Erro interno ao buscar usuário' });
   }
 };
 
-// Atualizar função do usuário (somente coordenador)
-exports.updateUserRole = async (req, res) => {
+// ✏️ Atualizar perfil completo (já tratado na rota)
+exports.updateUser = async (req, res) => {
   try {
-    if (req.user.role !== 'coordenador') {
-      return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
-    }
+    const { name, email, phone, instruments, roles } = req.body;
+    const updates = {};
+    if (name) updates.name = name;
+    if (email) updates.email = email;
+    if (phone) updates.phone = phone;
+    if (instruments) updates.instruments = instruments;
+    if (roles) updates.roles = roles;
 
-    const { role } = req.body;
-    const updatedUser = await User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
       req.params.id,
-      { role },
+      { $set: updates },
       { new: true }
     ).select('-password');
 
-    if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
-    res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
+    res.json(user);
   } catch (err) {
-    res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
+    console.error('Erro ao atualizar usuário:', err.message);
+    res.status(500).json({ message: 'Erro ao atualizar perfil' });
+  }
+};
+
+// 🧑‍🏫 Atualizar função (usado pelo coordenador/admin)
+exports.updateUserRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { role } },
+      { new: true }
+    ).select('-password');
+
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    res.json(user);
+  } catch (err) {
+    console.error('Erro ao atualizar função do usuário:', err.message);
+    res.status(500).json({ message: 'Erro ao atualizar função.' });
   }
 };
