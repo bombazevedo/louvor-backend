@@ -4,6 +4,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const musicRoutes = require('./routes/musicRoutes');
+app.use('/api/music', musicRoutes);
 const morgan = require('morgan');
 
 dotenv.config();
