@@ -1,4 +1,3 @@
-
 // src/routes/songRoutes.js
 const express = require('express');
 const router = express.Router();
@@ -18,9 +17,15 @@ router.get('/search-external', async (req, res) => {
 
   try {
     const results = await unifiedSearch(query);
+
+    if (!Array.isArray(results)) {
+      console.warn('⚠️ unifiedSearch não retornou um array válido:', results);
+      return res.status(502).json({ error: 'Erro na integração com as plataformas de música.' });
+    }
+
     res.json(results);
   } catch (err) {
-    console.error('Erro ao buscar músicas externas:', err);
+    console.error(`❌ Erro ao buscar músicas externas para query "${query}":`, err.stack || err.message);
     res.status(500).json({ error: 'Erro interno ao buscar músicas.' });
   }
 });
