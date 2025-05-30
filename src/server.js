@@ -4,8 +4,6 @@ const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const songRoutes = require('./routes/songRoutes');
-app.use('/api/songs', songRoutes);
 const morgan = require('morgan');
 
 dotenv.config();
@@ -15,6 +13,7 @@ console.log('🧪 process.env.MONGODB_URI exists:', !!process.env.MONGODB_URI);
 console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
+const songRoutes = require('./routes/songRoutes'); // ✅ Agora está depois de app
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
@@ -32,7 +31,7 @@ app.get('/ping', (req, res) => {
   res.send('pong');
 });
 
-// Importação de rotas com log defensivo
+// Rotas principais
 try {
   app.use('/api/events', require('./routes/eventRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
@@ -40,13 +39,13 @@ try {
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
   app.use('/api/repertoires', require('./routes/repertoireRoutes'));
-  app.use('/api/songs', require('./routes/songRoutes')); // só esta ativa
+  app.use('/api/songs', songRoutes); // ✅ Agora seguro
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
 }
 
-// Conexão com MongoDB
+// MongoDB
 console.log('🔄 Tentando conectar ao MongoDB...');
 mongoose.connect(process.env.MONGODB_URI || '', {
   useNewUrlParser: true,
