@@ -6,7 +6,7 @@ const {
   updateUser, // ✅ Confirmado: usado no PUT
 } = require("../controllers/authController");
 
-const { authenticate } = require("../middlewares/authMiddleware");
+const { authenticate } = require("../middlewares/auth");
 
 // 🛡️ Autenticação obrigatória
 router.get("/:id", authenticate, getUserById);
