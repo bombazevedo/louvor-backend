@@ -1,8 +1,9 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
-// Gerar token JWT
+// JWT Generator
 const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email, role: user.role },
@@ -11,7 +12,7 @@ const generateToken = (user) => {
   );
 };
 
-// 📌 REGISTRO
+// 📌 REGISTER
 exports.registerUser = async (req, res) => {
   const { name, email, password, phone } = req.body;
   try {
@@ -48,7 +49,7 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-// 🧑 Obter perfil por ID
+// 👤 GET PROFILE
 exports.getUserById = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
@@ -60,33 +61,46 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// ✏️ Atualizar perfil completo (já tratado na rota)
+// ✏️ UPDATE PROFILE
 exports.updateUser = async (req, res) => {
   try {
-    const { name, email, phone, instruments, roles } = req.body;
+    const { name, phone, birthDate, bio, socials, avatarUrl } = req.body;
     const updates = {};
     if (name) updates.name = name;
-    if (email) updates.email = email;
     if (phone) updates.phone = phone;
-    if (instruments) updates.instruments = instruments;
-    if (roles) updates.roles = roles;
+    if (birthDate) updates.birthDate = birthDate;
+    if (bio) updates.bio = bio;
+    if (socials) updates.socials = socials;
+    if (avatarUrl) {
+      const user = await User.findById(req.params.id);
+      if (user.avatarUrl && user.avatarUrl !== avatarUrl) {
+        // 🔥 Deletar imagem anterior no Cloudinary
+        const publicId = extractPublicIdFromUrl(user.avatarUrl);
+        if (publicId) {
+          await axios.post(`https://api.cloudinary.com/v1_1/${process.env.CLOUDINARY_CLOUD_NAME}/delete_by_token`, {
+            token: process.env.CLOUDINARY_API_SECRET,
+            public_id: publicId
+          });
+        }
+      }
+      updates.avatarUrl = avatarUrl;
+    }
 
-    const user = await User.findByIdAndUpdate(
+    const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
       { $set: updates },
       { new: true }
     ).select('-password');
 
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-
-    res.json(user);
+    if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.json(updatedUser);
   } catch (err) {
     console.error('Erro ao atualizar usuário:', err.message);
     res.status(500).json({ message: 'Erro ao atualizar perfil' });
   }
 };
 
-// 🧑‍🏫 Atualizar função (usado pelo coordenador/admin)
+// 🧑‍🏫 UPDATE ROLE
 exports.updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;
@@ -102,5 +116,16 @@ exports.updateUserRole = async (req, res) => {
   } catch (err) {
     console.error('Erro ao atualizar função do usuário:', err.message);
     res.status(500).json({ message: 'Erro ao atualizar função.' });
+  }
+};
+
+// 🔍 Extração do public_id do Cloudinary (sem extensão)
+const extractPublicIdFromUrl = (url) => {
+  try {
+    const parts = url.split('/');
+    const filename = parts.pop().split('.')[0];
+    return filename;
+  } catch {
+    return null;
   }
 };

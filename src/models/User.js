@@ -1,19 +1,35 @@
-const mongoose = require('mongoose');
+// backend/src/models/User.js
+const mongoose = require("mongoose");
+
+const socialSchema = new mongoose.Schema({
+  instagram: { type: String, default: '' },
+  youtube: { type: String, default: '' },
+  tiktok: { type: String, default: '' },
+}, { _id: false });
 
 const UserSchema = new mongoose.Schema({
-  name: { type: String },
-  email: { type: String, required: true, unique: true },
+  name: { type: String, required: true },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true
+  },
   password: { type: String, required: true },
-  phone: String,
-  instruments: [String],
-  roles: [String],
   role: {
     type: String,
-    enum: ['admin', 'coordenador', 'dm', 'usuario'],
-    default: 'usuario',
-    lowercase: true, // <-- adiciona normalização automática
-    trim: true
-  }
-}, { timestamps: true });
+    enum: ['membro', 'dm', 'coordenador', 'admin'],
+    default: 'membro'
+  },
+  phone: { type: String },
+  birthDate: { type: String },
+  avatarUrl: { type: String },
+  bio: { type: String },
+  social: socialSchema,
+  instruments: [String],
+  roles: [String],
+}, {
+  timestamps: true
+});
 
-module.exports = mongoose.model('User', UserSchema);
+module.exports = mongoose.model("User", UserSchema);
