@@ -1,21 +1,21 @@
 const express = require("express");
 const router = express.Router();
+
 const {
   getUserById,
-  updateUserRole,
-  updateUser, // ✅ Confirmado: usado no PUT
-} = require("../controllers/authController");
+  updateUser,
+  updateUserRole
+} = require("../controllers/authController"); // 🔧 Corrigido: usamos authController
 
-const { authenticate } = require("../middlewares/auth");
+const { authenticate } = require("../middlewares/auth"); // ✅ Caminho correto do middleware
 
-// 🛡️ Autenticação obrigatória
+// 📌 GET usuário por ID
 router.get("/:id", authenticate, getUserById);
-router.put("/:id", authenticate, updateUser); // ✅ Atualiza perfil
-router.patch("/:id/role", authenticate, updateUserRole); // ✅ Atualiza role
 
-// ❌ Removidas rotas de controller inexistente:
-// router.get("/", authenticate, getAllUsers);
-// router.get("/search", authenticate, searchUsers);
-// router.delete("/:id", authenticate, deleteUser);
+// 📌 PATCH atualizar perfil (inclui avatar)
+router.patch("/:id", authenticate, updateUser);
+
+// 📌 PATCH atualizar papel do usuário
+router.patch("/role/:id", authenticate, updateUserRole);
 
 module.exports = router;
