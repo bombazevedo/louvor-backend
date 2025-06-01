@@ -1,4 +1,5 @@
-// controllers/authController.js ✅
+// controllers/authController.js
+
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -27,6 +28,7 @@ exports.loginUser = async (req, res) => {
       }
     });
   } catch (err) {
+    console.error('[loginUser] Erro interno:', err.message);
     res.status(500).json({ message: 'Erro interno ao fazer login' });
   }
 };
@@ -44,6 +46,7 @@ exports.registerUser = async (req, res) => {
 
     res.status(201).json({ message: 'Usuário registrado com sucesso' });
   } catch (err) {
+    console.error('[registerUser] Erro interno:', err.message);
     res.status(500).json({ message: 'Erro interno ao registrar usuário' });
   }
 };
@@ -55,6 +58,7 @@ exports.getUserById = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
     res.status(200).json(user);
   } catch (err) {
+    console.error('[getUserById] Erro:', err.message);
     res.status(500).json({ message: 'Erro ao buscar usuário' });
   }
 };
@@ -77,6 +81,7 @@ exports.updateUserRole = async (req, res) => {
 
     res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
   } catch (err) {
+    console.error('[updateUserRole] Erro:', err.message);
     res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
   }
 };
@@ -111,7 +116,7 @@ exports.updateMe = async (req, res) => {
 
     res.status(200).json(updatedUser);
   } catch (err) {
-    console.error('[updateMe] Erro ao atualizar perfil:', err);
+    console.error('[updateMe] Erro ao atualizar perfil:', err.message);
     res.status(500).json({ message: 'Erro interno ao atualizar perfil' });
   }
 };
