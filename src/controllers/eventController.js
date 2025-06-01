@@ -1,10 +1,9 @@
-
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const BandRole = require('../models/BandRole'); // ✅ Novo import
 
-// GET /api/events
+// ✅ GET /api/events
 exports.getEventsWithScales = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -55,7 +54,7 @@ exports.getEventsWithScales = async (req, res) => {
   }
 };
 
-// GET /api/events/:id
+// ✅ GET /api/events/:id
 exports.getEventById = async (req, res) => {
   try {
     console.log('📡 Buscando evento por ID:', req.params.id);
@@ -95,5 +94,30 @@ exports.getEventById = async (req, res) => {
     console.error('🔥 ERRO getEventById:', err.message);
     console.error(err.stack);
     res.status(500).json({ error: 'Erro ao buscar evento' });
+  }
+};
+
+// ✅ POST /api/events
+exports.createEvent = async (req, res) => {
+  try {
+    const { title, location, date, notes, type = 'culto', status = 'agendado' } = req.body;
+
+    const newEvent = new Event({
+      title,
+      location,
+      date,
+      description: notes,
+      type,
+      status,
+      createdBy: req.user.id
+    });
+
+    await newEvent.save();
+    console.log('✅ Evento criado com sucesso:', newEvent._id);
+
+    res.status(201).json(newEvent);
+  } catch (err) {
+    console.error('🔥 Erro ao criar evento:', err.message);
+    res.status(500).json({ message: 'Erro ao criar evento.' });
   }
 };
