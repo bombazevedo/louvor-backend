@@ -13,7 +13,9 @@ console.log('🧪 process.env.MONGODB_URI exists:', !!process.env.MONGODB_URI);
 console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
-const songRoutes = require('./routes/songRoutes'); // ✅ Agora está depois de app
+const songRoutes = require('./routes/songRoutes');
+const musicRoutes = require('./routes/musicRoutes'); // ✅ NOVO - Rota para busca musical
+
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
@@ -39,7 +41,8 @@ try {
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
   app.use('/api/repertoires', require('./routes/repertoireRoutes'));
-  app.use('/api/songs', songRoutes); // ✅ Agora seguro
+  app.use('/api/songs', songRoutes);
+  app.use('/api/music', musicRoutes); // ✅ NOVO - Ativa busca YouTube/Spotify/Deezer
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
