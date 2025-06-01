@@ -1,42 +1,34 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
-const path = require("path");
-const os = require("os");
-
+const { authenticate } = require("../middleware/auth");
 const {
   getUserById,
   updateUserRole,
-  updateMe,
-  uploadAvatar
+  updateMe
 } = require("../controllers/authController");
-
-const { authenticate } = require("../middleware/auth");
 const User = require("../models/User");
 
-// ⚙️ Multer config: upload temporário
-const storage = multer.diskStorage({
-  destination: os.tmpdir(),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const safeName = file.originalname.replace(/[\/\\]/g, "_");
-    cb(null, Date.now() + "-" + safeName);
-  },
+// 🔐 Retorna dados do usuário autenticado
+router.get("/me", authenticate, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.status(200).json(user);
+  } catch (err) {
+    console.error('[GET /users/me] Erro:', err);
+    res.status(500).json({ message: 'Erro ao buscar dados do usuário' });
+  }
 });
 
-const upload = multer({ storage });
-
-// 📄 Listar todos os usuários (acesso controlado por papel)
+// Listar todos os usuários (acesso controlado por papel)
 router.get("/", authenticate, async (req, res) => {
   try {
     let users;
-
     if (req.user.role === 'coordenador') {
       users = await User.find().select('-password');
     } else {
       users = await User.find().select('name _id');
     }
-
     res.status(200).json(users);
   } catch (error) {
     console.error('Erro ao buscar usuários:', error.message);
@@ -44,13 +36,16 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// 🔍 Buscar usuário por ID
+// Buscar por ID
 router.get("/:id", authenticate, getUserById);
 
-// 🛡️ Atualizar função (somente coordenador)
+// Atualizar função do usuário (coordenador)
 router.patch("/:id", authenticate, updateUserRole);
 
-// 📝 Atualização completa de perfil
+// Atualizar perfil próprio
+router.patch("/me", authenticate, updateMe);
+
+// Atualização completa de perfil por ID (restrita)
 router.put("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -78,7 +73,7 @@ router.put("/:id", authenticate, async (req, res) => {
   }
 });
 
-// ❌ Deletar usuário
+// Deletar usuário
 router.delete("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -97,11 +92,5 @@ router.delete("/:id", authenticate, async (req, res) => {
     res.status(500).send("Erro no servidor");
   }
 });
-
-// 🙋 Atualizar o próprio perfil (bio, tel, etc)
-router.patch("/me", authenticate, updateMe);
-
-// 📸 Upload de avatar (Cloudinary - sobrescreve)
-router.post("/upload-avatar", authenticate, upload.single("avatar"), uploadAvatar);
 
 module.exports = router;
