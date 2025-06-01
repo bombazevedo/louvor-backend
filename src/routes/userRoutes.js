@@ -1,3 +1,4 @@
+// routes/userRoutes.js ✅
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
@@ -8,7 +9,7 @@ const {
 } = require("../controllers/authController");
 const User = require("../models/User");
 
-// 🔐 Retorna dados do usuário autenticado
+// ✅ Retorna dados do usuário autenticado
 router.get("/me", authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
@@ -20,15 +21,16 @@ router.get("/me", authenticate, async (req, res) => {
   }
 });
 
-// Listar todos os usuários (acesso controlado por papel)
+// ✅ Atualizar perfil próprio
+router.patch("/me", authenticate, updateMe);
+
+// ✅ Listar todos os usuários
 router.get("/", authenticate, async (req, res) => {
   try {
-    let users;
-    if (req.user.role === 'coordenador') {
-      users = await User.find().select('-password');
-    } else {
-      users = await User.find().select('name _id');
-    }
+    const users = req.user.role === 'coordenador'
+      ? await User.find().select('-password')
+      : await User.find().select('name _id');
+
     res.status(200).json(users);
   } catch (error) {
     console.error('Erro ao buscar usuários:', error.message);
@@ -36,16 +38,13 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// Buscar por ID
+// ✅ Buscar por ID
 router.get("/:id", authenticate, getUserById);
 
-// Atualizar função do usuário (coordenador)
+// ✅ Atualizar função do usuário (coordenador)
 router.patch("/:id", authenticate, updateUserRole);
 
-// Atualizar perfil próprio
-router.patch("/me", authenticate, updateMe);
-
-// Atualização completa de perfil por ID (restrita)
+// ✅ Atualização completa de perfil por ID (restrita a admin ou dono)
 router.put("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -73,7 +72,7 @@ router.put("/:id", authenticate, async (req, res) => {
   }
 });
 
-// Deletar usuário
+// ✅ Deletar usuário
 router.delete("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
