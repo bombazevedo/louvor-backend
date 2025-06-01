@@ -1,10 +1,32 @@
 const express = require("express");
 const router = express.Router();
+const multer = require("multer");
+const path = require("path");
+const os = require("os");
+
+const {
+  getUserById,
+  updateUserRole,
+  updateMe,
+  uploadAvatar
+} = require("../controllers/authController");
+
 const { authenticate } = require("../middleware/auth");
-const { getUserById, updateUserRole } = require("../controllers/authController");
 const User = require("../models/User");
 
-// Listar todos os usuários (acesso controlado por papel)
+// ⚙️ Multer config: upload temporário
+const storage = multer.diskStorage({
+  destination: os.tmpdir(),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const safeName = file.originalname.replace(/[\/\\]/g, "_");
+    cb(null, Date.now() + "-" + safeName);
+  },
+});
+
+const upload = multer({ storage });
+
+// 📄 Listar todos os usuários (acesso controlado por papel)
 router.get("/", authenticate, async (req, res) => {
   try {
     let users;
@@ -22,13 +44,13 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// Buscar usuário por ID
+// 🔍 Buscar usuário por ID
 router.get("/:id", authenticate, getUserById);
 
-// Atualizar apenas a função do usuário (PATCH)
+// 🛡️ Atualizar função (somente coordenador)
 router.patch("/:id", authenticate, updateUserRole);
 
-// Atualização completa de perfil (PUT)
+// 📝 Atualização completa de perfil
 router.put("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -56,7 +78,7 @@ router.put("/:id", authenticate, async (req, res) => {
   }
 });
 
-// Deletar usuário
+// ❌ Deletar usuário
 router.delete("/:id", authenticate, async (req, res) => {
   try {
     if (req.user.id !== req.params.id && req.user.role !== "admin") {
@@ -75,5 +97,11 @@ router.delete("/:id", authenticate, async (req, res) => {
     res.status(500).send("Erro no servidor");
   }
 });
+
+// 🙋 Atualizar o próprio perfil (bio, tel, etc)
+router.patch("/me", authenticate, updateMe);
+
+// 📸 Upload de avatar (Cloudinary - sobrescreve)
+router.post("/upload-avatar", authenticate, upload.single("avatar"), uploadAvatar);
 
 module.exports = router;
