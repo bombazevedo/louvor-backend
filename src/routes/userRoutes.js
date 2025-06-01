@@ -1,11 +1,11 @@
-// routes/userRoutes.js ✅
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
 const {
   getUserById,
   updateUserRole,
-  updateMe
+  updateMe,
+  deleteCloudinaryImage
 } = require("../controllers/authController");
 const User = require("../models/User");
 
@@ -91,5 +91,8 @@ router.delete("/:id", authenticate, async (req, res) => {
     res.status(500).send("Erro no servidor");
   }
 });
+
+// ☁️ Deletar imagem antiga (Cloudinary)
+router.post("/auth/delete-cloudinary", authenticate, deleteCloudinaryImage);
 
 module.exports = router;
