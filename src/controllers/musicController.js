@@ -1,4 +1,5 @@
-// backend/controllers/musicController.js 
+// backend/controllers/musicController.js
+
 const {
   searchSpotify,
   searchYouTube,
@@ -6,6 +7,7 @@ const {
   matchVersionsAcrossPlatforms,
 } = require('../services/musicApiService');
 
+// 🔍 Busca em plataforma única
 exports.searchPlatform = async (req, res) => {
   const { platform } = req.params;
   const { q } = req.query;
@@ -14,12 +16,14 @@ exports.searchPlatform = async (req, res) => {
 
   try {
     let results = [];
+
     if (platform === 'spotify') results = await searchSpotify(q);
     else if (platform === 'youtube') results = await searchYouTube(q);
     else if (platform === 'deezer') results = await searchDeezer(q);
     else {
       return res.status(400).json({ error: 'Invalid platform.' });
     }
+
     res.json(results);
   } catch (err) {
     console.error(`❌ Erro ao buscar em ${platform}:`, err.message);
@@ -27,6 +31,7 @@ exports.searchPlatform = async (req, res) => {
   }
 };
 
+// 🎯 Match direto de versões similares (usado internamente)
 exports.matchVersions = async (req, res) => {
   try {
     const result = await matchVersionsAcrossPlatforms(req.body);
@@ -37,9 +42,9 @@ exports.matchVersions = async (req, res) => {
   }
 };
 
-// 🔥 Nova rota compatível com o frontend
+// 🔥 Rota principal usada pelo frontend para sugerir versões alternativas
 exports.searchVersions = async (req, res) => {
-  const { title, artist, excludePlatform } = req.body;
+  const { title, artist, excludePlatform, url } = req.body;
 
   if (!title || !artist) {
     return res.status(400).json({ error: 'Campos obrigatórios ausentes: title e artist' });
@@ -50,7 +55,9 @@ exports.searchVersions = async (req, res) => {
       name: title,
       artist,
       platform: excludePlatform || null,
+      url: url || null,
     });
+
     res.json(result);
   } catch (err) {
     console.error('❌ Erro em searchVersions:', err.message);
