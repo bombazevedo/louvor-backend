@@ -1,5 +1,6 @@
 require('dotenv').config();
 const axios = require('axios');
+const _ = require('lodash');
 
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
@@ -11,9 +12,7 @@ let tokenExpiresAt = 0;
 // 🔑 Autenticação do Spotify
 const getSpotifyToken = async () => {
   const now = Date.now();
-  if (spotifyToken && now < tokenExpiresAt) {
-    return spotifyToken;
-  }
+  if (spotifyToken && now < tokenExpiresAt) return spotifyToken;
 
   try {
     const res = await axios.post(
@@ -37,7 +36,7 @@ const getSpotifyToken = async () => {
   }
 };
 
-// 🔍 Funções de busca por plataforma
+// 🔍 Buscas
 const searchYouTube = async (query) => {
   try {
     const res = await axios.get(
@@ -46,7 +45,7 @@ const searchYouTube = async (query) => {
 
     return res.data.items
       .filter(item => item.id && item.id.videoId)
-      .map((item) => ({
+      .map(item => ({
         name: item.snippet.title,
         artist: item.snippet.channelTitle,
         url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
@@ -61,7 +60,7 @@ const searchYouTube = async (query) => {
 const searchDeezer = async (query) => {
   try {
     const res = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(query)}`);
-    return res.data.data.slice(0, 5).map((track) => ({
+    return res.data.data.slice(0, 5).map(track => ({
       name: track.title,
       artist: track.artist.name,
       url: track.link,
@@ -78,16 +77,12 @@ const searchSpotify = async (query) => {
     const token = await getSpotifyToken();
     const res = await axios.get(
       `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=5`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
 
-    return res.data.tracks.items.map((track) => ({
+    return res.data.tracks.items.map(track => ({
       name: track.name,
-      artist: track.artists.map((a) => a.name).join(', '),
+      artist: track.artists.map(a => a.name).join(', '),
       url: track.external_urls.spotify,
       platform: 'Spotify',
     }));
@@ -97,7 +92,7 @@ const searchSpotify = async (query) => {
   }
 };
 
-// 🔀 Busca unificada
+// 🔁 Busca unificada
 const unifiedSearch = async (query) => {
   try {
     const [yt, dz, sp] = await Promise.all([
@@ -112,37 +107,47 @@ const unifiedSearch = async (query) => {
   }
 };
 
-// 🧠 Normalizador para match inteligente
-const normalize = (str) =>
-  str.toLowerCase().replace(/[^\w\s]/gi, '').replace(/\s+/g, ' ').trim();
+// 🔧 Utilidades de match
+const normalize = str =>
+  str?.toLowerCase().replace(/[^\w\s]/gi, '').trim();
 
-const isSimilar = (a, b) => {
-  const aName = normalize(a.name);
-  const bName = normalize(b.name);
-  const aArtist = normalize(a.artist);
-  const bArtist = normalize(b.artist);
+const calcSimilarity = (a, b) => {
+  const na = normalize(a);
+  const nb = normalize(b);
+  if (!na || !nb) return 0;
 
-  return (
-    aName.includes(bName) || bName.includes(aName) ||
-    aArtist.includes(bArtist) || bArtist.includes(aArtist)
-  );
+  const wordsA = new Set(na.split(/\s+/));
+  const wordsB = new Set(nb.split(/\s+/));
+  const inter = [...wordsA].filter(w => wordsB.has(w));
+  return inter.length / Math.max(wordsA.size, wordsB.size);
 };
 
-// 🎯 Comparação cruzada de versões
 const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => {
   const query = `${name} ${artist}`;
   const results = await unifiedSearch(query);
 
-  const filtered = results.filter(
-    (r) => r.platform !== platform && isSimilar(r, { name, artist })
-  );
+  const filtered = results.filter(r => r.platform !== platform);
+
+  // Agrupar e escolher o melhor de cada plataforma
+  const bestByPlatform = _(filtered)
+    .groupBy('platform')
+    .map((tracks, platform) => {
+      const ranked = tracks.map(t => ({
+        ...t,
+        score: calcSimilarity(t.name, name) * 0.6 + calcSimilarity(t.artist, artist) * 0.4,
+      })).sort((a, b) => b.score - a.score);
+
+      return ranked[0] ? { platform, url: ranked[0].url } : null;
+    })
+    .filter(Boolean)
+    .value();
 
   return {
     name,
     artist,
-    url,
     platform,
-    alternatives: filtered.map(({ platform, url }) => ({ platform, url }))
+    url,
+    alternatives: bestByPlatform
   };
 };
 
