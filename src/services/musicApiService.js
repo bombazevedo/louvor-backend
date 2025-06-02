@@ -8,6 +8,7 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 let spotifyToken = null;
 let tokenExpiresAt = 0;
 
+// 🔑 Autenticação do Spotify
 const getSpotifyToken = async () => {
   const now = Date.now();
   if (spotifyToken && now < tokenExpiresAt) {
@@ -28,7 +29,6 @@ const getSpotifyToken = async () => {
     );
 
     spotifyToken = res.data.access_token;
-    // Salva o tempo de expiração do token
     tokenExpiresAt = now + res.data.expires_in * 1000;
     return spotifyToken;
   } catch (err) {
@@ -37,6 +37,7 @@ const getSpotifyToken = async () => {
   }
 };
 
+// 🔍 Funções de busca por plataforma
 const searchYouTube = async (query) => {
   try {
     const res = await axios.get(
@@ -96,6 +97,7 @@ const searchSpotify = async (query) => {
   }
 };
 
+// 🔀 Busca unificada
 const unifiedSearch = async (query) => {
   try {
     const [yt, dz, sp] = await Promise.all([
@@ -110,15 +112,29 @@ const unifiedSearch = async (query) => {
   }
 };
 
+// 🧠 Normalizador para match inteligente
+const normalize = (str) =>
+  str.toLowerCase().replace(/[^\w\s]/gi, '').replace(/\s+/g, ' ').trim();
+
+const isSimilar = (a, b) => {
+  const aName = normalize(a.name);
+  const bName = normalize(b.name);
+  const aArtist = normalize(a.artist);
+  const bArtist = normalize(b.artist);
+
+  return (
+    aName.includes(bName) || bName.includes(aName) ||
+    aArtist.includes(bArtist) || bArtist.includes(aArtist)
+  );
+};
+
+// 🎯 Comparação cruzada de versões
 const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => {
   const query = `${name} ${artist}`;
   const results = await unifiedSearch(query);
-  const isSameVersion = (a, b) =>
-    a.name.toLowerCase().includes(b.name.toLowerCase()) &&
-    a.artist.toLowerCase().includes(b.artist.toLowerCase());
 
   const filtered = results.filter(
-    (r) => r.platform !== platform && isSameVersion(r, { name, artist })
+    (r) => r.platform !== platform && isSimilar(r, { name, artist })
   );
 
   return {
