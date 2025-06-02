@@ -1,4 +1,4 @@
-// backend/controllers/musicController.js
+// backend/controllers/musicController.js 
 const {
   searchSpotify,
   searchYouTube,
@@ -15,9 +15,9 @@ exports.searchPlatform = async (req, res) => {
   try {
     let results = [];
     if (platform === 'spotify') results = await searchSpotify(q);
-    if (platform === 'youtube') results = await searchYouTube(q);
-    if (platform === 'deezer') results = await searchDeezer(q);
-    else if (!['spotify', 'youtube', 'deezer'].includes(platform)) {
+    else if (platform === 'youtube') results = await searchYouTube(q);
+    else if (platform === 'deezer') results = await searchDeezer(q);
+    else {
       return res.status(400).json({ error: 'Invalid platform.' });
     }
     res.json(results);
@@ -34,5 +34,26 @@ exports.matchVersions = async (req, res) => {
   } catch (err) {
     console.error('❌ Erro ao buscar versões relacionadas:', err.message);
     res.status(500).json({ error: 'Match failed' });
+  }
+};
+
+// 🔥 Nova rota compatível com o frontend
+exports.searchVersions = async (req, res) => {
+  const { title, artist, excludePlatform } = req.body;
+
+  if (!title || !artist) {
+    return res.status(400).json({ error: 'Campos obrigatórios ausentes: title e artist' });
+  }
+
+  try {
+    const result = await matchVersionsAcrossPlatforms({
+      name: title,
+      artist,
+      platform: excludePlatform || null,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('❌ Erro em searchVersions:', err.message);
+    res.status(500).json({ error: 'Erro ao buscar versões' });
   }
 };

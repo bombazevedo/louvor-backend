@@ -42,7 +42,8 @@ try {
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
   app.use('/api/repertoires', require('./routes/repertoireRoutes'));
   app.use('/api/songs', songRoutes);
-  app.use('/api/music', musicRoutes); // ✅ NOVO - Ativa busca YouTube/Spotify/Deezer
+  app.use('/api/music', musicRoutes);   // ✅ singular
+  app.use('/api/musics', musicRoutes);  // ✅ plural (para o frontend atual)
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
