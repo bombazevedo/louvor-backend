@@ -9,7 +9,7 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 let spotifyToken = null;
 let tokenExpiresAt = 0;
 
-// 🔑 Autenticação do Spotify
+// 🔐 Obter token do Spotify
 const getSpotifyToken = async () => {
   const now = Date.now();
   if (spotifyToken && now < tokenExpiresAt) return spotifyToken;
@@ -36,7 +36,7 @@ const getSpotifyToken = async () => {
   }
 };
 
-// 🔍 Buscas
+// 🎥 YouTube
 const searchYouTube = async (query) => {
   try {
     const res = await axios.get(
@@ -50,6 +50,7 @@ const searchYouTube = async (query) => {
         artist: item.snippet.channelTitle,
         url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
         platform: 'YouTube',
+        image: item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || null,
       }));
   } catch (err) {
     console.error('❌ Erro ao buscar no YouTube:', err.message);
@@ -57,6 +58,7 @@ const searchYouTube = async (query) => {
   }
 };
 
+// 🎧 Deezer
 const searchDeezer = async (query) => {
   try {
     const res = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(query)}`);
@@ -65,6 +67,7 @@ const searchDeezer = async (query) => {
       artist: track.artist.name,
       url: track.link,
       platform: 'Deezer',
+      image: track.album?.cover_medium || track.album?.cover || null,
     }));
   } catch (err) {
     console.error('❌ Erro ao buscar no Deezer:', err.message);
@@ -72,6 +75,7 @@ const searchDeezer = async (query) => {
   }
 };
 
+// 🎵 Spotify
 const searchSpotify = async (query) => {
   try {
     const token = await getSpotifyToken();
@@ -85,6 +89,7 @@ const searchSpotify = async (query) => {
       artist: track.artists.map(a => a.name).join(', '),
       url: track.external_urls.spotify,
       platform: 'Spotify',
+      image: track.album?.images?.[0]?.url || null,
     }));
   } catch (err) {
     console.error('❌ Erro ao buscar no Spotify:', err.message);
@@ -92,7 +97,7 @@ const searchSpotify = async (query) => {
   }
 };
 
-// 🔁 Busca unificada
+// 🔀 Busca unificada
 const unifiedSearch = async (query) => {
   try {
     const [yt, dz, sp] = await Promise.all([
@@ -107,7 +112,7 @@ const unifiedSearch = async (query) => {
   }
 };
 
-// 🔧 Utilidades de match
+// 🧠 Normalização + Similaridade
 const normalize = str =>
   str?.toLowerCase().replace(/[^\w\s]/gi, '').trim();
 
@@ -122,13 +127,13 @@ const calcSimilarity = (a, b) => {
   return inter.length / Math.max(wordsA.size, wordsB.size);
 };
 
+// 🔁 Match inteligente
 const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => {
   const query = `${name} ${artist}`;
   const results = await unifiedSearch(query);
 
-  const filtered = results.filter(r => r.platform !== platform);
+  const filtered = results.filter(r => r.platform.toLowerCase() !== platform.toLowerCase());
 
-  // Agrupar e escolher o melhor de cada plataforma
   const bestByPlatform = _(filtered)
     .groupBy('platform')
     .map((tracks, platform) => {
@@ -137,7 +142,7 @@ const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => 
         score: calcSimilarity(t.name, name) * 0.6 + calcSimilarity(t.artist, artist) * 0.4,
       })).sort((a, b) => b.score - a.score);
 
-      return ranked[0] ? { platform, url: ranked[0].url } : null;
+      return ranked[0] ? { platform, url: ranked[0].url, image: ranked[0].image } : null;
     })
     .filter(Boolean)
     .value();
