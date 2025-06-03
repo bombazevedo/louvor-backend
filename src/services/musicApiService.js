@@ -161,5 +161,5 @@ module.exports = {
   searchDeezer,
   searchSpotify,
   unifiedSearch,
-  matchVersionsAcrossPlatforms,
+  matchVersionsAcrossPlatforms,searchMusic: unifiedSearch  // 🔧 Alias exportado corretamente
 };
