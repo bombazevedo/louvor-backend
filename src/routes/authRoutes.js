@@ -7,10 +7,8 @@ const {
   updateMe,
   deleteAvatar,
 } = require('../controllers/authController');
+const { authenticate } = require('../middleware/auth'); // ✅ Corrigido
 
-const { protect } = require('../middleware/auth');
-
-// 🧪 Confirma se as funções foram importadas corretamente
 console.log('🧪 [authRoutes] Importações do controller:', {
   registerUser: typeof registerUser,
   loginUser: typeof loginUser,
@@ -18,13 +16,13 @@ console.log('🧪 [authRoutes] Importações do controller:', {
   updateMe: typeof updateMe,
   deleteAvatar: typeof deleteAvatar,
 });
-console.log('🧪 [authRoutes] Middleware protect:', typeof protect);
+console.log('🧪 [authRoutes] Middleware authenticate:', typeof authenticate);
 
-// 🚦 Rotas RESTful
+// ⚠️ Trocar '/' por '/register' é opcional REST compliance
 router.post('/register', registerUser);
 router.post('/login', loginUser);
-router.get('/me', protect, getMe);
-router.patch('/me', protect, updateMe);
-router.delete('/me/avatar', protect, deleteAvatar);
+router.get('/me', authenticate, getMe);
+router.patch('/me', authenticate, updateMe);
+router.delete('/me/avatar', authenticate, deleteAvatar); // ✅ Correção aqui também
 
 module.exports = router;
