@@ -1,7 +1,8 @@
+// src/middleware/auth.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-exports.authenticate = async (req, res, next) => {
+const authenticate = async (req, res, next) => {
   const authHeader = req.header('Authorization');
   if (!authHeader) return res.status(401).json({ message: 'Token não fornecido' });
 
@@ -19,14 +20,16 @@ exports.authenticate = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error('Erro de autenticação:', error);
+    console.error('🔐 Erro de autenticação:', error.message);
     res.status(401).json({ message: 'Token inválido ou expirado' });
   }
 };
 
-exports.isCoordinator = (req, res, next) => {
+const isCoordinator = (req, res, next) => {
   if (req.user?.role !== 'coordenador') {
     return res.status(403).json({ message: 'Apenas coordenadores têm permissão' });
   }
   next();
 };
+
+module.exports = { authenticate, isCoordinator };
