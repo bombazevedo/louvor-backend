@@ -1,16 +1,27 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const { authenticate } = require("../middleware/auth");
+
+const { authenticate } = require('../middleware/auth');
 const {
   getUserById,
   updateUserRole,
   updateMe,
-  deleteCloudinaryImage
-} = require("../controllers/authController");
-const User = require("../models/User");
+  deleteCloudinaryImage,
+} = require('../controllers/authController');
+
+const User = require('../models/User');
+
+// ✅ Logando importações
+console.log('🧪 [userRoutes] Controller:', {
+  getUserById: typeof getUserById,
+  updateUserRole: typeof updateUserRole,
+  updateMe: typeof updateMe,
+  deleteCloudinaryImage: typeof deleteCloudinaryImage,
+});
+console.log('🧪 [userRoutes] Middleware authenticate:', typeof authenticate);
 
 // ✅ Retorna dados do usuário autenticado
-router.get("/me", authenticate, async (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password');
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
@@ -22,10 +33,10 @@ router.get("/me", authenticate, async (req, res) => {
 });
 
 // ✅ Atualizar perfil próprio
-router.patch("/me", authenticate, updateMe);
+router.patch('/me', authenticate, updateMe);
 
 // ✅ Listar todos os usuários
-router.get("/", authenticate, async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const users = req.user.role === 'coordenador'
       ? await User.find().select('-password')
@@ -39,16 +50,16 @@ router.get("/", authenticate, async (req, res) => {
 });
 
 // ✅ Buscar por ID
-router.get("/:id", authenticate, getUserById);
+router.get('/:id', authenticate, getUserById);
 
 // ✅ Atualizar função do usuário (coordenador)
-router.patch("/:id", authenticate, updateUserRole);
+router.patch('/:id', authenticate, updateUserRole);
 
 // ✅ Atualização completa de perfil por ID (restrita a admin ou dono)
-router.put("/:id", authenticate, async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id && req.user.role !== "admin") {
-      return res.status(403).json({ message: "Acesso negado" });
+    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Acesso negado' });
     }
 
     const { name, email, phone, instruments, roles } = req.body;
@@ -63,36 +74,36 @@ router.put("/:id", authenticate, async (req, res) => {
       req.params.id,
       { $set: userFields },
       { new: true }
-    ).select("-password");
+    ).select('-password');
 
     res.json(user);
   } catch (err) {
     console.error(err.message);
-    res.status(500).send("Erro no servidor");
+    res.status(500).send('Erro no servidor');
   }
 });
 
 // ✅ Deletar usuário
-router.delete("/:id", authenticate, async (req, res) => {
+router.delete('/:id', authenticate, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id && req.user.role !== "admin") {
-      return res.status(403).json({ message: "Acesso negado" });
+    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Acesso negado' });
     }
 
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: "Usuário não encontrado" });
+      return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
     await User.findByIdAndRemove(req.params.id);
-    res.json({ message: "Usuário removido" });
+    res.json({ message: 'Usuário removido' });
   } catch (err) {
     console.error(err.message);
-    res.status(500).send("Erro no servidor");
+    res.status(500).send('Erro no servidor');
   }
 });
 
 // ☁️ Deletar imagem antiga (Cloudinary)
-router.post("/auth/delete-cloudinary", authenticate, deleteCloudinaryImage);
+router.post('/auth/delete-cloudinary', authenticate, deleteCloudinaryImage);
 
 module.exports = router;

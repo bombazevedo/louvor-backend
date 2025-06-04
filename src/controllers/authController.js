@@ -4,21 +4,82 @@ const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const cloudinary = require('../utils/cloudinary');
 
-// 🧪 Loga se as dependências estão presentes
+// 🧪 Log de carga
 console.log('🧪 [authController] Módulos carregados corretamente');
 
+// 🔑 Gera token JWT
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '7d',
+  });
+};
+
+// ✅ Registrar novo usuário
 const registerUser = asyncHandler(async (req, res) => {
-  res.status(201).json({ message: 'Usuário registrado (mock)' });
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    res.status(400);
+    throw new Error('Todos os campos são obrigatórios');
+  }
+
+  const userExists = await User.findOne({ email });
+  if (userExists) {
+    res.status(400);
+    throw new Error('Usuário já existe');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+  });
+
+  if (user) {
+    res.status(201).json({
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user.id),
+    });
+  } else {
+    res.status(500);
+    throw new Error('Falha ao criar usuário');
+  }
 });
 
+// ✅ Login do usuário
 const loginUser = asyncHandler(async (req, res) => {
-  res.json({ token: 'fake-jwt-token' });
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (user && (await bcrypt.compare(password, user.password))) {
+    res.json({
+      _id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      token: generateToken(user.id),
+    });
+  } else {
+    res.status(401);
+    throw new Error('Credenciais inválidas');
+  }
 });
 
+// ✅ Retorna dados do perfil logado
 const getMe = asyncHandler(async (req, res) => {
-  res.json({ message: 'Perfil retornado (mock)' });
+  const user = await User.findById(req.user.id).select('-password');
+  if (!user) {
+    res.status(404);
+    throw new Error('Usuário não encontrado');
+  }
+  res.status(200).json(user);
 });
 
+// ✅ Atualiza perfil do usuário autenticado
 const updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -38,6 +99,7 @@ const updateMe = asyncHandler(async (req, res) => {
   });
 });
 
+// ✅ Deleta avatar atual do Cloudinary e limpa no banco
 const deleteAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -53,7 +115,7 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   res.json({ message: 'Avatar removido com sucesso.' });
 });
 
-// 🧪 Debug de exportação
+// 🧪 Log de exportação
 console.log('🧪 Exportando funções do controller:', {
   registerUser: typeof registerUser,
   loginUser: typeof loginUser,
