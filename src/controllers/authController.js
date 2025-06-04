@@ -2,32 +2,23 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
-const cloudinary = require('../utils/cloudinary'); // já contém deleteImage()
+const cloudinary = require('../utils/cloudinary');
 
-// @desc    Registrar novo usuário
-// @route   POST /api/users
-// @access  Public
+// 🧪 Loga se as dependências estão presentes
+console.log('🧪 [authController] Módulos carregados corretamente');
+
 const registerUser = asyncHandler(async (req, res) => {
-  // ... (sem alteração)
+  res.status(201).json({ message: 'Usuário registrado (mock)' });
 });
 
-// @desc    Login
-// @route   POST /api/users/login
-// @access  Public
 const loginUser = asyncHandler(async (req, res) => {
-  // ... (sem alteração)
+  res.json({ token: 'fake-jwt-token' });
 });
 
-// @desc    Obter perfil
-// @route   GET /api/users/me
-// @access  Private
 const getMe = asyncHandler(async (req, res) => {
-  // ... (sem alteração)
+  res.json({ message: 'Perfil retornado (mock)' });
 });
 
-// @desc    Atualizar perfil do usuário
-// @route   PATCH /api/users/me
-// @access  Private
 const updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -47,9 +38,6 @@ const updateMe = asyncHandler(async (req, res) => {
   });
 });
 
-// @desc    Excluir avatar atual do usuário
-// @route   DELETE /api/users/avatar
-// @access  Private
 const deleteAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -65,10 +53,19 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   res.json({ message: 'Avatar removido com sucesso.' });
 });
 
+// 🧪 Debug de exportação
+console.log('🧪 Exportando funções do controller:', {
+  registerUser: typeof registerUser,
+  loginUser: typeof loginUser,
+  getMe: typeof getMe,
+  updateMe: typeof updateMe,
+  deleteAvatar: typeof deleteAvatar,
+});
+
 module.exports = {
   registerUser,
   loginUser,
   getMe,
   updateMe,
-  deleteAvatar, // ✅ novo export
+  deleteAvatar,
 };
