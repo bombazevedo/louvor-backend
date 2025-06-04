@@ -5,14 +5,16 @@ const {
   loginUser,
   getMe,
   updateMe,
-  deleteAvatar, // ✅ novo
-} = require('../controllers/authController');
-const { protect } = require('../middleware/auth');
+  deleteAvatar,
+} = require('../controllers/authController'); // ✅ Confirme que todas estão exportadas
 
-router.post('/', registerUser);
+const { protect } = require('../middleware/auth'); // ✅ Confirme se o caminho é correto
+
+// 🔐 Auth routes
+router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
 router.patch('/me', protect, updateMe);
-router.delete('/avatar', protect, deleteAvatar); // ✅ nova rota segura
+router.delete('/me/avatar', protect, deleteAvatar); // ✅ REST correto
 
 module.exports = router;
