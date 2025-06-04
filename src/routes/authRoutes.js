@@ -6,15 +6,14 @@ const {
   getMe,
   updateMe,
   deleteAvatar,
-} = require('../controllers/authController'); // ✅ Confirme que todas estão exportadas
+} = require('../controllers/authController');
+const { protect } = require('../middleware/auth');
 
-const { protect } = require('../middleware/auth'); // ✅ Confirme se o caminho é correto
-
-// 🔐 Auth routes
+// 🧠 Uso RESTful
 router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
 router.patch('/me', protect, updateMe);
-router.delete('/me/avatar', protect, deleteAvatar); // ✅ REST correto
+router.delete('/me/avatar', protect, deleteAvatar); // rota corrigida
 
 module.exports = router;
