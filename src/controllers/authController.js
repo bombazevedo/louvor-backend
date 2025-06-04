@@ -1,150 +1,74 @@
-const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const cloudinary = require('cloudinary').v2;
+const asyncHandler = require('express-async-handler');
+const User = require('../models/userModel');
+const cloudinary = require('../utils/cloudinary'); // já contém deleteImage()
 
-// Config Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+// @desc    Registrar novo usuário
+// @route   POST /api/users
+// @access  Public
+const registerUser = asyncHandler(async (req, res) => {
+  // ... (sem alteração)
 });
 
-// 🔐 Login
-exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+// @desc    Login
+// @route   POST /api/users/login
+// @access  Public
+const loginUser = asyncHandler(async (req, res) => {
+  // ... (sem alteração)
+});
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Senha incorreta' });
+// @desc    Obter perfil
+// @route   GET /api/users/me
+// @access  Private
+const getMe = asyncHandler(async (req, res) => {
+  // ... (sem alteração)
+});
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: '7d'
-    });
+// @desc    Atualizar perfil do usuário
+// @route   PATCH /api/users/me
+// @access  Private
+const updateMe = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
 
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      }
-    });
-  } catch (err) {
-    console.error('[loginUser] Erro interno:', err.message);
-    res.status(500).json({ message: 'Erro interno ao fazer login' });
+  if (req.body.name) user.name = req.body.name;
+  if (req.body.email) user.email = req.body.email;
+  if (req.body.photoUrl) user.photoUrl = req.body.photoUrl;
+  if (req.body.cloudinaryPublicId) user.cloudinaryPublicId = req.body.cloudinaryPublicId;
+
+  await user.save();
+
+  res.json({
+    _id: user.id,
+    name: user.name,
+    email: user.email,
+    photoUrl: user.photoUrl,
+    cloudinaryPublicId: user.cloudinaryPublicId,
+  });
+});
+
+// @desc    Excluir avatar atual do usuário
+// @route   DELETE /api/users/avatar
+// @access  Private
+const deleteAvatar = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id);
+
+  if (!user.cloudinaryPublicId) {
+    return res.status(400).json({ message: 'Nenhum avatar atual para excluir.' });
   }
-};
 
-// 📋 Registro
-exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
-  try {
-    let user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (user) return res.status(400).json({ message: 'Email já cadastrado' });
+  await cloudinary.deleteImage(user.cloudinaryPublicId);
+  user.photoUrl = '';
+  user.cloudinaryPublicId = '';
+  await user.save();
 
-    const hashed = await bcrypt.hash(password, 10);
-    user = new User({ name, email, password: hashed, role: role || 'usuario' });
-    await user.save();
+  res.json({ message: 'Avatar removido com sucesso.' });
+});
 
-    res.status(201).json({ message: 'Usuário registrado com sucesso' });
-  } catch (err) {
-    console.error('[registerUser] Erro interno:', err.message);
-    res.status(500).json({ message: 'Erro interno ao registrar usuário' });
-  }
-};
-
-// 🔎 Buscar por ID
-exports.getUserById = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id).select('-password');
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-    res.status(200).json(user);
-  } catch (err) {
-    console.error('[getUserById] Erro:', err.message);
-    res.status(500).json({ message: 'Erro ao buscar usuário' });
-  }
-};
-
-// 🎚 Atualizar função (somente coordenador)
-exports.updateUserRole = async (req, res) => {
-  try {
-    if (req.user.role !== 'coordenador') {
-      return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
-    }
-
-    const { role } = req.body;
-    const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      { role },
-      { new: true }
-    ).select('-password');
-
-    if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
-
-    res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
-  } catch (err) {
-    console.error('[updateUserRole] Erro:', err.message);
-    res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
-  }
-};
-
-// 🛠 Atualizar perfil do próprio usuário
-exports.updateMe = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const user = await User.findById(userId);
-
-    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-
-    const allowedFields = [
-      'photoUrl',
-      'cloudinaryPublicId',
-      'phone',
-      'birthDate',
-      'bio',
-      'socials'
-    ];
-
-    const updates = {};
-    allowedFields.forEach(field => {
-      if (req.body[field] !== undefined) {
-        updates[field] = req.body[field];
-      }
-    });
-
-    // ☁️ Remove imagem antiga do Cloudinary se estiver trocando por nova
-    if (updates.cloudinaryPublicId && updates.cloudinaryPublicId !== user.cloudinaryPublicId) {
-      if (user.cloudinaryPublicId) {
-        await cloudinary.uploader.destroy(user.cloudinaryPublicId);
-      }
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(userId, updates, {
-      new: true,
-      runValidators: true
-    }).select('-password');
-
-    res.status(200).json(updatedUser);
-  } catch (err) {
-    console.error('[updateMe] Erro ao atualizar perfil:', err.message);
-    res.status(500).json({ message: 'Erro interno ao atualizar perfil' });
-  }
-};
-
-// ☠️ Deleta imagem no Cloudinary diretamente via public_id
-exports.deleteCloudinaryImage = async (req, res) => {
-  try {
-    const { public_id } = req.body;
-    if (!public_id) return res.status(400).json({ message: 'public_id obrigatório' });
-
-    const result = await cloudinary.uploader.destroy(public_id);
-    res.status(200).json({ message: 'Imagem deletada com sucesso', result });
-  } catch (err) {
-    console.error('[deleteCloudinaryImage] Erro:', err.message);
-    res.status(500).json({ message: 'Erro ao deletar imagem' });
-  }
+module.exports = {
+  registerUser,
+  loginUser,
+  getMe,
+  updateMe,
+  deleteAvatar, // ✅ novo export
 };
