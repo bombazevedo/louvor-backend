@@ -1,35 +1,61 @@
+// src/controllers/authController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const cloudinary = require('../utils/cloudinary');
 
-// 🧪 Log de verificação
+// 🧪 Loga se as dependências estão presentes
 console.log('🧪 [authController] Módulos carregados corretamente');
 
-// ==============================================
-// 🔐 AUTH BASICS
-// ==============================================
+// ✅ Função para gerar JWT
+const generateToken = (id, role) => {
+  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  });
+};
 
+// ✅ Registrar (placeholder)
 const registerUser = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'Usuário registrado (mock)' });
 });
 
+// ✅ Corrigido: Login real com validação de credenciais e retorno de token
 const loginUser = asyncHandler(async (req, res) => {
-  res.json({ token: 'fake-jwt-token' });
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+  if (!user) {
+    return res.status(401).json({ message: 'Credenciais inválidas' });
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({ message: 'Senha incorreta' });
+  }
+
+  const token = generateToken(user._id, user.role);
+
+  res.status(200).json({
+    token,
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      photoUrl: user.photoUrl,
+    },
+  });
 });
 
+// ✅ Retornar perfil próprio
 const getMe = asyncHandler(async (req, res) => {
   res.json({ message: 'Perfil retornado (mock)' });
 });
 
-// ==============================================
-// 👤 PERFIL
-// ==============================================
-
+// ✅ Atualizar perfil próprio
 const updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
   if (req.body.name) user.name = req.body.name;
   if (req.body.email) user.email = req.body.email;
@@ -47,8 +73,10 @@ const updateMe = asyncHandler(async (req, res) => {
   });
 });
 
+// ✅ Deletar avatar (Cloudinary)
 const deleteAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
+
   if (!user.cloudinaryPublicId) {
     return res.status(400).json({ message: 'Nenhum avatar atual para excluir.' });
   }
@@ -61,40 +89,39 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   res.json({ message: 'Avatar removido com sucesso.' });
 });
 
-// ==============================================
-// 👥 USER MANAGEMENT
-// ==============================================
-
+// ✅ Buscar usuário por ID
 const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('-password');
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+  if (!user) {
+    return res.status(404).json({ message: 'Usuário não encontrado' });
+  }
   res.json(user);
 });
 
+// ✅ Atualizar função do usuário
 const updateUserRole = asyncHandler(async (req, res) => {
+  const { role } = req.body;
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
-  user.role = req.body.role;
+  user.role = role;
   await user.save();
 
-  res.json({ message: 'Função atualizada com sucesso', role: user.role });
+  res.json({ message: 'Função atualizada', role: user.role });
 });
 
+// ✅ Deletar imagem antiga (Cloudinary)
 const deleteCloudinaryImage = asyncHandler(async (req, res) => {
   const { publicId } = req.body;
   if (!publicId) {
-    return res.status(400).json({ message: 'Public ID é obrigatório.' });
+    return res.status(400).json({ message: 'publicId é obrigatório' });
   }
 
   await cloudinary.deleteImage(publicId);
-  res.json({ message: 'Imagem removida com sucesso do Cloudinary.' });
+  res.json({ message: 'Imagem deletada com sucesso' });
 });
 
-// ==============================================
-// ✅ EXPORTAÇÕES
-// ==============================================
-
+// 🧪 Debug de exportação
 console.log('🧪 Exportando funções do controller:', {
   registerUser: typeof registerUser,
   loginUser: typeof loginUser,
@@ -103,7 +130,7 @@ console.log('🧪 Exportando funções do controller:', {
   deleteAvatar: typeof deleteAvatar,
   getUserById: typeof getUserById,
   updateUserRole: typeof updateUserRole,
-  deleteCloudinaryImage: typeof deleteCloudinaryImage
+  deleteCloudinaryImage: typeof deleteCloudinaryImage,
 });
 
 module.exports = {
@@ -114,5 +141,5 @@ module.exports = {
   deleteAvatar,
   getUserById,
   updateUserRole,
-  deleteCloudinaryImage
+  deleteCloudinaryImage,
 };
