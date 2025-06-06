@@ -7,17 +7,18 @@ const cloudinary = require('../utils/cloudinary');
 
 console.log('🧪 [authController] Módulos carregados corretamente');
 
+// 🔐 Gerar JWT
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
 
-// 📌 Login
+// ✅ Login
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-
   const user = await User.findOne({ email });
+
   if (!user) {
     return res.status(401).json({ message: 'Credenciais inválidas' });
   }
@@ -41,29 +42,42 @@ const loginUser = asyncHandler(async (req, res) => {
   });
 });
 
-// ✅ Corrigido: Retornar perfil real do usuário autenticado
+// ✅ Corrigido: Retornar perfil real
 const getMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id).select('-password');
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Token ausente ou mal formatado' });
+  }
 
-  res.status(200).json(user);
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuário não encontrado' });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('[getMe] Erro ao decodificar token:', error);
+    res.status(401).json({ message: 'Token inválido' });
+  }
 });
 
-// ⚙️ Demais funções (inalteradas para preservar lógica anterior)
+// ⚙️ Demais funções mantidas
 const registerUser = asyncHandler(async (req, res) => {
   res.status(201).json({ message: 'Usuário registrado (mock)' });
 });
 
 const updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
-
   if (req.body.name) user.name = req.body.name;
   if (req.body.email) user.email = req.body.email;
   if (req.body.photoUrl) user.photoUrl = req.body.photoUrl;
   if (req.body.cloudinaryPublicId) user.cloudinaryPublicId = req.body.cloudinaryPublicId;
-
   await user.save();
-
   res.json({
     _id: user.id,
     name: user.name,
@@ -75,24 +89,19 @@ const updateMe = asyncHandler(async (req, res) => {
 
 const deleteAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
-
   if (!user.cloudinaryPublicId) {
     return res.status(400).json({ message: 'Nenhum avatar atual para excluir.' });
   }
-
   await cloudinary.deleteImage(user.cloudinaryPublicId);
   user.photoUrl = '';
   user.cloudinaryPublicId = '';
   await user.save();
-
   res.json({ message: 'Avatar removido com sucesso.' });
 });
 
 const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('-password');
-  if (!user) {
-    return res.status(404).json({ message: 'Usuário não encontrado' });
-  }
+  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
   res.json(user);
 });
 
@@ -100,19 +109,14 @@ const updateUserRole = asyncHandler(async (req, res) => {
   const { role } = req.body;
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-
   user.role = role;
   await user.save();
-
   res.json({ message: 'Função atualizada', role: user.role });
 });
 
 const deleteCloudinaryImage = asyncHandler(async (req, res) => {
   const { publicId } = req.body;
-  if (!publicId) {
-    return res.status(400).json({ message: 'publicId é obrigatório' });
-  }
-
+  if (!publicId) return res.status(400).json({ message: 'publicId é obrigatório' });
   await cloudinary.deleteImage(publicId);
   res.json({ message: 'Imagem deletada com sucesso' });
 });
