@@ -1,41 +1,32 @@
+// src/routes/songRoutes.js
 const express = require('express');
 const router = express.Router();
 const songController = require('../controllers/songController');
-const { unifiedSearch, matchVersionsAcrossPlatforms } = require('../services/musicApiService');
+const { unifiedSearch } = require('../services/musicApiService');
 
+// Rota para criar nova música
 router.post('/', songController.createSong);
+
+// Rota para listar todas músicas
 router.get('/', songController.getAllSongs);
 
-// 🔍 Rota externa de busca
+// Rota para buscar músicas em Spotify, YouTube e Deezer
 router.get('/search-external', async (req, res) => {
   const query = req.query.q;
   if (!query) return res.status(400).json({ error: 'Query param "q" is required.' });
 
   try {
     const results = await unifiedSearch(query);
+
     if (!Array.isArray(results)) {
       console.warn('⚠️ unifiedSearch não retornou um array válido:', results);
-      return res.status(502).json({ error: 'Erro na integração com plataformas externas.' });
+      return res.status(502).json({ error: 'Erro na integração com as plataformas de música.' });
     }
+
     res.json(results);
   } catch (err) {
-    console.error('❌ Erro ao buscar músicas externas:', err.stack || err.message);
+    console.error(`❌ Erro ao buscar músicas externas para query "${query}":`, err.stack || err.message);
     res.status(500).json({ error: 'Erro interno ao buscar músicas.' });
-  }
-});
-
-// ✅ NOVO endpoint para retornar equivalência exata da versão da música
-router.post('/match', async (req, res) => {
-  const { name, artist, platform, url } = req.body;
-  if (!name || !artist || !platform || !url)
-    return res.status(400).json({ error: 'Campos obrigatórios: name, artist, platform, url.' });
-
-  try {
-    const matched = await matchVersionsAcrossPlatforms({ name, artist, platform, url });
-    res.json(matched);
-  } catch (err) {
-    console.error('Erro ao fazer matching de versões:', err.message);
-    res.status(500).json({ error: 'Erro interno ao procurar versões equivalentes.' });
   }
 });
 
