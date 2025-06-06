@@ -5,22 +5,15 @@ const asyncHandler = require('express-async-handler');
 const User = require('../models/User');
 const cloudinary = require('../utils/cloudinary');
 
-// 🧪 Loga se as dependências estão presentes
 console.log('🧪 [authController] Módulos carregados corretamente');
 
-// ✅ Função para gerar JWT
 const generateToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
 
-// ✅ Registrar (placeholder)
-const registerUser = asyncHandler(async (req, res) => {
-  res.status(201).json({ message: 'Usuário registrado (mock)' });
-});
-
-// ✅ Corrigido: Login real com validação de credenciais e retorno de token
+// 📌 Login
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
@@ -48,12 +41,19 @@ const loginUser = asyncHandler(async (req, res) => {
   });
 });
 
-// ✅ Retornar perfil próprio
+// ✅ Corrigido: Retornar perfil real do usuário autenticado
 const getMe = asyncHandler(async (req, res) => {
-  res.json({ message: 'Perfil retornado (mock)' });
+  const user = await User.findById(req.user.id).select('-password');
+  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+  res.status(200).json(user);
 });
 
-// ✅ Atualizar perfil próprio
+// ⚙️ Demais funções (inalteradas para preservar lógica anterior)
+const registerUser = asyncHandler(async (req, res) => {
+  res.status(201).json({ message: 'Usuário registrado (mock)' });
+});
+
 const updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -73,7 +73,6 @@ const updateMe = asyncHandler(async (req, res) => {
   });
 });
 
-// ✅ Deletar avatar (Cloudinary)
 const deleteAvatar = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
 
@@ -89,7 +88,6 @@ const deleteAvatar = asyncHandler(async (req, res) => {
   res.json({ message: 'Avatar removido com sucesso.' });
 });
 
-// ✅ Buscar usuário por ID
 const getUserById = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('-password');
   if (!user) {
@@ -98,7 +96,6 @@ const getUserById = asyncHandler(async (req, res) => {
   res.json(user);
 });
 
-// ✅ Atualizar função do usuário
 const updateUserRole = asyncHandler(async (req, res) => {
   const { role } = req.body;
   const user = await User.findById(req.params.id);
@@ -110,7 +107,6 @@ const updateUserRole = asyncHandler(async (req, res) => {
   res.json({ message: 'Função atualizada', role: user.role });
 });
 
-// ✅ Deletar imagem antiga (Cloudinary)
 const deleteCloudinaryImage = asyncHandler(async (req, res) => {
   const { publicId } = req.body;
   if (!publicId) {
@@ -121,7 +117,6 @@ const deleteCloudinaryImage = asyncHandler(async (req, res) => {
   res.json({ message: 'Imagem deletada com sucesso' });
 });
 
-// 🧪 Debug de exportação
 console.log('🧪 Exportando funções do controller:', {
   registerUser: typeof registerUser,
   loginUser: typeof loginUser,
