@@ -1,4 +1,3 @@
-// src/utils/cloudinary.js
 const cloudinary = require('cloudinary').v2;
 
 cloudinary.config({
@@ -15,7 +14,7 @@ const uploadAvatar = async (filePath, publicId = null) => {
   };
 
   if (publicId) {
-    options.public_id = publicId;
+    options.public_id = publicId; // sobrescreve
   }
 
   const result = await cloudinary.uploader.upload(filePath, options);
