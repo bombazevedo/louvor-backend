@@ -1,144 +1,70 @@
-// src/controllers/authController.js
+const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const asyncHandler = require('express-async-handler');
-const User = require('../models/User');
-const cloudinary = require('../utils/cloudinary');
 
-console.log('🧪 [authController] Módulos carregados corretamente');
+// Login
+exports.loginUser = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
-// 🔐 Gerar JWT
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRES_IN,
-  });
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ message: 'Senha incorreta' });
+
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro interno ao fazer login' });
+  }
 };
 
-// ✅ Login
-const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    return res.status(401).json({ message: 'Credenciais inválidas' });
-  }
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    return res.status(401).json({ message: 'Senha incorreta' });
-  }
-
-  const token = generateToken(user._id, user.role);
-
-  res.status(200).json({
-    token,
-    user: {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      photoUrl: user.photoUrl,
-    },
-  });
-});
-
-// ✅ Corrigido: Retornar perfil real
-const getMe = asyncHandler(async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Token ausente ou mal formatado' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
+// Registro
+exports.registerUser = async (req, res) => {
+  const { name, email, password, role } = req.body;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
+    let user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (user) return res.status(400).json({ message: 'Email já cadastrado' });
 
-    if (!user) {
-      return res.status(404).json({ message: 'Usuário não encontrado' });
+    const hashed = await bcrypt.hash(password, 10);
+    user = new User({ name, email, password: hashed, role: role || 'Membro' });
+    await user.save();
+
+    res.status(201).json({ message: 'Usuário registrado com sucesso' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro interno ao registrar usuário' });
+  }
+};
+
+// Buscar usuário por ID
+exports.getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+    res.status(200).json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao buscar usuário' });
+  }
+};
+
+// Atualizar função do usuário (somente coordenador)
+exports.updateUserRole = async (req, res) => {
+  try {
+    if (req.user.role !== 'coordenador') {
+      return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
     }
 
-    res.status(200).json(user);
-  } catch (error) {
-    console.error('[getMe] Erro ao decodificar token:', error);
-    res.status(401).json({ message: 'Token inválido' });
+    const { role } = req.body;
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { role },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
   }
-});
-
-// ⚙️ Demais funções mantidas
-const registerUser = asyncHandler(async (req, res) => {
-  res.status(201).json({ message: 'Usuário registrado (mock)' });
-});
-
-const updateMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id);
-  if (req.body.name) user.name = req.body.name;
-  if (req.body.email) user.email = req.body.email;
-  if (req.body.photoUrl) user.photoUrl = req.body.photoUrl;
-  if (req.body.cloudinaryPublicId) user.cloudinaryPublicId = req.body.cloudinaryPublicId;
-  await user.save();
-  res.json({
-    _id: user.id,
-    name: user.name,
-    email: user.email,
-    photoUrl: user.photoUrl,
-    cloudinaryPublicId: user.cloudinaryPublicId,
-  });
-});
-
-const deleteAvatar = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id);
-  if (!user.cloudinaryPublicId) {
-    return res.status(400).json({ message: 'Nenhum avatar atual para excluir.' });
-  }
-  await cloudinary.deleteImage(user.cloudinaryPublicId);
-  user.photoUrl = '';
-  user.cloudinaryPublicId = '';
-  await user.save();
-  res.json({ message: 'Avatar removido com sucesso.' });
-});
-
-const getUserById = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id).select('-password');
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-  res.json(user);
-});
-
-const updateUserRole = asyncHandler(async (req, res) => {
-  const { role } = req.body;
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-  user.role = role;
-  await user.save();
-  res.json({ message: 'Função atualizada', role: user.role });
-});
-
-const deleteCloudinaryImage = asyncHandler(async (req, res) => {
-  const { publicId } = req.body;
-  if (!publicId) return res.status(400).json({ message: 'publicId é obrigatório' });
-  await cloudinary.deleteImage(publicId);
-  res.json({ message: 'Imagem deletada com sucesso' });
-});
-
-console.log('🧪 Exportando funções do controller:', {
-  registerUser: typeof registerUser,
-  loginUser: typeof loginUser,
-  getMe: typeof getMe,
-  updateMe: typeof updateMe,
-  deleteAvatar: typeof deleteAvatar,
-  getUserById: typeof getUserById,
-  updateUserRole: typeof updateUserRole,
-  deleteCloudinaryImage: typeof deleteCloudinaryImage,
-});
-
-module.exports = {
-  registerUser,
-  loginUser,
-  getMe,
-  updateMe,
-  deleteAvatar,
-  getUserById,
-  updateUserRole,
-  deleteCloudinaryImage,
 };

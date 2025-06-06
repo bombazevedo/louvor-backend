@@ -1,4 +1,3 @@
-// src/server.js
 console.log("🛠️ server.js iniciado - hash de controle 2501");
 
 const express = require('express');
@@ -14,7 +13,8 @@ console.log('🧪 process.env.MONGODB_URI exists:', !!process.env.MONGODB_URI);
 console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const songRoutes = require('./routes/songRoutes'); // ✅ Agora está depois de app
+const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json());
@@ -25,7 +25,7 @@ try {
   console.error('❌ Erro ao configurar Morgan:', err.message);
 }
 
-// Test Route
+// Rota de teste
 app.get('/ping', (req, res) => {
   console.log('✅ /ping recebido');
   res.send('pong');
@@ -33,25 +33,23 @@ app.get('/ping', (req, res) => {
 
 // Rotas principais
 try {
+  app.use('/api/events', require('./routes/eventRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
   app.use('/api/users', require('./routes/userRoutes'));
-  app.use('/api/events', require('./routes/eventRoutes'));
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
   app.use('/api/repertoires', require('./routes/repertoireRoutes'));
-  app.use('/api/songs', require('./routes/songRoutes'));
-  app.use('/api/music', require('./routes/musicRoutes'));   // singular
-  app.use('/api/musics', require('./routes/musicRoutes'));  // plural
+  app.use('/api/songs', songRoutes); // ✅ Agora seguro
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
 }
 
-// MongoDB Connection
+// MongoDB
 console.log('🔄 Tentando conectar ao MongoDB...');
 mongoose.connect(process.env.MONGODB_URI || '', {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true
 })
 .then(() => {
   console.log('✅ MongoDB conectado com sucesso');
