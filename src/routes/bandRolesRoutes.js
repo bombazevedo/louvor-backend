@@ -1,33 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate, isCoordinator } = require('../middleware/auth');
-const BandRole = require('../models/BandRole');
+const {
+  getAllBandRoles,
+  createBandRole,
+  updateBandRole,
+  deleteBandRole
+} = require('../controllers/bandRoleController');
 
-// 🔓 Torne pública para que o app consiga carregar as funções sem estar logado
-router.get('/', async (req, res) => {
-  try {
-    const roles = await BandRole.find().sort({ name: 1 });
-    res.status(200).json(roles);
-  } catch (err) {
-    res.status(500).json({ message: 'Erro ao buscar funções', error: err.message });
-  }
-});
+const authenticate = require('../middleware/auth');
+const isCoordinator = require('../middleware/isCoordinator');
 
-// 🔐 Rotas protegidas
-router.post('/', authenticate, isCoordinator, async (req, res) => {
-  const { name } = req.body;
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ message: 'O nome da função é obrigatório.' });
-  }
+// 🔓 Rotas Públicas
+router.get('/', getAllBandRoles);
 
-  const roleExists = await BandRole.findOne({ name: name.trim() });
-  if (roleExists) {
-    return res.status(409).json({ message: 'Essa função já está cadastrada.' });
-  }
-
-  const newRole = new BandRole({ name: name.trim() });
-  const savedRole = await newRole.save();
-  res.status(201).json(savedRole);
-});
+// 🔐 Rotas Protegidas (somente Coordenador)
+router.post('/', authenticate, isCoordinator, createBandRole);
+router.put('/:id', authenticate, isCoordinator, updateBandRole);
+router.delete('/:id', authenticate, isCoordinator, deleteBandRole); // ✅ Corrigida
 
 module.exports = router;
