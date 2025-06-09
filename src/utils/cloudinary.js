@@ -1,38 +1,31 @@
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require("cloudinary").v2;
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_KEY,
+  api_secret: process.env.CLOUD_SECRET,
 });
 
-const uploadAvatar = async (filePath, publicId = null) => {
-  const options = {
-    folder: 'louvorApp/avatars',
-    resource_type: 'image',
-    overwrite: true,
-  };
+const allowedMimeTypes = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "audio/mpeg",
+  "image/jpeg",
+  "image/png",
+  "video/mp4",
+];
 
-  if (publicId) {
-    options.public_id = publicId; // sobrescreve
+exports.uploadFile = async (file) => {
+  if (!allowedMimeTypes.includes(file.mimetype)) {
+    throw new Error("Tipo de arquivo não permitido.");
   }
 
-  const result = await cloudinary.uploader.upload(filePath, options);
-  return {
-    url: result.secure_url,
-    publicId: result.public_id,
-  };
-};
-
-const deleteImage = async (publicId) => {
-  if (!publicId) return;
-  await cloudinary.uploader.destroy(publicId, {
-    resource_type: 'image',
-    invalidate: true,
+  return await cloudinary.uploader.upload(file.path, {
+    upload_preset: "louvor_unsigned",
+    resource_type: "auto",
   });
 };
 
-module.exports = {
-  uploadAvatar,
-  deleteImage,
+exports.deleteFile = async (publicId) => {
+  return await cloudinary.uploader.destroy(publicId);
 };

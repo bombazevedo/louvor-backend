@@ -1,32 +1,27 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const jwt = require("jsonwebtoken");
 
-exports.authenticate = async (req, res, next) => {
-  const authHeader = req.header('Authorization');
-  if (!authHeader) return res.status(401).json({ message: 'Token não fornecido' });
-
-  const token = authHeader.replace('Bearer ', '');
+exports.authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  if (!token) return res.status(401).json({ message: "Token ausente." });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
-    if (!user) return res.status(401).json({ message: 'Usuário não encontrado' });
-
-    req.user = {
-      id: user._id.toString(),
-      role: user.role
-    };
-
+    req.user = decoded;
     next();
   } catch (error) {
-    console.error('Erro de autenticação:', error);
-    res.status(401).json({ message: 'Token inválido ou expirado' });
+    res.status(401).json({ message: "Token inválido." });
   }
 };
 
 exports.isCoordinator = (req, res, next) => {
-  if (req.user?.role !== 'coordenador') {
-    return res.status(403).json({ message: 'Apenas coordenadores têm permissão' });
+  if (req.user.role === "coordinator") return next();
+  return res.status(403).json({ message: "Acesso restrito a coordenadores." });
+};
+
+exports.isDMOrCoordinator = (req, res, next) => {
+  const role = req.user?.role;
+  if (role === 'coordinator' || role === 'dm') {
+    return next();
   }
-  next();
+  return res.status(403).json({ message: "Acesso restrito a coordenadores ou DMs." });
 };
