@@ -7,7 +7,7 @@ const BandRole = require('../models/BandRole'); // ✅ Mantido
 exports.getEventsWithScales = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role;
+    const userRole = req.user.role.toLowerCase(); // ✅ normaliza role
 
     const events = await Event.find().sort({ date: 1 });
 
@@ -16,11 +16,13 @@ exports.getEventsWithScales = async (req, res) => {
         const scale = await Scale.findOne({ eventId: event._id }).lean();
 
         if (scale && scale.members && scale.members.length > 0) {
-          const populatedMembers = await Promise.all(scale.members.map(async (member) => {
-            const user = await User.findById(member.user).select('name email');
-            const func = await BandRole.findById(member.function).select('name');
-            return { ...member, user: user || null, function: func || null };
-          }));
+          const populatedMembers = await Promise.all(
+            scale.members.map(async (member) => {
+              const user = await User.findById(member.user).select('name email');
+              const func = await BandRole.findById(member.function).select('name');
+              return { ...member, user: user || null, function: func || null };
+            })
+          );
           scale.members = populatedMembers;
         }
 
@@ -29,7 +31,7 @@ exports.getEventsWithScales = async (req, res) => {
           podeVer = true;
         } else {
           const escalado = scale && scale.members && scale.members.some(m =>
-            ((m.user && m.user._id && m.user._id.toString && m.user._id.toString()) || (m.user && m.user.toString && m.user.toString())) === userId
+            (m.user && m.user._id?.toString?.()) === userId
           );
           podeVer = escalado;
         }
@@ -37,9 +39,8 @@ exports.getEventsWithScales = async (req, res) => {
         if (!podeVer) return null;
 
         const eventObj = event.toObject();
-        delete eventObj.members;
         eventObj.scale = scale || { members: [] };
-        eventObj.members = scale && scale.members ? scale.members : [];
+        eventObj.members = scale?.members || [];
 
         return eventObj;
       })
@@ -59,15 +60,16 @@ exports.getEventById = async (req, res) => {
   try {
     console.log('📡 Buscando evento por ID:', req.params.id);
     const event = await Event.findById(req.params.id);
-
     if (!event) {
-      console.warn('⚠️ Evento não encontrado');
       return res.status(404).json({ error: 'Evento não encontrado' });
     }
 
+    const userId = req.user.id;
+    const userRole = req.user.role.toLowerCase();
+
     let scale = await Scale.findOne({ eventId: event._id }).lean();
 
-    if (scale && scale.members && scale.members.length > 0) {
+    if (scale?.members?.length > 0) {
       const populatedMembers = await Promise.all(
         scale.members.map(async (member) => {
           try {
@@ -84,15 +86,22 @@ exports.getEventById = async (req, res) => {
       scale = { members: [] };
     }
 
+    const isCoordinator = userRole === 'coordenador';
+    const isEscalado = scale.members?.some(
+      (m) => m.user?._id?.toString() === userId
+    );
+
+    if (!isCoordinator && !isEscalado) {
+      return res.status(403).json({ message: 'Sem permissão para visualizar este evento.' });
+    }
+
     const eventObj = event.toObject();
-    delete eventObj.members;
     eventObj.scale = scale;
     eventObj.members = scale.members;
 
     res.status(200).json(eventObj);
   } catch (err) {
     console.error('🔥 ERRO getEventById:', err.message);
-    console.error(err.stack);
     res.status(500).json({ error: 'Erro ao buscar evento' });
   }
 };
@@ -109,9 +118,11 @@ exports.updateEvent = async (req, res) => {
       return res.status(404).json({ message: 'Evento não encontrado.' });
     }
 
-    const isCoordinator = req.user.role === 'coordinator';
+    const userId = req.user.id;
+    const userRole = req.user.role.toLowerCase();
+    const isCoordinator = userRole === 'coordenador';
     const isEscalado = event.scale?.members?.some(
-      (m) => m.user?._id?.toString() === req.user.id
+      (m) => m.user?._id?.toString() === userId
     );
 
     if (!isCoordinator && !isEscalado) {

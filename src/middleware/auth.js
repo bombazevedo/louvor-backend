@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 
+// 🔐 Autenticador global
 exports.authenticate = (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Token ausente." });
@@ -13,14 +14,17 @@ exports.authenticate = (req, res, next) => {
   }
 };
 
+// ✅ Verifica se o usuário é coordenador
 exports.isCoordinator = (req, res, next) => {
-  if (req.user.role === "coordinator") return next();
+  const role = req.user?.role?.toLowerCase();
+  if (role === "coordenador") return next();
   return res.status(403).json({ message: "Acesso restrito a coordenadores." });
 };
 
+// ✅ Verifica se é coordenador ou DM
 exports.isDMOrCoordinator = (req, res, next) => {
-  const role = req.user?.role;
-  if (role === 'coordinator' || role === 'dm') {
+  const role = req.user?.role?.toLowerCase();
+  if (role === "coordenador" || role === "dm") {
     return next();
   }
   return res.status(403).json({ message: "Acesso restrito a coordenadores ou DMs." });

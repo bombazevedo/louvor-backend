@@ -20,9 +20,14 @@ exports.loginUser = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Senha incorreta' });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: '7d'
-    });
+    const token = jwt.sign(
+      {
+        id: user._id,
+        role: user.role.toLowerCase() // ✅ lowercase garantido
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       token,
@@ -47,7 +52,13 @@ exports.registerUser = async (req, res) => {
     if (user) return res.status(400).json({ message: 'Email já cadastrado' });
 
     const hashed = await bcrypt.hash(password, 10);
-    user = new User({ name, email, password: hashed, role: role || 'usuario' });
+    user = new User({
+      name,
+      email,
+      password: hashed,
+      role: (role || 'usuario').toLowerCase() // ✅ normalize role
+    });
+
     await user.save();
 
     res.status(201).json({ message: 'Usuário registrado com sucesso' });
@@ -72,14 +83,14 @@ exports.getUserById = async (req, res) => {
 // 🎚 Atualizar função (somente coordenador)
 exports.updateUserRole = async (req, res) => {
   try {
-    if (req.user.role !== 'coordenador') {
+    if (req.user.role?.toLowerCase() !== 'coordenador') {
       return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
     }
 
     const { role } = req.body;
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { role },
+      { role: role.toLowerCase() }, // ✅ garante lowercase ao atualizar
       { new: true }
     ).select('-password');
 
@@ -97,7 +108,6 @@ exports.updateMe = async (req, res) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId);
-
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
     const allowedFields = [
@@ -116,7 +126,6 @@ exports.updateMe = async (req, res) => {
       }
     });
 
-    // ☁️ Remove imagem antiga do Cloudinary se estiver trocando por nova
     if (updates.cloudinaryPublicId && updates.cloudinaryPublicId !== user.cloudinaryPublicId) {
       if (user.cloudinaryPublicId) {
         await cloudinary.uploader.destroy(user.cloudinaryPublicId);
