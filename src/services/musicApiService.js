@@ -1,12 +1,16 @@
 require('dotenv').config();
 const axios = require('axios');
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 
+// ✅ Leitura dinâmica de chaves YouTube API numeradas
+const YT_KEYS = Array.from({ length: 10 }, (_, i) => process.env[`YOUTUBE_API_KEY_${i + 1}`]).filter(Boolean);
+
 let spotifyToken = null;
 let tokenExpiresAt = 0;
+let currentIndex = 0;
+const failedKeys = new Set();
 
 const getSpotifyToken = async () => {
   const now = Date.now();
@@ -36,29 +40,44 @@ const getSpotifyToken = async () => {
   }
 };
 
-// ✅ CORRIGIDO: função protegida com try/catch + fallback de chave
+// ✅ Busca YouTube com fallback inteligente entre múltiplas chaves
 const searchYouTube = async (query) => {
-  if (!YOUTUBE_API_KEY) {
-    console.error('❌ YOUTUBE_API_KEY ausente no .env!');
-    return [];
+  const total = YT_KEYS.length;
+
+  for (let i = 0; i < total; i++) {
+    const index = (currentIndex + i) % total;
+    const key = YT_KEYS[index];
+
+    if (!key || failedKeys.has(key)) continue;
+
+    try {
+      const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${key}`;
+      const res = await axios.get(url);
+
+      currentIndex = index;
+      return res.data.items
+        .filter(item => item.id?.videoId)
+        .map(item => ({
+          name: item.snippet.title,
+          artist: item.snippet.channelTitle,
+          url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
+          platform: 'YouTube',
+        }));
+
+    } catch (err) {
+      const reason = err.response?.data?.error?.errors?.[0]?.reason;
+      if (reason === 'quotaExceeded') {
+        failedKeys.add(key);
+        console.warn(`🔁 Chave estourada ignorada: ${key}`);
+        continue;
+      }
+      console.error(`❌ Erro inesperado na chave ${key}:`, err.message);
+      break;
+    }
   }
 
-  try {
-    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
-    const res = await axios.get(url);
-
-    return res.data.items
-      .filter(item => item.id?.videoId)
-      .map(item => ({
-        name: item.snippet.title,
-        artist: item.snippet.channelTitle,
-        url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
-        platform: 'YouTube',
-      }));
-  } catch (err) {
-    console.error('❌ Erro ao buscar no YouTube:', err.response?.data || err.message);
-    return [];
-  }
+  console.error('❌ Todas as chaves falharam ou atingiram a quota.');
+  return [];
 };
 
 const searchDeezer = async (query) => {
@@ -142,4 +161,3 @@ module.exports = {
   unifiedSearch,
   matchVersionsAcrossPlatforms,
 };
-
