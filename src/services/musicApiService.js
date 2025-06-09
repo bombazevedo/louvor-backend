@@ -36,6 +36,7 @@ const getSpotifyToken = async () => {
   }
 };
 
+// ✅ CORRIGIDO: função protegida com try/catch + fallback de chave
 const searchYouTube = async (query) => {
   if (!YOUTUBE_API_KEY) {
     console.error('❌ YOUTUBE_API_KEY ausente no .env!');
@@ -141,3 +142,4 @@ module.exports = {
   unifiedSearch,
   matchVersionsAcrossPlatforms,
 };
+
