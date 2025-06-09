@@ -28,7 +28,6 @@ const getSpotifyToken = async () => {
     );
 
     spotifyToken = res.data.access_token;
-    // Salva o tempo de expiração do token
     tokenExpiresAt = now + res.data.expires_in * 1000;
     return spotifyToken;
   } catch (err) {
@@ -38,21 +37,25 @@ const getSpotifyToken = async () => {
 };
 
 const searchYouTube = async (query) => {
+  if (!YOUTUBE_API_KEY) {
+    console.error('❌ YOUTUBE_API_KEY ausente no .env!');
+    return [];
+  }
+
   try {
-    const res = await axios.get(
-      `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`
-    );
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+    const res = await axios.get(url);
 
     return res.data.items
-      .filter(item => item.id && item.id.videoId)
-      .map((item) => ({
+      .filter(item => item.id?.videoId)
+      .map(item => ({
         name: item.snippet.title,
         artist: item.snippet.channelTitle,
         url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
         platform: 'YouTube',
       }));
   } catch (err) {
-    console.error('❌ Erro ao buscar no YouTube:', err.message);
+    console.error('❌ Erro ao buscar no YouTube:', err.response?.data || err.message);
     return [];
   }
 };
@@ -60,7 +63,7 @@ const searchYouTube = async (query) => {
 const searchDeezer = async (query) => {
   try {
     const res = await axios.get(`https://api.deezer.com/search?q=${encodeURIComponent(query)}`);
-    return res.data.data.slice(0, 5).map((track) => ({
+    return res.data.data.slice(0, 5).map(track => ({
       name: track.title,
       artist: track.artist.name,
       url: track.link,
@@ -84,9 +87,9 @@ const searchSpotify = async (query) => {
       }
     );
 
-    return res.data.tracks.items.map((track) => ({
+    return res.data.tracks.items.map(track => ({
       name: track.name,
-      artist: track.artists.map((a) => a.name).join(', '),
+      artist: track.artists.map(a => a.name).join(', '),
       url: track.external_urls.spotify,
       platform: 'Spotify',
     }));
@@ -113,6 +116,7 @@ const unifiedSearch = async (query) => {
 const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => {
   const query = `${name} ${artist}`;
   const results = await unifiedSearch(query);
+
   const isSameVersion = (a, b) =>
     a.name.toLowerCase().includes(b.name.toLowerCase()) &&
     a.artist.toLowerCase().includes(b.artist.toLowerCase());
