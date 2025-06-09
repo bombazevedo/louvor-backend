@@ -1,25 +1,139 @@
-const Scale = require("../models/Scale");
+const Scale = require('../models/Scale');
+const User = require('../models/User');
+const BandRole = require('../models/BandRole');
+
+// Criar ou atualizar escala (inteligente)
+exports.createScale = async (req, res) => {
+  try {
+    const { eventId, members, notes } = req.body;
+    const role = req.user && req.user.role;
+    const userId = req.user && req.user.id;
+
+    if (!eventId || !Array.isArray(members)) {
+      return res.status(400).json({ message: 'Dados inválidos. É necessário eventId e lista de membros.' });
+    }
+
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        const roleDoc = await BandRole.findById(m.function);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
+        return {
+          user: m.user,
+          function: m.function,
+          confirmed: m.confirmed || false
+        };
+      })
+    );
+
+    if (role === 'member') {
+      return res.status(403).json({ message: 'Usuário comum não pode criar escalas.' });
+    }
+
+    if (role === 'dm') {
+      const escalado = validatedMembers.some(m => m.user.toString() === userId);
+      if (!escalado) {
+        return res.status(403).json({ message: 'DM só pode criar ou editar escalas onde está escalado.' });
+      }
+    }
+
+    let scale = await Scale.findOne({ eventId });
+
+    if (scale) {
+      scale.members = validatedMembers;
+      scale.notes = notes || '';
+      await scale.save();
+      const populated = await scale.populate([
+        { path: 'members.user', select: 'name email' },
+        { path: 'members.function', select: 'name' }
+      ]);
+      return res.status(200).json(populated);
+    } else {
+      scale = new Scale({ eventId, members: validatedMembers, notes: notes || '' });
+      const savedScale = await scale.save();
+      const populated = await savedScale.populate([
+        { path: 'members.user', select: 'name email' },
+        { path: 'members.function', select: 'name' }
+      ]);
+      return res.status(201).json(populated);
+    }
+  } catch (error) {
+    console.error('Erro ao criar/atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao salvar escala.', error: error.message });
+  }
+};
 
 exports.updateScale = async (req, res) => {
   try {
-    const scale = await Scale.findById(req.params.id).populate("members.user");
+    const scaleId = req.params.id;
+    const { members, notes } = req.body;
+    const role = req.user && req.user.role;
+    const userId = req.user && req.user.id;
 
-    if (!scale) return res.status(404).json({ message: "Escala não encontrada." });
-
-    if (
-      req.user.role !== "coordinator" &&
-      !scale.members?.some((m) => m.user?._id?.toString() === req.user.id)
-    ) {
-      return res.status(403).json({ message: "Sem permissão para editar esta escala." });
+    if (!Array.isArray(members)) {
+      return res.status(400).json({ message: 'Lista de membros inválida.' });
     }
 
-    const updatedScale = await Scale.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-    });
+    const validatedMembers = await Promise.all(
+      members.map(async m => {
+        const userExists = await User.findById(m.user);
+        const roleDoc = await BandRole.findById(m.function);
+        if (!userExists) throw new Error(`Usuário não encontrado: ${m.user}`);
+        if (!roleDoc) throw new Error(`Função de banda não encontrada: ${m.function}`);
+        return {
+          user: m.user,
+          function: m.function,
+          confirmed: m.confirmed || false
+        };
+      })
+    );
 
-    res.json(updatedScale);
+    if (role === 'member') {
+      return res.status(403).json({ message: 'Usuário comum não pode editar escalas.' });
+    }
+
+    if (role === 'dm') {
+      const originalScale = await Scale.findById(scaleId).populate('members.user');
+      const escalado = originalScale.members?.some(
+        (m) => m.user?._id?.toString() === userId
+      );
+      if (!escalado) {
+        return res.status(403).json({ message: 'DM só pode editar escalas onde está escalado.' });
+      }
+    }
+
+    const updated = await Scale.findByIdAndUpdate(
+      scaleId,
+      { members: validatedMembers, notes: notes || '', updatedAt: Date.now() },
+      { new: true }
+    ).populate([
+      { path: 'members.user', select: 'name email' },
+      { path: 'members.function', select: 'name' }
+    ]);
+
+    if (!updated) return res.status(404).json({ message: 'Escala não encontrada.' });
+
+    res.status(200).json(updated);
+  } catch (error) {
+    console.error('Erro ao atualizar escala:', error);
+    res.status(500).json({ message: 'Erro ao atualizar escala.', error: error.message });
+  }
+};
+
+// GET /scales/event/:eventId
+exports.getScaleByEventId = async (req, res) => {
+  try {
+    const scale = await Scale.findOne({ eventId: req.params.eventId }).populate([
+      { path: 'members.user', select: 'name email' },
+      { path: 'members.function', select: 'name' }
+    ]);
+
+    if (!scale) return res.status(404).json({ error: 'Escala não encontrada' });
+
+    res.json(scale);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Erro ao atualizar escala." });
+    console.error('Erro em getScaleByEventId:', err);
+    res.status(500).json({ error: 'Erro ao buscar escala' });
   }
 };
