@@ -1,3 +1,5 @@
+
+const mongoose = require('mongoose');
 const Repertoire = require("../models/Repertoire");
 const Event = require("../models/Event");
 const Song = require("../models/Song");
@@ -6,307 +8,190 @@ const Scale = require("../models/Scale"); // Needed for permission checks
 
 // --- Funções Auxiliares de Permissão (Adaptadas de eventController) ---
 
-// Verifica permissão de LEITURA para Escala/Repertório associado a um evento
 const checkReadPermission = async (eventId, userId, userRole) => {
-  if (!mongoose.Types.ObjectId.isValid(eventId)) return false; // Check for valid ID format
-  if (userRole === 'Coordenador') {
-    return true; // Coordenador pode ler tudo
-  }
-
-  const event = await Event.findById(eventId).select('leader').lean(); // Use lean for performance
-  if (!event) return false;
-
-  // Verificar se é DM e líder do evento
-  if (userRole === 'DM' && event.leader.toString() === userId) {
-    return true;
-  }
-
-  // Verificar se é membro e está na escala
-  // Use lean and select only necessary fields
-  const scale = await Scale.findOne({ event: eventId }).select('members.userId').lean();
-  if (scale && scale.members.some(member => member.userId.toString() === userId)) {
-    return true;
-  }
-
-  return false;
-};
-
-// Verifica permissão de ESCRITA (Criar/Update/Delete) para Escala/Repertório associado a um evento
-const checkWritePermission = async (eventId, userId, userRole) => {
   if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
-  if (userRole === 'Coordenador') {
-    return true; // Coordenador pode escrever
-  }
+  if (userRole === 'Coordenador') return true;
 
   const event = await Event.findById(eventId).select('leader').lean();
   if (!event) return false;
 
-  // Verificar se é DM e líder do evento
-  if (userRole === 'DM' && event.leader.toString() === userId) {
-    return true;
-  }
+  if (userRole === 'DM' && event.leader.toString() === userId) return true;
 
-  return false; // Membros comuns não podem escrever
+  const scale = await Scale.findOne({ event: eventId }).select('members.userId').lean();
+  return scale && scale.members.some(member => member.userId.toString() === userId);
 };
 
-// --- Controlador de Repertório com Permissões ---
+const checkWritePermission = async (eventId, userId, userRole) => {
+  if (!mongoose.Types.ObjectId.isValid(eventId)) return false;
+  if (userRole === 'Coordenador') return true;
 
-// Criar novo repertório para um evento
+  const event = await Event.findById(eventId).select('leader').lean();
+  return event && userRole === 'DM' && event.leader.toString() === userId;
+};
+
 exports.createRepertoire = async (req, res) => {
   try {
     const { eventId, songs, notes } = req.body;
     const createdBy = req.user.id;
     const userRole = req.user.role;
 
-    // Verificar permissão para criar/modificar repertório (Coordenador ou DM líder do evento)
     const hasPermission = await checkWritePermission(eventId, createdBy, userRole);
     if (!hasPermission) {
-        const eventExists = await Event.findById(eventId).select('_id').lean();
-        if (!eventExists) return res.status(404).json({ message: 'Evento não encontrado.' });
-        return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para criar/modificar o repertório deste evento.' });
+      const eventExists = await Event.findById(eventId).select('_id').lean();
+      if (!eventExists) return res.status(404).json({ message: 'Evento não encontrado.' });
+      return res.status(403).json({ message: 'Acesso negado.' });
     }
 
     if (!eventId || !songs || !Array.isArray(songs)) {
       return res.status(400).json({ message: "ID do evento e lista de músicas (songs) são obrigatórios." });
     }
 
-    // Evento já validado em checkWritePermission se não for Coordenador
-    if (userRole === 'Coordenador') {
-        const eventExists = await Event.findById(eventId).select('_id').lean();
-        if (!eventExists) return res.status(404).json({ message: 'Evento não encontrado.' });
-    }
-
     const validatedSongs = [];
     for (const item of songs) {
-      if (!item.song || item.order === undefined) { // Check order explicitly
+      if (!item.song || item.order === undefined) {
         return res.status(400).json({ message: "Cada item em 'songs' deve ter 'song' (ID da música) e 'order'." });
       }
       const songExists = await Song.findById(item.song).select('_id').lean();
       if (!songExists) {
         return res.status(404).json({ message: `Música com ID ${item.song} não encontrada.` });
       }
-      validatedSongs.push({
-        song: item.song,
-        order: item.order,
-        key: item.key,
-        notes: item.notes
-      });
+      validatedSongs.push(item);
     }
 
     const existingRepertoire = await Repertoire.findOne({ event: eventId }).select('_id').lean();
     if (existingRepertoire) {
-      return res.status(409).json({ message: "Já existe um repertório para este evento. Use a rota de atualização (PATCH)." });
+      return res.status(409).json({ message: "Já existe um repertório para este evento." });
     }
 
-    const newRepertoire = new Repertoire({
-      event: eventId,
-      songs: validatedSongs,
-      notes,
-      createdBy
-    });
+    const newRepertoire = new Repertoire({ event: eventId, songs: validatedSongs, notes, createdBy });
+    const saved = await newRepertoire.save();
 
-    const savedRepertoire = await newRepertoire.save();
-    const populatedRepertoire = await Repertoire.findById(savedRepertoire._id)
-                                          .populate("event", "title date location")
-                                          .populate("songs.song", "title artist")
-                                          .populate("createdBy", "name");
+    const populated = await Repertoire.findById(saved._id)
+      .populate("event", "title date location")
+      .populate("songs.song", "title artist")
+      .populate("createdBy", "name");
 
-    res.status(201).json(populatedRepertoire);
+    res.status(201).json(populated);
   } catch (error) {
     console.error("Erro ao criar repertório:", error);
-    if (error.kind === 'ObjectId' || error.name === 'CastError') {
-        return res.status(400).json({ message: 'ID do evento ou música inválido.' });
-    }
-    res.status(500).json({ message: "Erro interno do servidor ao criar repertório." });
+    res.status(500).json({ message: "Erro interno ao criar repertório." });
   }
 };
 
-// Listar todos os repertórios (Acesso Geral - Coordenador vê tudo)
-// TODO: Refinar se DMs/Membros devem ver apenas repertórios de eventos que participam/lideram?
 exports.getAllRepertoires = async (req, res) => {
   try {
-    if (req.user.role !== 'Coordenador') {
-        return res.status(200).json([]); // Retorna vazio para não Coordenadores
-        // return res.status(403).json({ message: 'Acesso negado. Apenas Coordenadores podem listar todos os repertórios.' });
-    }
+    if (req.user.role !== 'Coordenador') return res.status(200).json([]);
     const repertoires = await Repertoire.find()
-                                    .populate("event", "title date")
-                                    .populate("createdBy", "name")
-                                    .sort({ createdAt: -1 });
+      .populate("event", "title date")
+      .populate("createdBy", "name")
+      .sort({ createdAt: -1 });
     res.status(200).json(repertoires);
   } catch (error) {
     console.error("Erro ao buscar repertórios:", error);
-    res.status(500).json({ message: "Erro interno do servidor ao buscar repertórios." });
+    res.status(500).json({ message: "Erro interno ao buscar repertórios." });
   }
 };
 
-// Buscar repertório por ID (Verifica permissão de leitura do evento associado)
 exports.getRepertoireById = async (req, res) => {
   try {
-    const repertoireId = req.params.id;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const { id } = req.params;
+    const { id: userId, role: userRole } = req.user;
 
-    const repertoire = await Repertoire.findById(repertoireId)
-                                     .populate("event", "title date location leader") // Precisa do leader
-                                     .populate("songs.song", "title artist key")
-                                     .populate("createdBy", "name email");
+    const repertoire = await Repertoire.findById(id)
+      .populate("event", "title date location leader")
+      .populate("songs.song", "title artist key")
+      .populate("createdBy", "name email");
 
-    if (!repertoire) {
-      return res.status(404).json({ message: "Repertório não encontrado." });
-    }
+    if (!repertoire) return res.status(404).json({ message: "Repertório não encontrado." });
 
-    // Verificar permissão de leitura no evento associado
     const hasPermission = await checkReadPermission(repertoire.event._id.toString(), userId, userRole);
-    if (!hasPermission) {
-        return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para ver o repertório deste evento.' });
-    }
+    if (!hasPermission) return res.status(403).json({ message: 'Acesso negado.' });
 
     res.status(200).json(repertoire);
   } catch (error) {
     console.error("Erro ao buscar repertório por ID:", error);
-    if (error.kind === 'ObjectId' || error.name === 'CastError') {
-        return res.status(400).json({ message: 'ID do repertório inválido.' });
-    }
-    res.status(500).json({ message: "Erro interno do servidor ao buscar repertório." });
+    res.status(500).json({ message: "Erro interno ao buscar repertório." });
   }
 };
 
-// Buscar repertório por ID do Evento (Verifica permissão de leitura do evento)
 exports.getRepertoireByEventId = async (req, res) => {
   try {
-    const eventId = req.params.eventId;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const { eventId } = req.params;
+    const { id: userId, role: userRole } = req.user;
 
-    // Verificar permissão de leitura no evento
     const hasPermission = await checkReadPermission(eventId, userId, userRole);
-    if (!hasPermission) {
-        const eventExists = await Event.findById(eventId).select('_id').lean();
-        if (!eventExists) return res.status(404).json({ message: 'Evento não encontrado.' });
-        return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para ver o repertório deste evento.' });
-    }
+    if (!hasPermission) return res.status(403).json({ message: 'Acesso negado.' });
 
     const repertoire = await Repertoire.findOne({ event: eventId })
-                                     .populate("event", "title date location")
-                                     .populate("songs.song", "title artist key")
-                                     .populate("createdBy", "name email");
+      .populate("event", "title date location")
+      .populate("songs.song", "title artist key")
+      .populate("createdBy", "name email");
 
-    res.status(200).json(repertoire); // Retorna null se não encontrado
-
+    res.status(200).json(repertoire);
   } catch (error) {
     console.error("Erro ao buscar repertório por Evento ID:", error);
-     if (error.kind === 'ObjectId' || error.name === 'CastError') {
-        return res.status(400).json({ message: 'ID do evento inválido.' });
-    }
-    res.status(500).json({ message: "Erro interno do servidor ao buscar repertório." });
+    res.status(500).json({ message: "Erro interno ao buscar repertório." });
   }
 };
 
-
-// Atualizar repertório por ID (Verifica permissão de escrita no evento associado)
 exports.updateRepertoire = async (req, res) => {
   try {
+    const { id } = req.params;
     const { songs, notes } = req.body;
-    const repertoireId = req.params.id;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const { id: userId, role: userRole } = req.user;
 
-    const repertoire = await Repertoire.findById(repertoireId).select('event').lean();
-    if (!repertoire) {
-        return res.status(404).json({ message: "Repertório não encontrado para atualização." });
-    }
-    const eventId = repertoire.event.toString();
+    const repertoire = await Repertoire.findById(id).select('event').lean();
+    if (!repertoire) return res.status(404).json({ message: "Repertório não encontrado." });
 
-    // Verificar permissão de escrita no evento associado
-    const hasPermission = await checkWritePermission(eventId, userId, userRole);
-    if (!hasPermission) {
-        return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para modificar o repertório deste evento.' });
-    }
+    const hasPermission = await checkWritePermission(repertoire.event.toString(), userId, userRole);
+    if (!hasPermission) return res.status(403).json({ message: 'Acesso negado.' });
 
-    // Validar músicas se fornecidas
     let validatedSongs = undefined;
-    if (songs !== undefined) { // Permitir enviar array vazio para limpar
-        if (!Array.isArray(songs)) {
-            return res.status(400).json({ message: "O campo 'songs' deve ser um array." });
+    if (songs !== undefined) {
+      if (!Array.isArray(songs)) return res.status(400).json({ message: "songs deve ser um array." });
+      validatedSongs = [];
+      for (const item of songs) {
+        if (!item.song || item.order === undefined) {
+          return res.status(400).json({ message: "Cada item deve ter 'song' e 'order'." });
         }
-        validatedSongs = [];
-        for (const item of songs) {
-            if (!item.song || item.order === undefined) {
-                return res.status(400).json({ message: "Cada item em 'songs' deve ter 'song' (ID da música) e 'order'." });
-            }
-            const songExists = await Song.findById(item.song).select('_id').lean();
-            if (!songExists) {
-                return res.status(404).json({ message: `Música com ID ${item.song} não encontrada.` });
-            }
-            validatedSongs.push({
-                song: item.song,
-                order: item.order,
-                key: item.key,
-                notes: item.notes
-            });
-        }
+        const exists = await Song.findById(item.song).select('_id').lean();
+        if (!exists) return res.status(404).json({ message: `Música com ID ${item.song} não encontrada.` });
+        validatedSongs.push(item);
+      }
     }
 
     const updateData = {};
     if (validatedSongs !== undefined) updateData.songs = validatedSongs;
     if (notes !== undefined) updateData.notes = notes;
-
-    if (Object.keys(updateData).length === 0) {
-        return res.status(400).json({ message: "Nenhum dado válido fornecido para atualização (songs ou notes)." });
-    }
     updateData.updatedAt = Date.now();
 
-    const updatedRepertoire = await Repertoire.findByIdAndUpdate(
-      repertoireId,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    ).populate("event", "title date")
-     .populate("songs.song", "title artist")
-     .populate("createdBy", "name");
+    const updated = await Repertoire.findByIdAndUpdate(id, { $set: updateData }, { new: true, runValidators: true })
+      .populate("event", "title date")
+      .populate("songs.song", "title artist")
+      .populate("createdBy", "name");
 
-    res.status(200).json(updatedRepertoire);
-
+    res.status(200).json(updated);
   } catch (error) {
     console.error("Erro ao atualizar repertório:", error);
-    if (error.kind === 'ObjectId' || error.name === 'CastError') {
-        return res.status(400).json({ message: 'ID do repertório, evento ou música inválido.' });
-    }
-    res.status(500).json({ message: "Erro interno do servidor ao atualizar repertório." });
+    res.status(500).json({ message: "Erro interno ao atualizar repertório." });
   }
 };
 
-// Deletar repertório por ID (Verifica permissão de escrita no evento associado)
 exports.deleteRepertoire = async (req, res) => {
   try {
-    const repertoireId = req.params.id;
-    const userId = req.user.id;
-    const userRole = req.user.role;
+    const { id } = req.params;
+    const { id: userId, role: userRole } = req.user;
 
-    const repertoire = await Repertoire.findById(repertoireId).select('event').lean();
-    if (!repertoire) {
-        return res.status(404).json({ message: "Repertório não encontrado para exclusão." });
-    }
-    const eventId = repertoire.event.toString();
+    const repertoire = await Repertoire.findById(id).select('event').lean();
+    if (!repertoire) return res.status(404).json({ message: "Repertório não encontrado." });
 
-    // Verificar permissão de escrita no evento associado
-    const hasPermission = await checkWritePermission(eventId, userId, userRole);
-    if (!hasPermission) {
-        return res.status(403).json({ message: 'Acesso negado. Você não tem permissão para excluir o repertório deste evento.' });
-    }
+    const hasPermission = await checkWritePermission(repertoire.event.toString(), userId, userRole);
+    if (!hasPermission) return res.status(403).json({ message: 'Acesso negado.' });
 
-    await Repertoire.findByIdAndDelete(repertoireId);
-
+    await Repertoire.findByIdAndDelete(id);
     res.status(200).json({ message: "Repertório excluído com sucesso." });
   } catch (error) {
     console.error("Erro ao excluir repertório:", error);
-    if (error.kind === 'ObjectId' || error.name === 'CastError') {
-        return res.status(400).json({ message: 'ID do repertório inválido.' });
-    }
-    res.status(500).json({ message: "Erro interno do servidor ao excluir repertório." });
+    res.status(500).json({ message: "Erro interno ao excluir repertório." });
   }
 };
-
-// Adicionar a importação do mongoose no início do arquivo se ainda não estiver lá
-const mongoose = require('mongoose');
-

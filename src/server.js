@@ -1,4 +1,4 @@
-// server.js atualizado
+
 console.log("🛠️ server.js iniciado - hash de controle 2501");
 
 const express = require('express');
@@ -15,8 +15,8 @@ console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
 const songRoutes = require('./routes/songRoutes');
-const repertoireRoutes = require('./routes/repertoireRoutes'); // ✅ CONTROLE DE REPERTÓRIO DE EVENTOS
-const historicoRoutes = require('./routes/historicoRoutes');   // ✅ HISTÓRICO DE MÚSICAS TOCADAS
+const repertoireRoutes = require('./routes/repertoireRoutes');
+const historicoRoutes = require('./routes/historicoRoutes');
 
 const PORT = process.env.PORT || 8080;
 
@@ -29,28 +29,25 @@ try {
   console.error('❌ Erro ao configurar Morgan:', err.message);
 }
 
-// Rota de teste
 app.get('/ping', (req, res) => {
   console.log('✅ /ping recebido');
   res.send('pong');
 });
 
-// Rotas principais
 try {
   app.use('/api/events', require('./routes/eventRoutes'));
   app.use('/api/auth', require('./routes/authRoutes'));
   app.use('/api/users', require('./routes/userRoutes'));
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
+  app.use('/api/repertoires', repertoireRoutes);
   app.use('/api/songs', songRoutes);
-  app.use('/api/repertoires', repertoireRoutes); // ✅ Mantido para CRUD de repertórios
-  app.use('/api/historico', historicoRoutes);    // ✅ Novo endpoint público para o histórico
+  app.use('/api/historico', historicoRoutes);
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
 }
 
-// MongoDB
 console.log('🔄 Tentando conectar ao MongoDB...');
 mongoose.connect(process.env.MONGODB_URI || '', {
   useNewUrlParser: true,
