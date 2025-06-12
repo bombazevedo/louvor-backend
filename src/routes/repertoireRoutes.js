@@ -1,7 +1,7 @@
 
 const express = require("express");
 const router = express.Router();
-const repertoireController = require("../controllers/repertoireController");
+const repertoireController = require('../controllers/historicoController');
 const { authenticate } = require("../middleware/auth");
 
 router.use(authenticate);

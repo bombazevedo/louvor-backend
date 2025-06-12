@@ -15,7 +15,8 @@ console.log('🧪 NODE_ENV:', process.env.NODE_ENV);
 
 const app = express();
 const songRoutes = require('./routes/songRoutes');
-const repertorioRoutes = require('./routes/repertorioRoutes'); // ✅ Adicionado
+const repertoireRoutes = require('./routes/repertoireRoutes'); // ✅ CONTROLE DE REPERTÓRIO DE EVENTOS
+const historicoRoutes = require('./routes/historicoRoutes');   // ✅ HISTÓRICO DE MÚSICAS TOCADAS
 
 const PORT = process.env.PORT || 8080;
 
@@ -41,9 +42,9 @@ try {
   app.use('/api/users', require('./routes/userRoutes'));
   app.use('/api/scales', require('./routes/scaleRoutes'));
   app.use('/api/band-roles', require('./routes/bandRolesRoutes'));
-  app.use('/api/repertoires', require('./routes/repertoireRoutes'));
   app.use('/api/songs', songRoutes);
-  app.use('/api/repertorio', repertorioRoutes); // ✅ Inserido corretamente
+  app.use('/api/repertoires', repertoireRoutes); // ✅ Mantido para CRUD de repertórios
+  app.use('/api/historico', historicoRoutes);    // ✅ Novo endpoint público para o histórico
 } catch (err) {
   console.error('❌ Erro ao montar rotas:', err.message);
   console.error(err);
