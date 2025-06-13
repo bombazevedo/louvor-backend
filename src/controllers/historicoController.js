@@ -1,17 +1,15 @@
 const Event = require('../models/Event');
 
-// Função para normalizar texto para comparação
 function normalizarTexto(texto) {
   return texto
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '') // remove versões
+    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '') // remove (Ao Vivo), feat. etc.
     .replace(/[^a-z0-9 ]/gi, '') // remove símbolos
-    .replace(/\s+/g, ' ') // espaços normais
+    .replace(/\s+/g, ' ') // normaliza espaços
     .trim();
 }
 
-// Padroniza capitalização para exibição
 function formatarNome(texto) {
   return texto
     .toLowerCase()
@@ -34,7 +32,12 @@ exports.listarHistorico = async (req, res) => {
       for (const musica of evento.musicLinks || []) {
         if (!musica.name || !musica.artist) continue;
 
-        const chave = normalizarTexto(`${musica.name} ${musica.artist}`);
+        const nomeNormalizado = normalizarTexto(musica.name);
+        const artistaNormalizado = normalizarTexto(musica.artist);
+
+        // Remove artista do nome se estiver duplicado
+        const nomeSemArtista = nomeNormalizado.replace(artistaNormalizado, '').trim();
+        const chave = `${nomeSemArtista} ${artistaNormalizado}`.trim();
 
         if (!mapa.has(chave)) {
           mapa.set(chave, {
