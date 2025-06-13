@@ -1,66 +1,61 @@
+// historicoController.js atualizado com lógica aprimorada para agrupar músicas por nome e artista, ignorando variações como "Ao Vivo", "feat", etc.
+
 const Event = require('../models/Event');
 
-// Listar histórico consolidado de músicas tocadas (eventos passados)
-exports.listarHistorico = async (req, res) => {
+function normalizarTexto(texto) {
+  return texto
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '') // remove (Ao Vivo), feat. e colchetes
+    .replace(/[^a-z0-9 ]/gi, '') // remove caracteres especiais
+    .replace(/\s+/g, ' ') // normaliza espaços múltiplos
+    .trim();
+}
+
+exports.getHistoricoMusicas = async (req, res) => {
   try {
-    const hoje = new Date();
+    const eventos = await Event.find({ date: { $lt: new Date() } })
+      .select('musicLinks')
+      .lean();
 
-    // Buscar somente eventos já passados que tenham musicLinks
-    const eventosPassados = await Event.find({
-      date: { $lt: hoje },
-      musicLinks: { $exists: true, $ne: [] }
-    }).select('musicLinks');
+    const contador = new Map();
 
-    const historicoMap = new Map();
+    for (const evento of eventos) {
+      for (const musica of evento.musicLinks || []) {
+        const chaveNormalizada = normalizarTexto(musica.name + musica.artist);
 
-    for (const evento of eventosPassados) {
-      for (const musica of evento.musicLinks) {
-        const chave = `${musica.name.trim().toLowerCase()}___${musica.artist.trim().toLowerCase()}`;
-
-        if (!historicoMap.has(chave)) {
-          historicoMap.set(chave, {
+        if (!contador.has(chaveNormalizada)) {
+          contador.set(chaveNormalizada, {
+            id: musica.url,
             nome: musica.name,
             artista: musica.artist,
-            qtdTocada: 1,
-            links: [musica]
+            plataforma: musica.platform,
+            url: musica.url,
+            qtdTocada: 1
           });
         } else {
-          const item = historicoMap.get(chave);
-          item.qtdTocada += 1;
-          item.links.push(musica); // Armazena todos os links para avaliação posterior
+          const entradaExistente = contador.get(chaveNormalizada);
+
+          // Se o novo link for YouTube e o atual não, atualiza para o YouTube
+          if (musica.platform === 'YouTube' && entradaExistente.plataforma !== 'YouTube') {
+            entradaExistente.id = musica.url;
+            entradaExistente.nome = musica.name;
+            entradaExistente.artista = musica.artist;
+            entradaExistente.plataforma = musica.platform;
+            entradaExistente.url = musica.url;
+          }
+
+          entradaExistente.qtdTocada += 1;
         }
       }
     }
 
-    const resultado = Array.from(historicoMap.values()).map((item) => {
-      // Verifica se algum dos links é do YouTube
-      const youtube = item.links.find(link => link.platform.toLowerCase() === 'youtube');
-      let plataformaFinal = '';
-      let urlFinal = '';
+    const historico = Array.from(contador.values())
+      .sort((a, b) => b.qtdTocada - a.qtdTocada || a.nome.localeCompare(b.nome));
 
-      if (youtube) {
-        plataformaFinal = youtube.platform;
-        urlFinal = youtube.url;
-      } else {
-        // Se não há YouTube, retorna o primeiro link usado
-        const fallback = item.links[0];
-        plataformaFinal = fallback.platform;
-        urlFinal = fallback.url;
-      }
-
-      return {
-        id: urlFinal,
-        nome: item.nome,
-        artista: item.artista,
-        plataforma: plataformaFinal,
-        url: urlFinal,
-        qtdTocada: item.qtdTocada
-      };
-    });
-
-    res.status(200).json(resultado);
-  } catch (err) {
-    console.error('Erro ao gerar histórico:', err);
-    res.status(500).json({ error: 'Erro ao gerar histórico de músicas' });
+    res.json(historico);
+  } catch (error) {
+    console.error('Erro ao gerar histórico:', error);
+    res.status(500).json({ message: 'Erro ao gerar histórico de músicas.' });
   }
 };
