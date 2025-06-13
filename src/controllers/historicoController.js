@@ -1,27 +1,23 @@
-const Repertoire = require('../models/Repertoire');
-const Song = require('../models/Song');
+const Event = require('../models/Event');
 
+// Histórico baseado nos links musicais dos eventos
 exports.listarHistorico = async (req, res) => {
   try {
-    const repertorios = await Repertoire.find().populate('songs');
+    const eventos = await Event.find().select('musicLinks');
+
     const historico = {};
 
-    for (const rep of repertorios) {
-      for (const musica of rep.songs) {
-        const id = musica._id.toString();
+    for (const evento of eventos) {
+      for (const link of evento.musicLinks || []) {
+        const id = link.url;
 
         if (!historico[id]) {
           historico[id] = {
             id: id,
-            nome: musica.nome,
-            artista: musica.artista,
-            album: musica.album,
-            tonalidade: musica.tonalidade,
-            bpm: musica.bpm,
-            duracao: musica.duracao,
-            albumCoverUrl: musica.albumCoverUrl,
-            cifras: musica.cifras,
-            links: musica.links,
+            nome: link.name || 'Desconhecida',
+            artista: link.artist || 'Desconhecido',
+            plataforma: link.platform || 'Indefinido',
+            url: link.url,
             qtdTocada: 1
           };
         } else {
@@ -30,7 +26,7 @@ exports.listarHistorico = async (req, res) => {
       }
     }
 
-    res.json(Object.values(historico));
+    res.status(200).json(Object.values(historico));
   } catch (err) {
     console.error('Erro ao buscar histórico:', err);
     res.status(500).json({ error: 'Erro ao buscar histórico de músicas' });
