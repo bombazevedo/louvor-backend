@@ -1,61 +1,66 @@
-// historicoController.js atualizado com lógica aprimorada para agrupar músicas por nome e artista, ignorando variações como "Ao Vivo", "feat", etc.
-
 const Event = require('../models/Event');
 
+// Função utilitária para normalizar nome + artista
 function normalizarTexto(texto) {
   return texto
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '') // remove (Ao Vivo), feat. e colchetes
+    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '') // remove "ao vivo", "feat", etc.
     .replace(/[^a-z0-9 ]/gi, '') // remove caracteres especiais
-    .replace(/\s+/g, ' ') // normaliza espaços múltiplos
+    .replace(/\s+/g, ' ') // normaliza espaços
     .trim();
 }
 
-exports.getHistoricoMusicas = async (req, res) => {
+// Função principal exportada corretamente
+exports.listarHistorico = async (req, res) => {
   try {
-    const eventos = await Event.find({ date: { $lt: new Date() } })
-      .select('musicLinks')
-      .lean();
+    const hoje = new Date();
 
-    const contador = new Map();
+    const eventosPassados = await Event.find({
+      date: { $lt: hoje },
+      musicLinks: { $exists: true, $ne: [] }
+    }).select('musicLinks');
 
-    for (const evento of eventos) {
+    const historicoMap = new Map();
+
+    for (const evento of eventosPassados) {
       for (const musica of evento.musicLinks || []) {
-        const chaveNormalizada = normalizarTexto(musica.name + musica.artist);
+        if (!musica.name || !musica.artist) continue;
 
-        if (!contador.has(chaveNormalizada)) {
-          contador.set(chaveNormalizada, {
-            id: musica.url,
+        const chave = normalizarTexto(`${musica.name} ${musica.artist}`);
+
+        if (!historicoMap.has(chave)) {
+          historicoMap.set(chave, {
             nome: musica.name,
             artista: musica.artist,
-            plataforma: musica.platform,
-            url: musica.url,
-            qtdTocada: 1
+            qtdTocada: 1,
+            links: [musica]
           });
         } else {
-          const entradaExistente = contador.get(chaveNormalizada);
-
-          // Se o novo link for YouTube e o atual não, atualiza para o YouTube
-          if (musica.platform === 'YouTube' && entradaExistente.plataforma !== 'YouTube') {
-            entradaExistente.id = musica.url;
-            entradaExistente.nome = musica.name;
-            entradaExistente.artista = musica.artist;
-            entradaExistente.plataforma = musica.platform;
-            entradaExistente.url = musica.url;
-          }
-
-          entradaExistente.qtdTocada += 1;
+          const item = historicoMap.get(chave);
+          item.qtdTocada += 1;
+          item.links.push(musica);
         }
       }
     }
 
-    const historico = Array.from(contador.values())
-      .sort((a, b) => b.qtdTocada - a.qtdTocada || a.nome.localeCompare(b.nome));
+    const resultado = Array.from(historicoMap.values()).map(item => {
+      const youtube = item.links.find(link => link.platform?.toLowerCase() === 'youtube');
+      const preferido = youtube || item.links[0];
 
-    res.json(historico);
-  } catch (error) {
-    console.error('Erro ao gerar histórico:', error);
-    res.status(500).json({ message: 'Erro ao gerar histórico de músicas.' });
+      return {
+        id: preferido.url,
+        nome: item.nome,
+        artista: item.artista,
+        plataforma: preferido.platform,
+        url: preferido.url,
+        qtdTocada: item.qtdTocada
+      };
+    });
+
+    res.status(200).json(resultado);
+  } catch (err) {
+    console.error('Erro ao gerar histórico:', err);
+    res.status(500).json({ error: 'Erro ao gerar histórico de músicas' });
   }
 };
