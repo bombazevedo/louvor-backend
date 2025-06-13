@@ -1,23 +1,29 @@
 const Event = require('../models/Event');
 
-// Histórico baseado nos links musicais dos eventos
+// Listar histórico de músicas tocadas em eventos passados
 exports.listarHistorico = async (req, res) => {
   try {
-    const eventos = await Event.find().select('musicLinks');
+    const hoje = new Date();
+
+    // Buscar somente eventos cuja data seja anterior à data atual e que contenham músicas
+    const eventosPassados = await Event.find({
+      date: { $lt: hoje },
+      musicLinks: { $exists: true, $ne: [] }
+    }).select('musicLinks');
 
     const historico = {};
 
-    for (const evento of eventos) {
-      for (const link of evento.musicLinks || []) {
-        const id = link.url;
+    for (const evento of eventosPassados) {
+      for (const musica of evento.musicLinks) {
+        const id = musica.url; // Usa a URL como identificador único da música
 
         if (!historico[id]) {
           historico[id] = {
-            id: id,
-            nome: link.name || 'Desconhecida',
-            artista: link.artist || 'Desconhecido',
-            plataforma: link.platform || 'Indefinido',
-            url: link.url,
+            id: musica.url,
+            nome: musica.name,
+            artista: musica.artist,
+            plataforma: musica.platform,
+            url: musica.url,
             qtdTocada: 1
           };
         } else {
