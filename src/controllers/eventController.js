@@ -1,13 +1,13 @@
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
-const BandRole = require('../models/BandRole'); // ✅ Mantido
+const BandRole = require('../models/BandRole');
 
 // GET /api/events
 exports.getEventsWithScales = async (req, res) => {
   try {
     const userId = req.user.id;
-    const userRole = req.user.role.toLowerCase(); // ✅ normaliza role
+    const userRole = req.user.role.toLowerCase();
 
     const events = await Event.find().sort({ date: 1 });
 
@@ -18,7 +18,7 @@ exports.getEventsWithScales = async (req, res) => {
         if (scale && scale.members && scale.members.length > 0) {
           const populatedMembers = await Promise.all(
             scale.members.map(async (member) => {
-              const user = await User.findById(member.user).select('name email');
+              const user = await User.findById(member.user).select('name email photoUrl');
               const func = await BandRole.findById(member.function).select('name');
               return { ...member, user: user || null, function: func || null };
             })
@@ -73,7 +73,7 @@ exports.getEventById = async (req, res) => {
       const populatedMembers = await Promise.all(
         scale.members.map(async (member) => {
           try {
-            const user = await User.findById(member.user).select('name email');
+            const user = await User.findById(member.user).select('name email photoUrl');
             const func = await BandRole.findById(member.function).select('name');
             return { ...member, user: user || null, function: func || null };
           } catch {
