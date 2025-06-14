@@ -16,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 // Rotas
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
-const bandRoleRoutes = require('./routes/bandRoleRoutes');
+const bandRolesRoutes = require('./routes/bandRolesRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const scaleRoutes = require('./routes/scaleRoutes');
 const songRoutes = require('./routes/songRoutes');
@@ -27,7 +27,7 @@ const utilsRoutes = require('./routes/utilsRoutes');
 // Usando as rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/band-roles', bandRoleRoutes);
+app.use('/api/band-roles', bandRolesRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/scales', scaleRoutes);
 app.use('/api/songs', songRoutes);
