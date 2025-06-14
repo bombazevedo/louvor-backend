@@ -13,7 +13,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Rotas
+// 🔗 Importação de rotas
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const bandRolesRoutes = require('./routes/bandRolesRoutes');
@@ -22,9 +22,9 @@ const scaleRoutes = require('./routes/scaleRoutes');
 const songRoutes = require('./routes/songRoutes');
 const repertoireRoutes = require('./routes/repertoireRoutes');
 const historicoRoutes = require('./routes/historicoRoutes');
-const utilsRoutes = require('./routes/utilsRoutes');
+const utilsRoutes = require('./routes/utilsRoutes'); // ✅ Upload e delete de arquivos no Cloudinary
 
-// Usando as rotas
+// 🛠️ Usando as rotas
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/band-roles', bandRolesRoutes);
@@ -33,9 +33,9 @@ app.use('/api/scales', scaleRoutes);
 app.use('/api/songs', songRoutes);
 app.use('/api/repertoires', repertoireRoutes);
 app.use('/api/historico', historicoRoutes);
-app.use('/api/utils', utilsRoutes);
+app.use('/api/utils', utilsRoutes); // ✅ Nova rota
 
-// Conexão MongoDB
+// 🚀 Conexão com MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -43,12 +43,12 @@ mongoose.connect(process.env.MONGODB_URI, {
 .then(() => console.log('✅ MongoDB conectado com sucesso'))
 .catch((err) => console.error('❌ Erro na conexão com MongoDB:', err));
 
-// Deploy - enviar o frontend React Native expo ou web futuramente
+// 🏠 Deploy - Página inicial da API
 app.get('/', (req, res) => {
   res.send('🚀 API do LouvorApp está rodando');
 });
 
-// Definir porta
+// 🚪 Definir porta
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
