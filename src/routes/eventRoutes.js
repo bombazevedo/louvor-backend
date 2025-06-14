@@ -1,24 +1,28 @@
 const express = require('express');
 const router = express.Router();
 const { authenticate, isCoordinator } = require('../middleware/auth');
-const { getEventsWithScales, getEventById } = require('../controllers/eventController');
+const { getEventsWithScales, getEventById, updateEvent } = require('../controllers/eventController');
 const Event = require('../models/Event');
 
+// 🔍 Buscar todos os eventos com escalas
 router.get('/', authenticate, getEventsWithScales);
 
+// ➕ Criar novo evento (apenas coordenador)
 router.post('/', authenticate, isCoordinator, async (req, res) => {
   try {
     const event = new Event(req.body);
     await event.save();
     res.status(201).json(event);
   } catch (error) {
-    console.error('Erro ao criar evento:', error);
+    console.error('❌ Erro ao criar evento:', error);
     res.status(500).json({ error: 'Erro ao criar evento' });
   }
 });
 
+// 🔍 Buscar evento por ID
 router.get('/:id', authenticate, getEventById);
 
+// ✏️ Atualizar evento
 router.patch('/:id', authenticate, async (req, res) => {
   try {
     const { musicLinks, attachments, ...rest } = req.body;
@@ -51,17 +55,18 @@ router.patch('/:id', authenticate, async (req, res) => {
 
     res.json(event);
   } catch (error) {
-    console.error('Erro ao atualizar evento:', error);
+    console.error('❌ Erro ao atualizar evento:', error);
     res.status(500).json({ error: 'Erro ao atualizar evento' });
   }
 });
 
+// 🗑️ Deletar evento (apenas coordenador)
 router.delete('/:id', authenticate, isCoordinator, async (req, res) => {
   try {
     await Event.findByIdAndDelete(req.params.id);
     res.status(204).end();
   } catch (error) {
-    console.error('Erro ao deletar evento:', error);
+    console.error('❌ Erro ao deletar evento:', error);
     res.status(500).json({ error: 'Erro ao deletar evento' });
   }
 });
