@@ -1,9 +1,11 @@
+// src/routes/utilsRoutes.js
+
 const express = require('express');
 const router = express.Router();
-const utilsController = require('../controllers/utilsController');
-const auth = require('../middleware/auth');
 
-// 🔒 Protegido por autenticação
-router.delete('/delete-image', auth, utilsController.deleteImage);
+const { deleteImage } = require('../controllers/utilsController');
+
+// ✅ Correto: passando uma função como callback
+router.delete('/delete-image', deleteImage);
 
 module.exports = router;
