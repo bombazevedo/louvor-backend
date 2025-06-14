@@ -4,15 +4,16 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 
+// Importações de rotas
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const eventRoutes = require('./routes/eventRoutes');
-const bandRoleRoutes = require('./routes/bandRoleRoutes');
+const bandRolesRoutes = require('./routes/bandRolesRoutes'); // ✅ Corrigido aqui
 const scaleRoutes = require('./routes/scaleRoutes');
 const songRoutes = require('./routes/songRoutes');
 const repertoireRoutes = require('./routes/repertoireRoutes');
 const historicoRoutes = require('./routes/historicoRoutes');
-const utilsRoutes = require('./routes/utilsRoutes'); // ✅ Adicionado para utils
+const utilsRoutes = require('./routes/utilsRoutes'); // ✅ Novo para utils
 
 const app = express();
 
@@ -33,12 +34,12 @@ mongoose.connect(process.env.MONGO_URL, {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/events', eventRoutes);
-app.use('/api/band-roles', bandRoleRoutes);
+app.use('/api/band-roles', bandRolesRoutes); // ✅ Corrigido nome
 app.use('/api/scales', scaleRoutes);
 app.use('/api/songs', songRoutes);
 app.use('/api/repertoires', repertoireRoutes);
 app.use('/api/historico', historicoRoutes);
-app.use('/api/utils', utilsRoutes); // ✅ Aplicação correta da rota utils
+app.use('/api/utils', utilsRoutes); // ✅ Rota de utilitários
 
 // Rota padrão para testar se o backend está funcionando
 app.get('/', (req, res) => {
