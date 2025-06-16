@@ -26,7 +26,7 @@ exports.createTeam = async (req, res) => {
 exports.getTeams = async (req, res) => {
   try {
     const teams = await Team.find()
-      .populate('members.user', 'name avatar')
+      .populate('members.user', 'name avatar photoUrl')
       .populate('members.bandRole', 'name icon')
       .sort({ createdAt: -1 });
     res.json(teams);
