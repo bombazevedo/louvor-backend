@@ -23,12 +23,13 @@ exports.uploadFile = async (file) => {
   }
 
   return await cloudinary.uploader.upload(file.path, {
-    upload_preset: "louvor_unsigned", // Opcional, pode remover se não estiver configurado
+    overwrite: true, // 🚩 Chave da solução — substitui a imagem anterior
+    upload_preset: "louvor_unsigned", // Se estiver configurado no Cloudinary
     resource_type: "auto",
   });
 };
 
-// ✅ Exclusão de arquivo no Cloudinary pelo publicId
+// ✅ Exclusão de arquivo no Cloudinary pelo publicId (continua disponível caso precise)
 exports.deleteFile = async (publicId) => {
   return await cloudinary.uploader.destroy(publicId);
 };
