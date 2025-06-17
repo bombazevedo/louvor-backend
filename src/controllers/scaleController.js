@@ -1,8 +1,21 @@
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const BandRole = require('../models/BandRole');
+const Event = require('../models/Event');
+const Unavailability = require('../models/Unavailability'); // 🔥 Adicionado
 
-// Criar ou atualizar escala (inteligente)
+// ✔️ Função auxiliar para checar indisponibilidade
+const checkUnavailability = async (members, eventDate) => {
+  const unavailable = await Unavailability.find({
+    startDate: { $lte: eventDate },
+    endDate: { $gte: eventDate },
+    userId: { $in: members.map(m => m.user) }
+  }).populate('userId', 'name');
+
+  return unavailable;
+};
+
+// ✔️ Criar ou atualizar escala (inteligente)
 exports.createScale = async (req, res) => {
   try {
     const { eventId, members, notes } = req.body;
@@ -12,6 +25,9 @@ exports.createScale = async (req, res) => {
     if (!eventId || !Array.isArray(members)) {
       return res.status(400).json({ message: 'Dados inválidos. É necessário eventId e lista de membros.' });
     }
+
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
 
     const validatedMembers = await Promise.all(
       members.map(async m => {
@@ -26,6 +42,15 @@ exports.createScale = async (req, res) => {
         };
       })
     );
+
+    // ✔️ Verifica indisponibilidade antes de salvar
+    const unavailable = await checkUnavailability(validatedMembers, event.date);
+    if (unavailable.length > 0) {
+      const names = unavailable.map(u => u.userId.name).join(', ');
+      return res.status(400).json({
+        message: `Os seguintes membros estão indisponíveis na data deste evento: ${names}`
+      });
+    }
 
     if (role === 'member') {
       return res.status(403).json({ message: 'Usuário comum não pode criar escalas.' });
@@ -75,6 +100,14 @@ exports.updateScale = async (req, res) => {
       return res.status(400).json({ message: 'Lista de membros inválida.' });
     }
 
+    const originalScale = await Scale.findById(scaleId);
+    if (!originalScale) {
+      return res.status(404).json({ message: 'Escala não encontrada.' });
+    }
+
+    const event = await Event.findById(originalScale.eventId);
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
+
     const validatedMembers = await Promise.all(
       members.map(async m => {
         const userExists = await User.findById(m.user);
@@ -89,13 +122,22 @@ exports.updateScale = async (req, res) => {
       })
     );
 
+    // ✔️ Verifica indisponibilidade antes de salvar
+    const unavailable = await checkUnavailability(validatedMembers, event.date);
+    if (unavailable.length > 0) {
+      const names = unavailable.map(u => u.userId.name).join(', ');
+      return res.status(400).json({
+        message: `Os seguintes membros estão indisponíveis na data deste evento: ${names}`
+      });
+    }
+
     if (role === 'member') {
       return res.status(403).json({ message: 'Usuário comum não pode editar escalas.' });
     }
 
     if (role === 'dm') {
-      const originalScale = await Scale.findById(scaleId).populate('members.user');
-      const escalado = originalScale.members?.some(
+      const populatedOriginal = await originalScale.populate('members.user');
+      const escalado = populatedOriginal.members?.some(
         (m) => m.user?._id?.toString() === userId
       );
       if (!escalado) {

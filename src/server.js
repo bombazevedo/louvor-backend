@@ -23,7 +23,8 @@ const songRoutes = require('./routes/songRoutes');
 const repertoireRoutes = require('./routes/repertoireRoutes');
 const historicoRoutes = require('./routes/historicoRoutes');
 const utilsRoutes = require('./routes/utilsRoutes');
-const teamRoutes = require('./routes/teamRoutes');  // <-- ADICIONADO
+const teamRoutes = require('./routes/teamRoutes'); // <-- ADICIONADO
+const unavailabilityRoutes = require('./routes/unavailabilityRoutes'); // <-- 🔥 ADICIONADO
 
 // Usando as rotas
 app.use('/api/auth', authRoutes);
@@ -35,7 +36,8 @@ app.use('/api/songs', songRoutes);
 app.use('/api/repertoires', repertoireRoutes);
 app.use('/api/historico', historicoRoutes);
 app.use('/api/utils', utilsRoutes);
-app.use('/api/teams', teamRoutes);   // <-- ADICIONADO
+app.use('/api/teams', teamRoutes); // <-- ADICIONADO
+app.use('/api/unavailability', unavailabilityRoutes); // <-- 🔥 ADICIONADO
 
 // Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
