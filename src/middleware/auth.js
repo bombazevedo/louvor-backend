@@ -8,6 +8,7 @@ exports.authenticate = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
+    req.userId = decoded.id; // 🔥 🔥 🔥 Alinhado com o Canvas → Obrigatório
     next();
   } catch (error) {
     res.status(401).json({ message: "Token inválido." });
