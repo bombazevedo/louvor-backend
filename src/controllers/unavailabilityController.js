@@ -72,4 +72,23 @@ const deleteUnavailability = async (req, res) => {
 const getUnavailabilityByDate = async (req, res) => {
   try {
     const { date } = req.params;
-    const t
+    const targetDate = new Date(date);
+
+    const unavailable = await Unavailability.find({
+      startDate: { $lte: targetDate },
+      endDate: { $gte: targetDate },
+    }).populate('userId', 'name email');
+
+    res.status(200).json(unavailable);
+  } catch (error) {
+    console.error('Erro ao consultar indisponibilidade:', error);
+    res.status(500).json({ message: 'Erro ao consultar indisponibilidade.' });
+  }
+};
+
+module.exports = {
+  createUnavailability,
+  getMyUnavailability,
+  deleteUnavailability,
+  getUnavailabilityByDate,
+};
