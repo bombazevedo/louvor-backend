@@ -1,11 +1,11 @@
-import express from 'express';
-import {
+const express = require('express');
+const {
   createUnavailability,
   deleteUnavailability,
   getMyUnavailability,
   getUnavailabilityByDate,
-} from '../controllers/unavailabilityController.js';
-import auth from '../middleware/auth.js';
+} = require('../controllers/unavailabilityController');
+const auth = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -16,4 +16,4 @@ router.get('/mine', getMyUnavailability);               // Listar minhas
 router.delete('/:id', deleteUnavailability);            // Deletar
 router.get('/by-date/:date', getUnavailabilityByDate);  // Checar quem está indisponível na data
 
-export default router;
+module.exports = router;
