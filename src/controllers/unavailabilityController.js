@@ -1,7 +1,7 @@
-import Unavailability from '../models/Unavailability.js';
+const Unavailability = require('../models/Unavailability');
 
 // ✔️ Criar indisponibilidade
-export const createUnavailability = async (req, res) => {
+const createUnavailability = async (req, res) => {
   try {
     const { startDate, endDate } = req.body;
 
@@ -37,7 +37,7 @@ export const createUnavailability = async (req, res) => {
 };
 
 // ✔️ Listar indisponibilidades do usuário logado
-export const getMyUnavailability = async (req, res) => {
+const getMyUnavailability = async (req, res) => {
   try {
     const data = await Unavailability.find({ userId: req.userId }).sort({ startDate: 1 });
     res.status(200).json(data);
@@ -48,7 +48,7 @@ export const getMyUnavailability = async (req, res) => {
 };
 
 // ✔️ Deletar indisponibilidade
-export const deleteUnavailability = async (req, res) => {
+const deleteUnavailability = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -69,19 +69,7 @@ export const deleteUnavailability = async (req, res) => {
 };
 
 // ✔️ Checar quem está indisponível para uma data específica
-export const getUnavailabilityByDate = async (req, res) => {
+const getUnavailabilityByDate = async (req, res) => {
   try {
     const { date } = req.params;
-    const targetDate = new Date(date);
-
-    const unavailable = await Unavailability.find({
-      startDate: { $lte: targetDate },
-      endDate: { $gte: targetDate },
-    }).populate('userId', 'name email');
-
-    res.status(200).json(unavailable);
-  } catch (error) {
-    console.error('Erro ao consultar indisponibilidade:', error);
-    res.status(500).json({ message: 'Erro ao consultar indisponibilidade.' });
-  }
-};
+    const t

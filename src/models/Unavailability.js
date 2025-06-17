@@ -1,23 +1,19 @@
-import mongoose from 'mongoose';
+const express = require('express');
+const {
+  createUnavailability,
+  deleteUnavailability,
+  getMyUnavailability,
+  getUnavailabilityByDate,
+} = require('../controllers/unavailabilityController');
+const auth = require('../middleware/auth');
 
-const UnavailabilitySchema = new mongoose.Schema({
-  userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
-  startDate: {
-    type: Date,
-    required: true,
-  },
-  endDate: {
-    type: Date,
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  }
-});
+const router = express.Router();
 
-export default mongoose.model('Unavailability', UnavailabilitySchema);
+router.use(auth); // Protege todas as rotas
+
+router.post('/', createUnavailability);                 // Criar
+router.get('/mine', getMyUnavailability);               // Listar minhas
+router.delete('/:id', deleteUnavailability);            // Deletar
+router.get('/by-date/:date', getUnavailabilityByDate);  // Checar quem está indisponível na data
+
+module.exports = router;
