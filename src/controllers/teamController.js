@@ -1,81 +1,112 @@
 const Team = require('../models/Team');
 
-// Cria uma nova equipe (apenas coordenador)
-exports.createTeam = async (req, res) => {
+const createTeam = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'coordenador') {
-      return res.status(403).json({ error: 'Apenas coordenador pode criar equipes.' });
-    }
     const { name, members } = req.body;
-    if (!name || !members || !Array.isArray(members) || members.length === 0) {
-      return res.status(400).json({ error: 'Preencha nome e membros da equipe.' });
-    }
-    const newTeam = new Team({
+
+    const validatedMembers = members.filter(
+      (m) => m.user && m.bandRole
+    );
+
+    const uniqueMembers = validatedMembers.filter(
+      (member, index, self) =>
+        index === self.findIndex(
+          (m) =>
+            m.user.toString() === member.user.toString() &&
+            m.bandRole.toString() === member.bandRole.toString()
+        )
+    );
+
+    const team = new Team({
       name,
-      members,
-      createdBy: req.user.id || req.user._id // AJUSTE AQUI
+      members: uniqueMembers,
     });
-    await newTeam.save();
-    res.status(201).json(newTeam);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao criar equipe.' });
+
+    await team.save();
+    res.status(201).json(team);
+  } catch (error) {
+    console.error('Erro ao criar time:', error);
+    res.status(500).json({ message: 'Erro ao criar time' });
   }
 };
 
-// Lista todas as equipes (aberto a todos)
-exports.getTeams = async (req, res) => {
+const updateTeam = async (req, res) => {
   try {
-    const teams = await Team.find()
-      .populate('members.user', 'name avatar photoUrl')
-      .populate('members.bandRole', 'name icon')
-      .sort({ createdAt: -1 });
-    res.json(teams);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao buscar equipes.' });
-  }
-};
-
-// Busca equipe por ID (aberto a todos)
-exports.getTeamById = async (req, res) => {
-  try {
-    const team = await Team.findById(req.params.id)
-      .populate('members.user', 'name avatar')
-      .populate('members.bandRole', 'name icon');
-    if (!team) return res.status(404).json({ error: 'Equipe não encontrada.' });
-    res.json(team);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao buscar equipe.' });
-  }
-};
-
-// Edita equipe (apenas coordenador)
-exports.updateTeam = async (req, res) => {
-  try {
-    if (!req.user || req.user.role !== 'coordenador') {
-      return res.status(403).json({ error: 'Apenas coordenador pode editar equipes.' });
-    }
     const { name, members } = req.body;
     const team = await Team.findById(req.params.id);
-    if (!team) return res.status(404).json({ error: 'Equipe não encontrada.' });
-    team.name = name || team.name;
-    team.members = members || team.members;
+
+    if (!team) {
+      return res.status(404).json({ message: 'Time não encontrado' });
+    }
+
+    const validatedMembers = members.filter(
+      (m) => m.user && m.bandRole
+    );
+
+    const uniqueMembers = validatedMembers.filter(
+      (member, index, self) =>
+        index === self.findIndex(
+          (m) =>
+            m.user.toString() === member.user.toString() &&
+            m.bandRole.toString() === member.bandRole.toString()
+        )
+    );
+
+    team.name = name;
+    team.members = uniqueMembers;
     await team.save();
+
     res.json(team);
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao editar equipe.' });
+  } catch (error) {
+    console.error('Erro ao atualizar time:', error);
+    res.status(500).json({ message: 'Erro ao atualizar time' });
   }
 };
 
-// Exclui equipe (apenas coordenador)
-exports.deleteTeam = async (req, res) => {
+const deleteTeam = async (req, res) => {
   try {
-    if (!req.user || req.user.role !== 'coordenador') {
-      return res.status(403).json({ error: 'Apenas coordenador pode excluir equipes.' });
-    }
     const team = await Team.findByIdAndDelete(req.params.id);
-    if (!team) return res.status(404).json({ error: 'Equipe não encontrada.' });
-    res.json({ message: 'Equipe excluída com sucesso.' });
-  } catch (err) {
-    res.status(500).json({ error: 'Erro ao excluir equipe.' });
+
+    if (!team) {
+      return res.status(404).json({ message: 'Time não encontrado' });
+    }
+
+    res.json({ message: 'Time excluído com sucesso' });
+  } catch (error) {
+    console.error('Erro ao excluir time:', error);
+    res.status(500).json({ message: 'Erro ao excluir time' });
   }
+};
+
+const getTeams = async (req, res) => {
+  try {
+    const teams = await Team.find().populate('members.user').populate('members.bandRole');
+    res.json(teams);
+  } catch (error) {
+    console.error('Erro ao buscar times:', error);
+    res.status(500).json({ message: 'Erro ao buscar times' });
+  }
+};
+
+const getTeamById = async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.id).populate('members.user').populate('members.bandRole');
+
+    if (!team) {
+      return res.status(404).json({ message: 'Time não encontrado' });
+    }
+
+    res.json(team);
+  } catch (error) {
+    console.error('Erro ao buscar time:', error);
+    res.status(500).json({ message: 'Erro ao buscar time' });
+  }
+};
+
+module.exports = {
+  createTeam,
+  updateTeam,
+  deleteTeam,
+  getTeams,
+  getTeamById,
 };

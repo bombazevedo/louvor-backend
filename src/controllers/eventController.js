@@ -1,7 +1,7 @@
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
-const Function = require('../models/Function');
+const Function = require('../models/BandRole');
 
 const getEventsWithScales = async (req, res) => {
   try {
