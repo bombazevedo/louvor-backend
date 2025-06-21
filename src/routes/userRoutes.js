@@ -6,7 +6,7 @@ const {
   updateUserRole,
   updateMe,
   deleteCloudinaryImage
-} = require("../controllers/authController");
+} = require("../controllers/authController"); // 🔥 Mantido como está, seguindo sua organização atual
 const User = require("../models/User");
 
 // ✅ Retorna dados do usuário autenticado
@@ -41,7 +41,7 @@ router.get("/", authenticate, async (req, res) => {
 // ✅ Buscar por ID
 router.get("/:id", authenticate, getUserById);
 
-// ✅ Atualizar função do usuário (coordenador)
+// ✅ Atualizar função do usuário (somente coordenador)
 router.patch("/:id", authenticate, updateUserRole);
 
 // ✅ Atualização completa de perfil por ID (restrita a admin ou dono)
