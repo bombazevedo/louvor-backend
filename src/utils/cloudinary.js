@@ -61,4 +61,3 @@ exports.deleteFile = async (publicId) => {
     resource_type: "auto",
   });
 };
-

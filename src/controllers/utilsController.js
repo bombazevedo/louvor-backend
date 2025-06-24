@@ -1,40 +1,57 @@
-const { v2: cloudinary } = require('cloudinary');
+const fs = require("fs");
+const path = require("path");
+const cloudinary = require("../config/cloudinary");
 
-// ✅ Upload de arquivos (imagens, PDFs, vídeos, áudios)
-exports.uploadFile = async (req, res) => {
+// ✅ Upload de arquivo
+exports.upload = async (req, res) => {
   try {
     const file = req.file;
-    if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
 
-    const result = await cloudinary.uploader.upload(file.path, {
-      resource_type: 'auto',        // ✅ Corrigido: agora aceita qualquer tipo
-      folder: 'louvor-app',
+    if (!file) {
+      return res.status(400).json({ error: "Nenhum arquivo enviado." });
+    }
+
+    const result = await cloudinary.uploadFile(file);
+
+    // ✅ Remove o arquivo local após upload
+    fs.unlink(file.path, (err) => {
+      if (err) console.error("Erro ao excluir arquivo temporário:", err);
     });
 
     return res.status(200).json({
-      name: file.originalname,
+      message: "Upload realizado com sucesso!",
       url: result.secure_url,
       public_id: result.public_id,
+      resource_type: result.resource_type,
     });
   } catch (error) {
-    console.error('❌ Erro no upload:', error);
-    return res.status(500).json({ error: error.message });
+    console.error("Erro no upload:", error);
+    return res.status(500).json({
+      error: "Erro ao fazer upload do arquivo.",
+      detalhes: error.message,
+    });
   }
 };
 
-// ✅ Delete de arquivos (imagem, PDF, etc) no Cloudinary
-exports.deleteImage = async (req, res) => {
+// ✅ Exclusão de arquivo
+exports.delete = async (req, res) => {
   try {
-    const { publicId } = req.body;
-    if (!publicId) return res.status(400).json({ error: 'publicId obrigatório' });
+    const { public_id } = req.body;
 
-    const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'auto'         // ✅ Garante remoção de qualquer tipo
+    if (!public_id) {
+      return res.status(400).json({ error: "public_id não fornecido." });
+    }
+
+    const result = await cloudinary.deleteFile(public_id);
+    return res.status(200).json({
+      message: "Arquivo excluído com sucesso!",
+      result,
     });
-
-    return res.status(200).json({ result });
   } catch (error) {
-    console.error('❌ Erro ao deletar imagem:', error);
-    return res.status(500).json({ error: error.message });
+    console.error("Erro na exclusão:", error);
+    return res.status(500).json({
+      error: "Erro ao excluir o arquivo.",
+      detalhes: error.message,
+    });
   }
 };
