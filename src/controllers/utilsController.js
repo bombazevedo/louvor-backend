@@ -1,57 +1,36 @@
-const fs = require("fs");
-const path = require("path");
-const cloudinary = require("../config/cloudinary");
+const { uploadFile, deleteFile } = require('../utils/cloudinary'); // ✅ Caminho correto
 
-// ✅ Upload de arquivo
-exports.upload = async (req, res) => {
+// ✅ Upload universal de arquivos (PDF, imagem, vídeo, áudio, DOC, etc.)
+exports.uploadFile = async (req, res) => {
   try {
     const file = req.file;
+    if (!file) return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
 
-    if (!file) {
-      return res.status(400).json({ error: "Nenhum arquivo enviado." });
-    }
-
-    const result = await cloudinary.uploadFile(file);
-
-    // ✅ Remove o arquivo local após upload
-    fs.unlink(file.path, (err) => {
-      if (err) console.error("Erro ao excluir arquivo temporário:", err);
-    });
+    const result = await uploadFile(file);
 
     return res.status(200).json({
-      message: "Upload realizado com sucesso!",
+      name: file.originalname,
       url: result.secure_url,
       public_id: result.public_id,
-      resource_type: result.resource_type,
+      mimetype: file.mimetype,
     });
   } catch (error) {
-    console.error("Erro no upload:", error);
-    return res.status(500).json({
-      error: "Erro ao fazer upload do arquivo.",
-      detalhes: error.message,
-    });
+    console.error('❌ Erro no upload:', error);
+    return res.status(500).json({ error: error.message });
   }
 };
 
-// ✅ Exclusão de arquivo
-exports.delete = async (req, res) => {
+// ✅ Exclusão de arquivo Cloudinary pelo publicId
+exports.deleteImage = async (req, res) => {
   try {
-    const { public_id } = req.body;
+    const { publicId } = req.body;
+    if (!publicId) return res.status(400).json({ error: 'publicId obrigatório' });
 
-    if (!public_id) {
-      return res.status(400).json({ error: "public_id não fornecido." });
-    }
+    const result = await deleteFile(publicId);
 
-    const result = await cloudinary.deleteFile(public_id);
-    return res.status(200).json({
-      message: "Arquivo excluído com sucesso!",
-      result,
-    });
+    return res.status(200).json({ result });
   } catch (error) {
-    console.error("Erro na exclusão:", error);
-    return res.status(500).json({
-      error: "Erro ao excluir o arquivo.",
-      detalhes: error.message,
-    });
+    console.error('❌ Erro ao deletar imagem:', error);
+    return res.status(500).json({ error: error.message });
   }
 };
