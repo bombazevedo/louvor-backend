@@ -55,9 +55,20 @@ exports.uploadFile = async (file) => {
   });
 };
 
-// ✅ Função de exclusão
+// ✅ Função de exclusão blindada
 exports.deleteFile = async (publicId) => {
-  return await cloudinary.uploader.destroy(publicId, {
-    resource_type: "auto",
-  });
+  try {
+    // Primeiro tenta deletar como imagem
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
+    return { message: "Deletado como image" };
+  } catch (imageErr) {
+    try {
+      // Se falhar, tenta como raw (documentos e áudios)
+      await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
+      return { message: "Deletado como raw" };
+    } catch (rawErr) {
+      console.error("❌ Erro ao deletar arquivo Cloudinary:", rawErr.message);
+      throw new Error(`Falha ao deletar arquivo. Tente novamente.`);
+    }
+  }
 };
