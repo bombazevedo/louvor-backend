@@ -10,7 +10,7 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // ✅ Necessário para req.body em DELETE
 app.use(express.urlencoded({ extended: true }));
 
 // Rotas

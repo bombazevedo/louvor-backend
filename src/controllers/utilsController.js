@@ -26,7 +26,7 @@ exports.deleteImage = async (req, res) => {
     const { publicId } = req.body;
     if (!publicId) return res.status(400).json({ error: 'publicId obrigatório' });
 
-    const result = await deleteFile(publicId);
+    const result = await deleteFile(publicId); // a função interna já resolve o tipo
 
     return res.status(200).json({ result });
   } catch (error) {
