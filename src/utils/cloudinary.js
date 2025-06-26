@@ -11,15 +11,12 @@ const allowedMimeTypes = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/msword",
-  "application/octet-stream", // binários genéricos
+  "application/octet-stream",
   "application/zip",
-  "audio/mpeg",
-  "image/jpeg",
-  "image/png",
-  "video/mp4",
+  "audio/mpeg"
 ];
 
-// ✅ Função para detectar o tipo de recurso com base no mimetype
+// ✅ Detecta tipo de recurso para o Cloudinary
 function resolveResourceType(mimeType) {
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
@@ -30,13 +27,12 @@ function resolveResourceType(mimeType) {
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     mimeType === "application/octet-stream" ||
     mimeType === "application/zip"
-  )
-    return "raw";
+  ) return "raw";
 
-  return "auto"; // fallback seguro
+  return "auto";
 }
 
-// ✅ Função principal de upload
+// ✅ Upload universal
 exports.uploadFile = async (file) => {
   if (!allowedMimeTypes.includes(file.mimetype)) {
     console.warn("📛 MIME TYPE REJEITADO:", file.mimetype);
@@ -49,26 +45,26 @@ exports.uploadFile = async (file) => {
   return await cloudinary.uploader.upload(file.path, {
     overwrite: true,
     resource_type: resourceType,
-    folder: "louvor-app", // ✅ Organização
+    folder: "louvor-app",
     use_filename: true,
     unique_filename: false,
   });
 };
 
-// ✅ Função de exclusão blindada
+// ✅ Exclusão com retorno de sucesso e tipo
 exports.deleteFile = async (publicId) => {
-  try {
-    // Primeiro tenta deletar como imagem
-    await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
-    return { message: "Deletado como image" };
-  } catch (imageErr) {
+  const typesToTry = ["image", "raw", "video"];
+
+  for (const type of typesToTry) {
     try {
-      // Se falhar, tenta como raw (documentos e áudios)
-      await cloudinary.uploader.destroy(publicId, { resource_type: "raw" });
-      return { message: "Deletado como raw" };
-    } catch (rawErr) {
-      console.error("❌ Erro ao deletar arquivo Cloudinary:", rawErr.message);
-      throw new Error(`Falha ao deletar arquivo. Tente novamente.`);
+      const res = await cloudinary.uploader.destroy(publicId, { resource_type: type });
+      if (res.result === "ok" || res.result === "not_found") {
+        return { success: res.result === "ok", type };
+      }
+    } catch (err) {
+      console.error(`Erro ao tentar deletar como ${type}:`, err.message);
     }
   }
+
+  throw new Error("Falha ao deletar arquivo. Tente novamente.");
 };
