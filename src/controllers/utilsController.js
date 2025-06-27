@@ -10,7 +10,7 @@ exports.uploadFile = async (req, res) => {
 
     const result = await uploadFile(file);
 
-    // 🔍 Log para auditoria do retorno do Cloudinary
+    // 🔍 Log do retorno Cloudinary
     console.log('📦 Resultado Cloudinary:', result);
 
     // 🔍 Log do objeto que será enviado ao frontend
