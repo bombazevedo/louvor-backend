@@ -1,4 +1,6 @@
-const { uploadFile, deleteFile } = require('../utils/cloudinary');
+// utilsController.js
+
+const { uploadFile, deleteFile } = require('../utils/cloudinary'); // ✅ Caminho correto
 
 // ✅ Upload universal de arquivos
 exports.uploadFile = async (req, res) => {
@@ -8,9 +10,20 @@ exports.uploadFile = async (req, res) => {
 
     const result = await uploadFile(file);
 
+    // 🔍 Log para auditoria do retorno do Cloudinary
+    console.log('📦 Resultado Cloudinary:', result);
+
+    // 🔍 Log do objeto que será enviado ao frontend
+    console.log('📦 Response Final:', {
+      name: file.originalname,
+      url: result?.secure_url || result?.url || null,
+      public_id: result.public_id,
+      mimetype: file.mimetype,
+    });
+
     return res.status(200).json({
       name: file.originalname,
-      url: result.secure_url,
+      url: result?.secure_url || result?.url || null,
       public_id: result.public_id,
       mimetype: file.mimetype,
     });
