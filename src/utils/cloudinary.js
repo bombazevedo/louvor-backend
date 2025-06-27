@@ -1,4 +1,5 @@
 const { v2: cloudinary } = require("cloudinary");
+const fs = require('fs');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -6,7 +7,6 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ✅ Tipos de arquivos permitidos
 const allowedMimeTypes = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -19,11 +19,10 @@ const allowedMimeTypes = [
   "image/webp",
 ];
 
-// ✅ Detecta tipo de recurso para o Cloudinary
 function resolveResourceType(mimeType) {
   if (mimeType.startsWith("image/")) return "image";
   if (mimeType.startsWith("video/")) return "video";
-  if (mimeType.startsWith("audio/")) return "video"; // Cloudinary trata áudio como vídeo
+  if (mimeType.startsWith("audio/")) return "video";
   if (
     mimeType === "application/pdf" ||
     mimeType === "application/msword" ||
@@ -31,25 +30,31 @@ function resolveResourceType(mimeType) {
     mimeType === "application/octet-stream" ||
     mimeType === "application/zip"
   ) return "raw";
-
   return "auto";
 }
 
-// ✅ Upload universal com retorno completo e válido
+// ✅ Upload universal (compatível com URI ou path)
 exports.uploadFile = async (file) => {
-  if (!allowedMimeTypes.includes(file.mimetype)) {
-    console.warn("📛 MIME TYPE REJEITADO:", file.mimetype);
+  const filePath = file.path || file.uri;
+  const mimeType = file.mimetype || file.mimeType || 'application/octet-stream';
+
+  if (!filePath) {
+    throw new Error("Arquivo inválido: ausência de path ou uri.");
+  }
+
+  if (!allowedMimeTypes.includes(mimeType)) {
+    console.warn("📛 MIME TYPE REJEITADO:", mimeType);
     throw new Error("Tipo de arquivo não permitido.");
   }
 
-  const resourceType = resolveResourceType(file.mimetype);
-  console.log(`📦 Upload → Mimetype: ${file.mimetype} | Resource Type: ${resourceType}`);
+  const resourceType = resolveResourceType(mimeType);
 
-  const result = await cloudinary.uploader.upload(file.path, {
+  const result = await cloudinary.uploader.upload(filePath, {
     overwrite: true,
     resource_type: resourceType,
     folder: "louvor-app",
-    use_filename: true,
+    public_id: file.publicId || undefined,
+    use_filename: !file.publicId,
     unique_filename: false,
   });
 
@@ -63,7 +68,7 @@ exports.uploadFile = async (file) => {
   };
 };
 
-// ✅ Exclusão com retorno de sucesso e tipo
+// ✅ Exclusão de arquivo Cloudinary com fallback de tipo
 exports.deleteFile = async (publicId) => {
   const typesToTry = ["image", "raw", "video"];
 
