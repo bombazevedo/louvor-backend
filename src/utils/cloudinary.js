@@ -13,7 +13,10 @@ const allowedMimeTypes = [
   "application/msword",
   "application/octet-stream",
   "application/zip",
-  "audio/mpeg"
+  "audio/mpeg",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
 ];
 
 // ✅ Detecta tipo de recurso para o Cloudinary
@@ -32,7 +35,7 @@ function resolveResourceType(mimeType) {
   return "auto";
 }
 
-// ✅ Upload universal
+// ✅ Upload universal com retorno completo e válido
 exports.uploadFile = async (file) => {
   if (!allowedMimeTypes.includes(file.mimetype)) {
     console.warn("📛 MIME TYPE REJEITADO:", file.mimetype);
@@ -42,13 +45,22 @@ exports.uploadFile = async (file) => {
   const resourceType = resolveResourceType(file.mimetype);
   console.log(`📦 Upload → Mimetype: ${file.mimetype} | Resource Type: ${resourceType}`);
 
-  return await cloudinary.uploader.upload(file.path, {
+  const result = await cloudinary.uploader.upload(file.path, {
     overwrite: true,
     resource_type: resourceType,
     folder: "louvor-app",
     use_filename: true,
     unique_filename: false,
   });
+
+  return {
+    url: result.secure_url,
+    public_id: result.public_id,
+    format: result.format,
+    resource_type: result.resource_type,
+    bytes: result.bytes,
+    original_filename: result.original_filename,
+  };
 };
 
 // ✅ Exclusão com retorno de sucesso e tipo
