@@ -3,15 +3,24 @@ const router = express.Router();
 const { authenticate, isCoordinator } = require('../middleware/auth');
 const { getEventsWithScales, getEventById, updateEvent } = require('../controllers/eventController');
 const Event = require('../models/Event');
+const Scale = require('../models/Scale'); // ✅ Importa o model Scale
 
 // 🔍 Buscar todos os eventos com escalas
 router.get('/', authenticate, getEventsWithScales);
 
-// ➕ Criar novo evento (apenas coordenador)
+// ➕ Criar novo evento e escala vazia (apenas coordenador)
 router.post('/', authenticate, isCoordinator, async (req, res) => {
   try {
     const event = new Event(req.body);
     await event.save();
+
+    // ✅ Criar a escala associada, mesmo sem membros
+    const scale = new Scale({
+      eventId: event._id,
+      members: []
+    });
+    await scale.save();
+
     res.status(201).json(event);
   } catch (error) {
     console.error('❌ Erro ao criar evento:', error);
