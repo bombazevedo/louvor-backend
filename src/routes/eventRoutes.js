@@ -20,8 +20,11 @@ router.post('/', authenticate, isCoordinator, async (req, res) => {
     });
     await scale.save();
 
-    // ✅ Correção cirúrgica: garantir _id serializado
-    res.status(201).json(event.toJSON());
+    // ✅ Correção cirúrgica: garantir _id presente
+    res.status(201).json({
+      _id: event._id,
+      ...event.toJSON()
+    });
   } catch (error) {
     console.error('❌ Erro ao criar evento:', error);
     res.status(500).json({ error: 'Erro ao criar evento' });
