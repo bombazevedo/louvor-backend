@@ -5,7 +5,8 @@ const {
   getUserById,
   updateUserRole,
   updateMe,
-  deleteCloudinaryImage
+  deleteCloudinaryImage,
+  getBirthdays
 } = require("../controllers/authController"); // 🔥 Mantido como está, seguindo sua organização atual
 const User = require("../models/User");
 
@@ -23,6 +24,9 @@ router.get("/me", authenticate, async (req, res) => {
 
 // ✅ Atualizar perfil próprio
 router.patch("/me", authenticate, updateMe);
+
+// ✅ Listar aniversariantes do mês
+router.get("/birthdays", authenticate, getBirthdays);
 
 // ✅ Listar todos os usuários
 router.get("/", authenticate, async (req, res) => {

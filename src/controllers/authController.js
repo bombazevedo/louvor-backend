@@ -23,7 +23,7 @@ exports.loginUser = async (req, res) => {
     const token = jwt.sign(
       {
         id: user._id,
-        role: user.role.toLowerCase() // ✅ lowercase garantido
+        role: user.role.toLowerCase()
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -56,7 +56,7 @@ exports.registerUser = async (req, res) => {
       name,
       email,
       password: hashed,
-      role: (role || 'usuario').toLowerCase() // ✅ normalize role
+      role: (role || 'usuario').toLowerCase()
     });
 
     await user.save();
@@ -90,7 +90,7 @@ exports.updateUserRole = async (req, res) => {
     const { role } = req.body;
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      { role: role.toLowerCase() }, // ✅ garante lowercase ao atualizar
+      { role: role.toLowerCase() },
       { new: true }
     ).select('-password');
 
@@ -155,5 +155,26 @@ exports.deleteCloudinaryImage = async (req, res) => {
   } catch (err) {
     console.error('[deleteCloudinaryImage] Erro:', err.message);
     res.status(500).json({ message: 'Erro ao deletar imagem' });
+  }
+};
+
+// 🎂 Listar aniversariantes do mês atual
+exports.getBirthdays = async (req, res) => {
+  try {
+    const month = new Date().getMonth();
+    const users = await User.find(
+      { birthDate: { $exists: true } },
+      { name: 1, birthDate: 1, photoUrl: 1 }
+    );
+
+    const birthdays = users.filter(u => {
+      const d = new Date(u.birthDate);
+      return d.getMonth() === month;
+    });
+
+    res.status(200).json(birthdays);
+  } catch (err) {
+    console.error('[getBirthdays] Erro ao buscar aniversariantes:', err.message);
+    res.status(500).json({ message: 'Erro ao buscar aniversariantes' });
   }
 };
