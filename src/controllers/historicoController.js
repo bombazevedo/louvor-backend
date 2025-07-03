@@ -1,13 +1,12 @@
 const Event = require('../models/Event');
-const MusicHistory = require('../models/MusicHistory');
 
 function normalizarTexto(texto) {
   return texto
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/\(ao vivo.*?\)|\(live.*?\)|feat\..*|\[.*?\]/gi, '')
-    .replace(/[^a-z0-9 ]/gi, '')
-    .replace(/\s+/g, ' ')
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
+    .replace(/(\(ao vivo.*?\)|- ao vivo|ao vivo|feat\..*|clipe oficial|video oficial|\|.*|\[.*?\])/gi, '') // remove sufixos
+    .replace(/[^a-z0-9 ]/gi, '') // remove símbolos
+    .replace(/\s+/g, ' ') // normaliza espaços
     .trim();
 }
 
@@ -23,17 +22,18 @@ exports.listarHistorico = async (req, res) => {
     const hoje = new Date();
     const { start, end } = req.query;
 
-    const filtroData = { date: { $lt: hoje } };
+    const filtro = {
+      date: { $lt: hoje },
+      musicLinks: { $exists: true, $ne: [] }
+    };
+
     if (start || end) {
-      filtroData.date = {};
-      if (start) filtroData.date.$gte = new Date(start);
-      if (end) filtroData.date.$lte = new Date(end);
+      filtro.date = {};
+      if (start) filtro.date.$gte = new Date(start);
+      if (end) filtro.date.$lte = new Date(end);
     }
 
-    const eventos = await Event.find({
-      ...filtroData,
-      musicLinks: { $exists: true, $ne: [] }
-    }).select('musicLinks date');
+    const eventos = await Event.find(filtro).select('musicLinks');
 
     const mapa = new Map();
 
@@ -43,6 +43,8 @@ exports.listarHistorico = async (req, res) => {
 
         const nomeNormalizado = normalizarTexto(musica.name);
         const artistaNormalizado = normalizarTexto(musica.artist);
+
+        // Remove artista do nome se estiver duplicado
         const nomeSemArtista = nomeNormalizado.replace(artistaNormalizado, '').trim();
         const chave = `${nomeSemArtista} ${artistaNormalizado}`.trim();
 
@@ -58,16 +60,6 @@ exports.listarHistorico = async (req, res) => {
           item.qtdTocada += 1;
           item.links.push(musica);
         }
-
-        // 🟢 NOVO: Registrar cada execução individualmente no MusicHistory
-        await MusicHistory.create({
-          nome: musica.name,
-          artista: musica.artist,
-          plataforma: musica.platform,
-          url: musica.url,
-          eventoId: evento._id,
-          dataExecucao: evento.date
-        });
       }
     }
 
@@ -94,19 +86,42 @@ exports.listarHistorico = async (req, res) => {
 
 exports.listarExecucoesIndividuais = async (req, res) => {
   try {
+    const hoje = new Date();
     const { start, end } = req.query;
-    const filtro = {};
+
+    const filtro = {
+      date: { $lt: hoje },
+      musicLinks: { $exists: true, $ne: [] }
+    };
 
     if (start || end) {
-      filtro.dataExecucao = {};
-      if (start) filtro.dataExecucao.$gte = new Date(start);
-      if (end) filtro.dataExecucao.$lte = new Date(end);
+      filtro.date = {};
+      if (start) filtro.date.$gte = new Date(start);
+      if (end) filtro.date.$lte = new Date(end);
     }
 
-    const execucoes = await MusicHistory.find(filtro).sort({ dataExecucao: -1 });
+    const eventos = await Event.find(filtro).select('musicLinks date');
+
+    const execucoes = [];
+
+    for (const evento of eventos) {
+      for (const musica of evento.musicLinks || []) {
+        if (!musica.name || !musica.artist) continue;
+
+        execucoes.push({
+          nome: musica.name,
+          artista: musica.artist,
+          plataforma: musica.platform,
+          url: musica.url,
+          eventoId: evento._id,
+          dataExecucao: evento.date
+        });
+      }
+    }
+
     res.status(200).json(execucoes);
   } catch (err) {
-    console.error('Erro ao buscar execuções:', err);
-    res.status(500).json({ error: 'Erro ao buscar execuções' });
+    console.error('Erro ao listar execuções:', err);
+    res.status(500).json({ error: 'Erro ao listar execuções' });
   }
 };
