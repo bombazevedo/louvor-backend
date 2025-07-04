@@ -86,9 +86,24 @@ const getUnavailabilityByDate = async (req, res) => {
   }
 };
 
+// ✔️ Listar indisponibilidades de um usuário específico
+const getUnavailabilityByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const data = await Unavailability.find({ userId }).sort({ startDate: 1 });
+
+    res.status(200).json(data);
+  } catch (error) {
+    console.error('Erro ao listar indisponibilidades por usuário:', error);
+    res.status(500).json({ message: 'Erro ao listar indisponibilidades.' });
+  }
+};
+
 module.exports = {
   createUnavailability,
   getMyUnavailability,
   deleteUnavailability,
   getUnavailabilityByDate,
+  getUnavailabilityByUser // 🔹 Nova exportação
 };

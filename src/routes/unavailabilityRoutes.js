@@ -4,16 +4,18 @@ const {
   deleteUnavailability,
   getMyUnavailability,
   getUnavailabilityByDate,
+  getUnavailabilityByUser // ✅ Nova função importada
 } = require('../controllers/unavailabilityController');
-const { authenticate } = require('../middleware/auth'); // ✔️ Correção aqui
+const { authenticate } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.use(authenticate); // ✔️ Middleware correto
+router.use(authenticate);
 
 router.post('/', createUnavailability);
 router.get('/mine', getMyUnavailability);
-router.delete('/:id', deleteUnavailability);
 router.get('/by-date/:date', getUnavailabilityByDate);
+router.get('/user/:userId', getUnavailabilityByUser); // ✅ Nova rota
+router.delete('/:id', deleteUnavailability);
 
 module.exports = router;
