@@ -16,12 +16,24 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        // Buscar músicas relacionadas
+        // Buscar músicas relacionadas (pelo URL ou pelo ID)
         const urls = (event.musicLinks || []).map(m => m.url);
-        const songs = await Song.find({ youtubeUrl: { $in: urls } });
+        const songIds = (event.musicLinks || [])
+          .filter(m => m.song) // se tiver songId futuro
+          .map(m => m.song);
+        
+        const songs = await Song.find({
+          $or: [
+            { youtubeUrl: { $in: urls } },
+            { _id: { $in: songIds } }
+          ]
+        });
 
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          const song = songs.find(s => s.youtubeUrl === m.url);
+          const song = songs.find(s =>
+            (s.youtubeUrl && s.youtubeUrl === m.url) ||
+            (s._id && m.song && s._id.toString() === m.song.toString())
+          );
           if (song) {
             return {
               ...m,
@@ -63,10 +75,22 @@ const getEventById = async (req, res) => {
       .populate('members.function');
 
     const urls = (event.musicLinks || []).map(m => m.url);
-    const songs = await Song.find({ youtubeUrl: { $in: urls } });
+    const songIds = (event.musicLinks || [])
+      .filter(m => m.song)
+      .map(m => m.song);
+
+    const songs = await Song.find({
+      $or: [
+        { youtubeUrl: { $in: urls } },
+        { _id: { $in: songIds } }
+      ]
+    });
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      const song = songs.find(s => s.youtubeUrl === m.url);
+      const song = songs.find(s =>
+        (s.youtubeUrl && s.youtubeUrl === m.url) ||
+        (s._id && m.song && s._id.toString() === m.song.toString())
+      );
       if (song) {
         return {
           ...m,

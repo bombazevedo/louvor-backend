@@ -1,3 +1,4 @@
+// src/models/Event.js
 const mongoose = require('mongoose');
 
 const eventSchema = new mongoose.Schema({
@@ -25,14 +26,13 @@ const eventSchema = new mongoose.Schema({
     ref: 'Scale'
   },
   musicLinks: [{
-    name: String,
-    artist: String,
+    song: { type: mongoose.Schema.Types.ObjectId, ref: 'Song' }, // 🔹 Referência ao Song
     platform: String,
     url: String
   }],
   attachments: [{
     name: String,
-    url: String // <- corrigido aqui (antes era 'uri')
+    url: String
   }]
 }, {
   timestamps: true,
