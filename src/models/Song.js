@@ -8,7 +8,8 @@ const SongSchema = new mongoose.Schema({
   spotifyUrl: { type: String },
   deezerUrl: { type: String },
   key: { type: String },
-  lyrics: { type: String }
+  lyrics: { type: String },
+  coverUrl: { type: String } // <-- Adicione isto
 });
 
 module.exports = mongoose.model('Song', SongSchema);
