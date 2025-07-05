@@ -6,6 +6,7 @@ const axios = require('axios');
 exports.createSong = async (req, res) => {
   try {
     let coverUrl = null;
+    let extraData = {};
 
     // YouTube
     if (req.body.youtubeUrl) {
@@ -22,24 +23,51 @@ exports.createSong = async (req, res) => {
         const trackId = deezerMatch[1];
         try {
           const deezerRes = await axios.get(`https://api.deezer.com/track/${trackId}`);
-          if (deezerRes.data && deezerRes.data.album && deezerRes.data.album.cover_medium) {
-            coverUrl = deezerRes.data.album.cover_medium;
+          if (deezerRes.data) {
+            if (deezerRes.data.album && deezerRes.data.album.cover_medium) {
+              coverUrl = deezerRes.data.album.cover_medium;
+            }
+            // Extras Deezer
+            extraData = {
+              bpm: deezerRes.data.bpm,
+              duration: deezerRes.data.duration,
+              title: deezerRes.data.title,
+              artist: deezerRes.data.artist?.name,
+            };
           }
         } catch (err) {
-          console.error('Erro ao buscar capa no Deezer:', err.response?.data || err.message);
+          console.error('Erro ao buscar dados no Deezer:', err.response?.data || err.message);
         }
       }
     }
 
     // Spotify
+    else if (req.body.spotifyUrl) {
+      // Usa o oEmbed do Spotify
+      try {
+        const spotifyRes = await axios.get(`https://open.spotify.com/oembed?url=${req.body.spotifyUrl}`);
+        if (spotifyRes.data && spotifyRes.data.thumbnail_url) {
+          coverUrl = spotifyRes.data.thumbnail_url;
+          // Spotify oEmbed não retorna BPM ou duração, esses podem ficar null
+          extraData = {
+            title: spotifyRes.data.title,
+            artist: spotifyRes.data.author_name,
+          };
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados no Spotify:', err.response?.data || err.message);
+      }
+    }
+
+    // Caso já venha pronto (ex: Spotify já salvo)
     else if (req.body.coverUrl) {
-      // Se já vem pronto, usa
       coverUrl = req.body.coverUrl;
     }
 
     const newSong = new Song({
       ...req.body,
-      coverUrl
+      coverUrl,
+      ...extraData
     });
 
     const savedSong = await newSong.save();
