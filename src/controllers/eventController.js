@@ -1,17 +1,43 @@
+// src/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const Function = require('../models/BandRole');
+const Song = require('../models/Song'); // 🔹 Importante: incluir Song
 
+// Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
   try {
     const events = await Event.find().sort({ date: 1 });
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
-        const scale = await Scale.findOne({ eventId: event._id }).populate('members.user').populate('members.function');
+        const scale = await Scale.findOne({ eventId: event._id })
+          .populate('members.user')
+          .populate('members.function');
+
+        // Buscar músicas relacionadas
+        const urls = (event.musicLinks || []).map(m => m.url);
+        const songs = await Song.find({ youtubeUrl: { $in: urls } });
+
+        const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+          const song = songs.find(s => s.youtubeUrl === m.url);
+          if (song) {
+            return {
+              ...m,
+              bpm: song.bpm,
+              duration: song.duration,
+              key: song.key,
+              coverUrl: song.coverUrl
+            };
+          }
+          return m;
+        });
+
         const eventObj = event.toObject();
         eventObj.scale = scale;
+        eventObj.musicLinks = enrichedMusicLinks;
+
         return eventObj;
       })
     );
@@ -23,6 +49,7 @@ const getEventsWithScales = async (req, res) => {
   }
 };
 
+// Buscar evento por ID com escala e detalhes das músicas
 const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -31,9 +58,30 @@ const getEventById = async (req, res) => {
       return res.status(404).json({ message: 'Evento não encontrado' });
     }
 
-    const scale = await Scale.findOne({ eventId: event._id }).populate('members.user').populate('members.function');
+    const scale = await Scale.findOne({ eventId: event._id })
+      .populate('members.user')
+      .populate('members.function');
+
+    const urls = (event.musicLinks || []).map(m => m.url);
+    const songs = await Song.find({ youtubeUrl: { $in: urls } });
+
+    const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+      const song = songs.find(s => s.youtubeUrl === m.url);
+      if (song) {
+        return {
+          ...m,
+          bpm: song.bpm,
+          duration: song.duration,
+          key: song.key,
+          coverUrl: song.coverUrl
+        };
+      }
+      return m;
+    });
+
     const eventObj = event.toObject();
     eventObj.scale = scale;
+    eventObj.musicLinks = enrichedMusicLinks;
 
     res.json(eventObj);
   } catch (error) {
