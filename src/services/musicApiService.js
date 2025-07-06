@@ -62,6 +62,7 @@ const searchYouTube = async (query) => {
           artist: item.snippet.channelTitle,
           url: `https://www.youtube.com/watch?v=${item.id.videoId}`,
           platform: 'YouTube',
+          thumbnail: item.snippet.thumbnails?.medium?.url || ''
         }));
 
     } catch (err) {
@@ -88,6 +89,7 @@ const searchDeezer = async (query) => {
       artist: track.artist.name,
       url: track.link,
       platform: 'Deezer',
+      thumbnail: track.album?.cover_medium || ''
     }));
   } catch (err) {
     console.error('❌ Erro ao buscar no Deezer:', err.message);
@@ -112,6 +114,7 @@ const searchSpotify = async (query) => {
       artist: track.artists.map(a => a.name).join(', '),
       url: track.external_urls.spotify,
       platform: 'Spotify',
+      thumbnail: track.album?.images?.[0]?.url || ''
     }));
   } catch (err) {
     console.error('❌ Erro ao buscar no Spotify:', err.message);

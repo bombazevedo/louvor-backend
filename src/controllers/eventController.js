@@ -4,6 +4,7 @@ const Scale = require('../models/Scale');
 const User = require('../models/User');
 const Function = require('../models/BandRole');
 const Song = require('../models/Song'); // 🔹 Importante: incluir Song
+const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl'); // 🔹 Função de normalização
 
 // Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
@@ -16,12 +17,11 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        // Buscar músicas relacionadas (pelo URL ou pelo ID)
-        const urls = (event.musicLinks || []).map(m => m.url);
+        const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform)); // 🔹 Normalização
         const songIds = (event.musicLinks || [])
-          .filter(m => m.song) // se tiver songId futuro
+          .filter(m => m.song)
           .map(m => m.song);
-        
+
         const songs = await Song.find({
           $or: [
             { youtubeUrl: { $in: urls } },
@@ -30,8 +30,9 @@ const getEventsWithScales = async (req, res) => {
         });
 
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+          const normalizedUrl = normalizeMusicUrl(m.url, m.platform); // 🔹 Normalização
           const song = songs.find(s =>
-            (s.youtubeUrl && s.youtubeUrl === m.url) ||
+            (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
             (s._id && m.song && s._id.toString() === m.song.toString())
           );
           if (song) {
@@ -74,7 +75,7 @@ const getEventById = async (req, res) => {
       .populate('members.user')
       .populate('members.function');
 
-    const urls = (event.musicLinks || []).map(m => m.url);
+    const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform)); // 🔹 Normalização
     const songIds = (event.musicLinks || [])
       .filter(m => m.song)
       .map(m => m.song);
@@ -87,8 +88,9 @@ const getEventById = async (req, res) => {
     });
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+      const normalizedUrl = normalizeMusicUrl(m.url, m.platform); // 🔹 Normalização
       const song = songs.find(s =>
-        (s.youtubeUrl && s.youtubeUrl === m.url) ||
+        (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
         (s._id && m.song && s._id.toString() === m.song.toString())
       );
       if (song) {
@@ -114,7 +116,77 @@ const getEventById = async (req, res) => {
   }
 };
 
+// Criar evento com salvamento automático do Song, normalização de URL e associação do _id
+const createEvent = async (req, res) => {
+  try {
+    const { title, description, date, location, type, musicLinks } = req.body;
+
+    const normalizedMusicLinks = [];
+
+    if (musicLinks && Array.isArray(musicLinks)) {
+      for (const link of musicLinks) {
+        // Normaliza URL
+        const normalizedUrl = normalizeMusicUrl(link.url, link.platform);
+
+        // Procura Song existente
+        const existing = await Song.findOne({
+          $or: [
+            { youtubeUrl: normalizedUrl },
+            { spotifyUrl: normalizedUrl },
+            { deezerUrl: normalizedUrl }
+          ]
+        });
+
+        let songId = null;
+
+        if (existing) {
+          songId = existing._id;
+        } else {
+          const songData = {
+            title: link.name || 'Sem título',
+            artist: link.artist || 'Desconhecido',
+            coverUrl: link.thumbnail || '',
+          };
+          if (link.platform === 'YouTube') {
+            songData.youtubeUrl = normalizedUrl;
+          }
+          if (link.platform === 'Spotify') {
+            songData.spotifyUrl = normalizedUrl;
+          }
+          if (link.platform === 'Deezer') {
+            songData.deezerUrl = normalizedUrl;
+          }
+          const created = await Song.create(songData);
+          songId = created._id;
+        }
+
+        normalizedMusicLinks.push({
+          ...link,
+          url: normalizedUrl,
+          song: songId // 🔹 Adiciona o _id do Song
+        });
+      }
+    }
+
+    const newEvent = new Event({
+      title,
+      description,
+      date,
+      location,
+      type,
+      musicLinks: normalizedMusicLinks
+    });
+
+    const savedEvent = await newEvent.save();
+    res.status(201).json(savedEvent);
+  } catch (error) {
+    console.error('Erro ao criar evento:', error);
+    res.status(500).json({ message: 'Erro ao criar evento' });
+  }
+};
+
 module.exports = {
   getEventsWithScales,
   getEventById,
+  createEvent
 };
