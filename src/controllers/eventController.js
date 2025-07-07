@@ -3,13 +3,13 @@ const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const User = require('../models/User');
 const Function = require('../models/BandRole');
-const Song = require('../models/Song'); // 🔹 Importante: incluir Song
-const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl'); // 🔹 Função de normalização
+const Song = require('../models/Song');
+const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 const {
   searchYouTube,
   searchSpotify,
   searchDeezer
-} = require('../services/musicApiService'); // 🔹 Para enriquecer se necessário
+} = require('../services/musicApiService');
 
 // Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
@@ -22,7 +22,7 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        const urls = (event.musicLinks || []).map(m => m.url); // 🔹 Usa URL direto
+        const urls = (event.musicLinks || []).map(m => m.url);
         const songIds = (event.musicLinks || [])
           .filter(m => m.song)
           .map(m => m.song);
@@ -35,14 +35,14 @@ const getEventsWithScales = async (req, res) => {
         });
 
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          const url = m.url;
           const song = songs.find(s =>
-            (s.youtubeUrl && s.youtubeUrl === url) ||
+            (s.youtubeUrl && s.youtubeUrl === m.url) ||
             (s._id && m.song && s._id.toString() === m.song.toString())
           );
           if (song) {
             return {
-              ...m,
+              url: m.url,
+              platform: m.platform,
               name: m.name || song.title || 'Sem título',
               artist: m.artist || song.artist || 'Desconhecido',
               bpm: song.bpm,
@@ -53,7 +53,8 @@ const getEventsWithScales = async (req, res) => {
             };
           }
           return {
-            ...m,
+            url: m.url,
+            platform: m.platform,
             name: m.name || 'Sem título',
             artist: m.artist || 'Desconhecido',
             coverUrl: m.thumbnail || '',
@@ -89,7 +90,7 @@ const getEventById = async (req, res) => {
       .populate('members.user')
       .populate('members.function');
 
-    const urls = (event.musicLinks || []).map(m => m.url); // 🔹 Usa URL direto
+    const urls = (event.musicLinks || []).map(m => m.url);
     const songIds = (event.musicLinks || [])
       .filter(m => m.song)
       .map(m => m.song);
@@ -102,14 +103,14 @@ const getEventById = async (req, res) => {
     });
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      const url = m.url;
       const song = songs.find(s =>
-        (s.youtubeUrl && s.youtubeUrl === url) ||
+        (s.youtubeUrl && s.youtubeUrl === m.url) ||
         (s._id && m.song && s._id.toString() === m.song.toString())
       );
       if (song) {
         return {
-          ...m,
+          url: m.url,
+          platform: m.platform,
           name: m.name || song.title || 'Sem título',
           artist: m.artist || song.artist || 'Desconhecido',
           bpm: song.bpm,
@@ -120,7 +121,8 @@ const getEventById = async (req, res) => {
         };
       }
       return {
-        ...m,
+        url: m.url,
+        platform: m.platform,
         name: m.name || 'Sem título',
         artist: m.artist || 'Desconhecido',
         coverUrl: m.thumbnail || '',
@@ -148,10 +150,8 @@ const createEvent = async (req, res) => {
 
     if (musicLinks && Array.isArray(musicLinks)) {
       for (const link of musicLinks) {
-        // Normaliza URL
         const normalizedUrl = normalizeMusicUrl(link.url, link.platform);
 
-        // Procura Song existente
         let existing = await Song.findOne({
           $or: [
             { youtubeUrl: normalizedUrl },
@@ -166,7 +166,6 @@ const createEvent = async (req, res) => {
         if (existing) {
           songId = existing._id;
         } else {
-          // 🔹 Faz 1 busca na API para enriquecer dados
           let enriched = [];
           if (link.platform === 'YouTube') {
             enriched = await searchYouTube(link.name || '');
