@@ -17,7 +17,7 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform)); // 🔹 Normalização
+        const urls = (event.musicLinks || []).map(m => m.url); // 🔹 Não normalizar de novo
         const songIds = (event.musicLinks || [])
           .filter(m => m.song)
           .map(m => m.song);
@@ -30,16 +30,16 @@ const getEventsWithScales = async (req, res) => {
         });
 
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          const normalizedUrl = normalizeMusicUrl(m.url, m.platform); // 🔹 Normalização
+          const url = m.url; // 🔹 Usa URL direto
           const song = songs.find(s =>
-            (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
+            (s.youtubeUrl && s.youtubeUrl === url) ||
             (s._id && m.song && s._id.toString() === m.song.toString())
           );
           if (song) {
             return {
               ...m,
-              name: m.name || song.title || '',
-              artist: m.artist || song.artist || '',
+              name: m.name || song.title || 'Sem título',
+              artist: m.artist || song.artist || 'Desconhecido',
               bpm: song.bpm,
               duration: song.duration,
               key: song.key,
@@ -49,8 +49,8 @@ const getEventsWithScales = async (req, res) => {
           }
           return {
             ...m,
-            name: m.name || '',
-            artist: m.artist || '',
+            name: m.name || 'Sem título',
+            artist: m.artist || 'Desconhecido',
             coverUrl: m.thumbnail || ''
           };
         });
@@ -83,7 +83,7 @@ const getEventById = async (req, res) => {
       .populate('members.user')
       .populate('members.function');
 
-    const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform)); // 🔹 Normalização
+    const urls = (event.musicLinks || []).map(m => m.url); // 🔹 Não normalizar de novo
     const songIds = (event.musicLinks || [])
       .filter(m => m.song)
       .map(m => m.song);
@@ -96,16 +96,16 @@ const getEventById = async (req, res) => {
     });
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      const normalizedUrl = normalizeMusicUrl(m.url, m.platform); // 🔹 Normalização
+      const url = m.url; // 🔹 Usa URL direto
       const song = songs.find(s =>
-        (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
+        (s.youtubeUrl && s.youtubeUrl === url) ||
         (s._id && m.song && s._id.toString() === m.song.toString())
       );
       if (song) {
         return {
           ...m,
-          name: m.name || song.title || '',
-          artist: m.artist || song.artist || '',
+          name: m.name || song.title || 'Sem título',
+          artist: m.artist || song.artist || 'Desconhecido',
           bpm: song.bpm,
           duration: song.duration,
           key: song.key,
@@ -115,8 +115,8 @@ const getEventById = async (req, res) => {
       }
       return {
         ...m,
-        name: m.name || '',
-        artist: m.artist || '',
+        name: m.name || 'Sem título',
+        artist: m.artist || 'Desconhecido',
         coverUrl: m.thumbnail || ''
       };
     });
