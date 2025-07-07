@@ -1,3 +1,4 @@
+// src/controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
 
@@ -33,41 +34,50 @@ exports.createSong = async (req, res) => {
             extraData = {
               bpm: deezerRes.data.bpm,
               duration: deezerRes.data.duration,
-              title: deezerRes.data.title,
-              artist: deezerRes.data.artist?.name,
+              title: deezerRes.data.title || 'Sem título',
+              artist: deezerRes.data.artist?.name || 'Desconhecido',
             };
           }
         } catch (err) {
           console.error('Erro ao buscar dados no Deezer:', err.response?.data || err.message);
+          // Garantir defaults mesmo que Deezer falhe
+          extraData.title = 'Sem título';
+          extraData.artist = 'Desconhecido';
         }
       }
     }
 
     // Spotify
     else if (req.body.spotifyUrl) {
-      // Usa o oEmbed do Spotify
       try {
         const spotifyRes = await axios.get(`https://open.spotify.com/oembed?url=${req.body.spotifyUrl}`);
         if (spotifyRes.data && spotifyRes.data.thumbnail_url) {
           coverUrl = spotifyRes.data.thumbnail_url;
-          // Spotify oEmbed não retorna BPM ou duração, esses podem ficar null
           extraData = {
-            title: spotifyRes.data.title,
-            artist: spotifyRes.data.author_name,
+            title: spotifyRes.data.title || 'Sem título',
+            artist: spotifyRes.data.author_name || 'Desconhecido',
           };
+        } else {
+          extraData.title = 'Sem título';
+          extraData.artist = 'Desconhecido';
         }
       } catch (err) {
         console.error('Erro ao buscar dados no Spotify:', err.response?.data || err.message);
+        extraData.title = 'Sem título';
+        extraData.artist = 'Desconhecido';
       }
     }
 
     // Caso já venha pronto (ex: Spotify já salvo)
     else if (req.body.coverUrl) {
       coverUrl = req.body.coverUrl;
-      // Garante title e artist se não vierem
       extraData.title = req.body.title || 'Sem título';
       extraData.artist = req.body.artist || 'Desconhecido';
     }
+
+    // Segurança final para garantir sempre preenchido
+    if (!extraData.title) extraData.title = 'Sem título';
+    if (!extraData.artist) extraData.artist = 'Desconhecido';
 
     const newSong = new Song({
       ...req.body,
@@ -94,7 +104,7 @@ exports.getAllSongs = async (req, res) => {
   }
 };
 
-// ✅ Buscar música por ID (usado no GET /api/songs/:id)
+// Buscar música por ID (usado no GET /api/songs/:id)
 exports.getSongById = async (id) => {
   const song = await Song.findById(id);
   if (!song) throw new Error('Song não encontrado');
