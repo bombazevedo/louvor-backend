@@ -116,7 +116,7 @@ const getEventById = async (req, res) => {
   }
 };
 
-// Criar evento com salvamento automático do Song, normalização de URL e associação do _id
+// Criar evento com salvamento automático do Song, normalização de URL e associação do _id, nome, artista e thumbnail
 const createEvent = async (req, res) => {
   try {
     const { title, description, date, location, type, musicLinks } = req.body;
@@ -161,9 +161,12 @@ const createEvent = async (req, res) => {
         }
 
         normalizedMusicLinks.push({
-          ...link,
+          name: link.name || (existing?.title || 'Sem título'),
+          artist: link.artist || (existing?.artist || 'Desconhecido'),
+          platform: link.platform,
           url: normalizedUrl,
-          song: songId // 🔹 Adiciona o _id do Song
+          thumbnail: link.thumbnail || (existing?.coverUrl || ''),
+          song: songId
         });
       }
     }
