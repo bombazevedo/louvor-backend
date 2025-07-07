@@ -38,13 +38,21 @@ const getEventsWithScales = async (req, res) => {
           if (song) {
             return {
               ...m,
+              name: m.name || song.title || '',
+              artist: m.artist || song.artist || '',
               bpm: song.bpm,
               duration: song.duration,
               key: song.key,
-              coverUrl: song.coverUrl
+              coverUrl: song.coverUrl,
+              song: song._id
             };
           }
-          return m;
+          return {
+            ...m,
+            name: m.name || '',
+            artist: m.artist || '',
+            coverUrl: m.thumbnail || ''
+          };
         });
 
         const eventObj = event.toObject();
@@ -96,13 +104,21 @@ const getEventById = async (req, res) => {
       if (song) {
         return {
           ...m,
+          name: m.name || song.title || '',
+          artist: m.artist || song.artist || '',
           bpm: song.bpm,
           duration: song.duration,
           key: song.key,
-          coverUrl: song.coverUrl
+          coverUrl: song.coverUrl,
+          song: song._id
         };
       }
-      return m;
+      return {
+        ...m,
+        name: m.name || '',
+        artist: m.artist || '',
+        coverUrl: m.thumbnail || ''
+      };
     });
 
     const eventObj = event.toObject();
