@@ -4,6 +4,7 @@ const songController = require('../controllers/songController');
 const { unifiedSearch, matchVersionsAcrossPlatforms } = require('../services/musicApiService');
 
 router.post('/', songController.createSong);
+
 router.get('/', songController.getAllSongs);
 
 // 🔍 Rota externa de busca
@@ -36,6 +37,17 @@ router.post('/match', async (req, res) => {
   } catch (err) {
     console.error('Erro ao fazer matching de versões:', err.message);
     res.status(500).json({ error: 'Erro interno ao procurar versões equivalentes.' });
+  }
+});
+
+// ✅ NOVO endpoint GET /api/songs/:id
+router.get('/:id', async (req, res) => {
+  try {
+    const song = await songController.getSongById(req.params.id);
+    res.json(song);
+  } catch (err) {
+    console.error('Erro ao buscar Song por ID:', err.message);
+    res.status(500).json({ error: 'Erro ao buscar Song.' });
   }
 });
 

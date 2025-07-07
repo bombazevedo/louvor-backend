@@ -1,4 +1,3 @@
-// src/controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
 
@@ -14,6 +13,9 @@ exports.createSong = async (req, res) => {
       if (match) {
         coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
       }
+      // Preencher title e artist se não vierem do frontend
+      extraData.title = req.body.title || 'Sem título';
+      extraData.artist = req.body.artist || 'Desconhecido';
     }
 
     // Deezer
@@ -62,6 +64,9 @@ exports.createSong = async (req, res) => {
     // Caso já venha pronto (ex: Spotify já salvo)
     else if (req.body.coverUrl) {
       coverUrl = req.body.coverUrl;
+      // Garante title e artist se não vierem
+      extraData.title = req.body.title || 'Sem título';
+      extraData.artist = req.body.artist || 'Desconhecido';
     }
 
     const newSong = new Song({
@@ -87,4 +92,11 @@ exports.getAllSongs = async (req, res) => {
     console.error('Erro ao buscar músicas:', error);
     res.status(500).json({ message: 'Erro ao buscar músicas' });
   }
+};
+
+// ✅ Buscar música por ID (usado no GET /api/songs/:id)
+exports.getSongById = async (id) => {
+  const song = await Song.findById(id);
+  if (!song) throw new Error('Song não encontrado');
+  return song;
 };
