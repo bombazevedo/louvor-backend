@@ -1,15 +1,8 @@
 // src/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
-const User = require('../models/User');
-const Function = require('../models/BandRole');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
-const {
-  searchYouTube,
-  searchSpotify,
-  searchDeezer
-} = require('../services/musicApiService');
 
 // Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
@@ -22,7 +15,7 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        const urls = (event.musicLinks || []).map(m => m.url);
+        const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform));
         const songIds = (event.musicLinks || [])
           .filter(m => m.song)
           .map(m => m.song);
@@ -35,31 +28,21 @@ const getEventsWithScales = async (req, res) => {
         });
 
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+          const normalizedUrl = normalizeMusicUrl(m.url, m.platform);
           const song = songs.find(s =>
-            (s.youtubeUrl && s.youtubeUrl === m.url) ||
+            (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
             (s._id && m.song && s._id.toString() === m.song.toString())
           );
           if (song) {
             return {
-              url: m.url,
-              platform: m.platform,
-              name: m.name || song.title || 'Sem título',
-              artist: m.artist || song.artist || 'Desconhecido',
+              ...m,
               bpm: song.bpm,
               duration: song.duration,
               key: song.key,
-              coverUrl: song.coverUrl,
-              song: song._id
+              coverUrl: song.coverUrl
             };
           }
-          return {
-            url: m.url,
-            platform: m.platform,
-            name: m.name || 'Sem título',
-            artist: m.artist || 'Desconhecido',
-            coverUrl: m.thumbnail || '',
-            song: m.song || null
-          };
+          return m;
         });
 
         const eventObj = event.toObject();
@@ -90,7 +73,7 @@ const getEventById = async (req, res) => {
       .populate('members.user')
       .populate('members.function');
 
-    const urls = (event.musicLinks || []).map(m => m.url);
+    const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform));
     const songIds = (event.musicLinks || [])
       .filter(m => m.song)
       .map(m => m.song);
@@ -103,31 +86,21 @@ const getEventById = async (req, res) => {
     });
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
+      const normalizedUrl = normalizeMusicUrl(m.url, m.platform);
       const song = songs.find(s =>
-        (s.youtubeUrl && s.youtubeUrl === m.url) ||
+        (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
         (s._id && m.song && s._id.toString() === m.song.toString())
       );
       if (song) {
         return {
-          url: m.url,
-          platform: m.platform,
-          name: m.name || song.title || 'Sem título',
-          artist: m.artist || song.artist || 'Desconhecido',
+          ...m,
           bpm: song.bpm,
           duration: song.duration,
           key: song.key,
-          coverUrl: song.coverUrl,
-          song: song._id
+          coverUrl: song.coverUrl
         };
       }
-      return {
-        url: m.url,
-        platform: m.platform,
-        name: m.name || 'Sem título',
-        artist: m.artist || 'Desconhecido',
-        coverUrl: m.thumbnail || '',
-        song: m.song || null
-      };
+      return m;
     });
 
     const eventObj = event.toObject();
@@ -141,12 +114,11 @@ const getEventById = async (req, res) => {
   }
 };
 
-// Criar evento com salvamento automático do Song, enriquecendo dados se necessário
+// Criar evento com salvamento automático do Song e gravação completa dos dados
 const createEvent = async (req, res) => {
   try {
-    console.log('🟢 [createEvent] Dados recebidos:', JSON.stringify(req.body, null, 2));
-
     const { title, description, date, location, type, musicLinks } = req.body;
+
     const normalizedMusicLinks = [];
 
     if (musicLinks && Array.isArray(musicLinks)) {
@@ -162,28 +134,13 @@ const createEvent = async (req, res) => {
         });
 
         let songId = null;
-        let songData = null;
 
-        if (existing) {
-          songId = existing._id;
-        } else {
-          let enriched = [];
-          if (link.platform === 'YouTube') {
-            enriched = await searchYouTube(link.name || '');
-          } else if (link.platform === 'Spotify') {
-            enriched = await searchSpotify(link.name || '');
-          } else if (link.platform === 'Deezer') {
-            enriched = await searchDeezer(link.name || '');
-          }
-
-          const first = enriched[0];
-
-          songData = {
-            title: link.name || first?.name || 'Sem título',
-            artist: link.artist || first?.artist || 'Desconhecido',
-            coverUrl: link.thumbnail || first?.thumbnail || ''
+        if (!existing) {
+          const songData = {
+            title: link.name || 'Sem título',
+            artist: link.artist || 'Desconhecido',
+            coverUrl: link.thumbnail || '',
           };
-
           if (link.platform === 'YouTube') {
             songData.youtubeUrl = normalizedUrl;
           }
@@ -193,17 +150,19 @@ const createEvent = async (req, res) => {
           if (link.platform === 'Deezer') {
             songData.deezerUrl = normalizedUrl;
           }
-
           const created = await Song.create(songData);
+          existing = created;
           songId = created._id;
+        } else {
+          songId = existing._id;
         }
 
         normalizedMusicLinks.push({
-          name: link.name || (existing?.title || songData?.title || 'Sem título'),
-          artist: link.artist || (existing?.artist || songData?.artist || 'Desconhecido'),
+          name: link.name || existing?.title || 'Sem título',
+          artist: link.artist || existing?.artist || 'Desconhecido',
+          thumbnail: link.thumbnail || existing?.coverUrl || '',
           platform: link.platform,
           url: normalizedUrl,
-          thumbnail: link.thumbnail || (existing?.coverUrl || songData?.coverUrl || ''),
           song: songId
         });
       }
