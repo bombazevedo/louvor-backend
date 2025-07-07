@@ -144,8 +144,9 @@ const getEventById = async (req, res) => {
 // Criar evento com salvamento automático do Song, enriquecendo dados se necessário
 const createEvent = async (req, res) => {
   try {
-    const { title, description, date, location, type, musicLinks } = req.body;
+    console.log('🟢 [createEvent] Dados recebidos:', JSON.stringify(req.body, null, 2));
 
+    const { title, description, date, location, type, musicLinks } = req.body;
     const normalizedMusicLinks = [];
 
     if (musicLinks && Array.isArray(musicLinks)) {
