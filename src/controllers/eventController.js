@@ -7,7 +7,9 @@ const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 // Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: 1 });
+    const events = await Event.find()
+      .sort({ date: 1 })
+      .populate('musicLinks.song');
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
@@ -15,31 +17,14 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.user')
           .populate('members.function');
 
-        const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform));
-        const songIds = (event.musicLinks || [])
-          .filter(m => m.song)
-          .map(m => m.song);
-
-        const songs = await Song.find({
-          $or: [
-            { youtubeUrl: { $in: urls } },
-            { _id: { $in: songIds } }
-          ]
-        });
-
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          const normalizedUrl = normalizeMusicUrl(m.url, m.platform);
-          const song = songs.find(s =>
-            (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
-            (s._id && m.song && s._id.toString() === m.song.toString())
-          );
-          if (song) {
+          // Se veio populado, usa direto
+          if (m.song && typeof m.song === 'object') {
             return {
               ...m,
-              bpm: song.bpm,
-              duration: song.duration,
-              key: song.key,
-              coverUrl: song.coverUrl
+              name: m.song.title,
+              artist: m.song.artist,
+              coverUrl: m.song.coverUrl
             };
           }
           return m;
@@ -63,7 +48,8 @@ const getEventsWithScales = async (req, res) => {
 // Buscar evento por ID com escala e detalhes das músicas
 const getEventById = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id);
+    const event = await Event.findById(req.params.id)
+      .populate('musicLinks.song');
 
     if (!event) {
       return res.status(404).json({ message: 'Evento não encontrado' });
@@ -73,31 +59,13 @@ const getEventById = async (req, res) => {
       .populate('members.user')
       .populate('members.function');
 
-    const urls = (event.musicLinks || []).map(m => normalizeMusicUrl(m.url, m.platform));
-    const songIds = (event.musicLinks || [])
-      .filter(m => m.song)
-      .map(m => m.song);
-
-    const songs = await Song.find({
-      $or: [
-        { youtubeUrl: { $in: urls } },
-        { _id: { $in: songIds } }
-      ]
-    });
-
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      const normalizedUrl = normalizeMusicUrl(m.url, m.platform);
-      const song = songs.find(s =>
-        (s.youtubeUrl && s.youtubeUrl === normalizedUrl) ||
-        (s._id && m.song && s._id.toString() === m.song.toString())
-      );
-      if (song) {
+      if (m.song && typeof m.song === 'object') {
         return {
           ...m,
-          bpm: song.bpm,
-          duration: song.duration,
-          key: song.key,
-          coverUrl: song.coverUrl
+          name: m.song.title,
+          artist: m.song.artist,
+          coverUrl: m.song.coverUrl
         };
       }
       return m;
@@ -114,7 +82,7 @@ const getEventById = async (req, res) => {
   }
 };
 
-// Criar evento com salvamento automático do Song e gravação completa dos dados
+// Criar evento com salvamento automático do Song
 const createEvent = async (req, res) => {
   try {
     const { title, description, date, location, type, musicLinks } = req.body;
@@ -125,7 +93,7 @@ const createEvent = async (req, res) => {
       for (const link of musicLinks) {
         const normalizedUrl = normalizeMusicUrl(link.url, link.platform);
 
-        let existing = await Song.findOne({
+        const existing = await Song.findOne({
           $or: [
             { youtubeUrl: normalizedUrl },
             { spotifyUrl: normalizedUrl },
@@ -135,7 +103,9 @@ const createEvent = async (req, res) => {
 
         let songId = null;
 
-        if (!existing) {
+        if (existing) {
+          songId = existing._id;
+        } else {
           const songData = {
             title: link.name || 'Sem título',
             artist: link.artist || 'Desconhecido',
@@ -151,18 +121,15 @@ const createEvent = async (req, res) => {
             songData.deezerUrl = normalizedUrl;
           }
           const created = await Song.create(songData);
-          existing = created;
           songId = created._id;
-        } else {
-          songId = existing._id;
         }
 
         normalizedMusicLinks.push({
-          name: link.name || existing?.title || 'Sem título',
-          artist: link.artist || existing?.artist || 'Desconhecido',
-          thumbnail: link.thumbnail || existing?.coverUrl || '',
+          name: link.name || (existing?.title || 'Sem título'),
+          artist: link.artist || (existing?.artist || 'Desconhecido'),
           platform: link.platform,
           url: normalizedUrl,
+          thumbnail: link.thumbnail || (existing?.coverUrl || ''),
           song: songId
         });
       }
