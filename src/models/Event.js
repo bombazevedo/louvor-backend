@@ -25,15 +25,22 @@ const eventSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Scale'
   },
-  musicLinks: [{
-    song: { type: mongoose.Schema.Types.ObjectId, ref: 'Song' }, // 🔹 Referência ao Song
-    platform: String,
-    url: String
-  }],
-  attachments: [{
-    name: String,
-    url: String
-  }]
+  musicLinks: [
+    {
+      song: { type: mongoose.Schema.Types.ObjectId, ref: 'Song' }, // Referência ao Song
+      name: String,     // Nome da música
+      artist: String,   // Artista
+      platform: String, // youtube / spotify / deezer
+      url: String,      // URL da música
+      thumbnail: String // Thumbnail/Capa
+    }
+  ],
+  attachments: [
+    {
+      name: String,
+      url: String
+    }
+  ]
 }, {
   timestamps: true,
 });
