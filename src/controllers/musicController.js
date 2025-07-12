@@ -89,11 +89,19 @@ exports.searchMusic = async (req, res) => {
   try {
     const normalizedQuery = query.trim().toLowerCase();
 
+    console.log('[musicController] 🟢 Query normalizada:', normalizedQuery);
+
     // Verifica cache
     const cached = await SearchCache.findOne({ query: normalizedQuery });
+
+    console.log('[musicController] 🟢 Cache encontrado:', cached);
+
     if (cached && cached.updatedAt > Date.now() - 24 * 60 * 60 * 1000) {
+      console.log('[musicController] 🟢 Retornando cache existente.');
       return res.json(cached.results);
     }
+
+    console.log('[musicController] 🟢 Executando Promise.all para busca externa.');
 
     // Busca nas APIs externas
     const [ytResults, spResults, dzResults] = await Promise.all([
@@ -101,6 +109,10 @@ exports.searchMusic = async (req, res) => {
       searchSpotify(normalizedQuery),
       searchDeezer(normalizedQuery),
     ]);
+
+    console.log('[musicController] 🟢 Resultado YouTube:', ytResults);
+    console.log('[musicController] 🟢 Resultado Spotify:', spResults);
+    console.log('[musicController] 🟢 Resultado Deezer:', dzResults);
 
     const allResults = [...ytResults, ...spResults, ...dzResults];
 
@@ -110,6 +122,8 @@ exports.searchMusic = async (req, res) => {
       { results: allResults, updatedAt: new Date() },
       { upsert: true }
     );
+
+    console.log('[musicController] 🟢 Resultados salvos no cache.');
 
     res.json(allResults);
   } catch (err) {
