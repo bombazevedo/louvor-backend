@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const musicController = require('../controllers/musicController');
-const { protect } = require('../middleware/auth'); // ✅ importa a função protect
+const { authenticate } = require('../middleware/auth'); // ✅ corrigido aqui
 
 // GET /api/music/search/:platform?q=title+artist
 router.get('/search/:platform', musicController.searchPlatform);
@@ -17,9 +17,9 @@ router.post('/search', musicController.searchMusic);
 router.post('/search-versions', musicController.searchVersions);
 
 // 🟢 NOVA ROTA: Retorna histórico do usuário logado
-router.get('/history', protect, musicController.getUserSearchHistory);
+router.get('/history', authenticate, musicController.getUserSearchHistory);
 
 // 🟢 NOVA ROTA: Salva termo buscado pelo usuário logado
-router.post('/history', protect, musicController.saveUserSearchTerm);
+router.post('/history', authenticate, musicController.saveUserSearchTerm);
 
 module.exports = router;
