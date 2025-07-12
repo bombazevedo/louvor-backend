@@ -6,6 +6,7 @@ const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 
 // ✅ Agora só uma chave YouTube
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
+console.log('[musicApiService] 🟢 process.env.YOUTUBE_API_KEY:', YOUTUBE_API_KEY);
 
 let spotifyToken = null;
 let tokenExpiresAt = 0;
