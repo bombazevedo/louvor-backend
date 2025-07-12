@@ -1,52 +1,41 @@
 const mongoose = require('mongoose');
 
-const EventSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true
-  },
-  date: {
-    type: Date,
-    required: true
-  },
-  location: {
-    type: String,
-    required: true
-  },
+const eventSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  description: String,
+  date: { type: Date, required: true },
+  location: String,
   type: {
     type: String,
-    enum: ['ensaio', 'culto', 'outro'],
-    default: 'culto'
+    enum: ['culto', 'ensaio', 'especial'],
+    default: 'culto',
   },
   status: {
     type: String,
-    enum: ['agendado', 'realizado', 'cancelado'],
-    default: 'agendado'
+    enum: ['agendado', 'cancelado', 'concluido'],
+    default: 'agendado',
   },
-  musicLinks: [
-    {
-      song: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Song'
-      },
-      name: String,
-      artist: String,
-      platform: String,
-      url: String,
-      thumbnail: String
-    }
-  ],
-  attachments: [
-    {
-      name: String,
-      url: String,
-      publicId: String
-    }
-  ],
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+  },
   scale: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Scale'
-  }
-}, { timestamps: true });
+  },
+  musicLinks: [{
+    name: String,
+    artist: String,
+    platform: String,
+    url: String
+  }],
+  attachments: [{
+    name: String,
+    url: String
+  }]
+}, {
+  timestamps: true,
+});
 
-module.exports = mongoose.model('Event', EventSchema);
+module.exports = mongoose.model('Event', eventSchema);
