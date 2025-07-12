@@ -116,12 +116,23 @@ const searchSpotify = async (query) => {
 
 const unifiedSearch = async (query) => {
   try {
-    const [yt, dz, sp] = await Promise.all([
-      searchYouTube(query),
-      searchDeezer(query),
-      searchSpotify(query),
-    ]);
-    return [...yt, ...dz, ...sp];
+    console.log('[musicApiService] 🟢 unifiedSearch INICIADA com query:', query);
+
+const promises = [
+  searchYouTube(query),
+  searchDeezer(query),
+  searchSpotify(query),
+];
+
+console.log('[musicApiService] 🟢 Promises criadas:', promises.map(p => typeof p));
+
+const [yt, dz, sp] = await Promise.all(promises);
+
+console.log('[musicApiService] 🟢 Resultado YouTube:', yt);
+console.log('[musicApiService] 🟢 Resultado Deezer:', dz);
+console.log('[musicApiService] 🟢 Resultado Spotify:', sp);
+
+return [...yt, ...dz, ...sp];
   } catch (err) {
     console.error('❌ unifiedSearch falhou:', err.message);
     return [];
