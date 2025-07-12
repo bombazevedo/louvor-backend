@@ -8,6 +8,7 @@ const {
 } = require('../services/musicApiService');
 
 const SearchCache = require('../models/SearchCache'); // Importa o modelo do cache
+const SearchHistory = require('../models/SearchHistory'); // Importa o modelo do histórico de buscas
 
 // 🔍 Busca em plataforma única
 exports.searchPlatform = async (req, res) => {
@@ -129,5 +130,43 @@ exports.searchMusic = async (req, res) => {
   } catch (err) {
     console.error('❌ Erro em searchMusic:', err.message);
     res.status(500).json({ error: 'Erro ao buscar músicas' });
+  }
+};
+
+// 🟢 Nova rota: Retorna histórico de buscas do usuário
+exports.getUserSearchHistory = async (req, res) => {
+  try {
+    const history = await SearchHistory.find({ userId: req.user.id })
+      .sort({ searchedAt: -1 })
+      .limit(20);
+
+    res.json(history);
+  } catch (err) {
+    console.error('❌ Erro ao buscar histórico do usuário:', err.message);
+    res.status(500).json({ error: 'Erro ao buscar histórico' });
+  }
+};
+
+// 🟢 Nova rota: Salva termo buscado pelo usuário
+exports.saveUserSearchTerm = async (req, res) => {
+  const { term } = req.body;
+
+  if (!term || typeof term !== 'string' || term.trim() === '') {
+    return res.status(400).json({ error: 'Campo "term" obrigatório.' });
+  }
+
+  const normalizedTerm = term.trim().toLowerCase();
+
+  try {
+    await SearchHistory.findOneAndUpdate(
+      { userId: req.user.id, term: normalizedTerm },
+      { searchedAt: new Date() },
+      { upsert: true }
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Erro ao salvar termo no histórico:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar histórico' });
   }
 };
