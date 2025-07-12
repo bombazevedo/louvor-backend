@@ -8,6 +8,9 @@ const {
   updateEvent
 } = require('../controllers/eventController');
 
+// ✅ Adicione esta linha
+const Event = require('../models/Event');
+
 // 🔍 Buscar todos os eventos com escalas
 router.get('/', authenticate, getEventsWithScales);
 
