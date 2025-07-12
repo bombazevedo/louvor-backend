@@ -69,10 +69,21 @@ exports.searchVersions = async (req, res) => {
 
 // 🚀 Nova rota principal com cache e enriquecimento completo
 exports.searchMusic = async (req, res) => {
-  const { query } = req.body;
+  let { query } = req.body;
 
   if (!query) {
     return res.status(400).json({ error: 'Campo "query" obrigatório.' });
+  }
+
+  // ✅ Normaliza query para string mesmo se vier objeto { name, artist }
+  if (typeof query === 'object' && query !== null) {
+    const name = query.name || '';
+    const artist = query.artist || '';
+    query = `${name} ${artist}`.trim();
+  }
+
+  if (typeof query !== 'string' || query.trim() === '') {
+    return res.status(400).json({ error: 'Campo "query" deve ser uma string válida.' });
   }
 
   try {
