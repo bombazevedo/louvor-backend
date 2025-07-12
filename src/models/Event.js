@@ -25,10 +25,12 @@ const eventSchema = new mongoose.Schema({
     ref: 'Scale'
   },
   musicLinks: [{
+    song: { type: mongoose.Schema.Types.ObjectId, ref: 'Song' },
     name: String,
     artist: String,
     platform: String,
-    url: String
+    url: String,
+    thumbnail: String
   }],
   attachments: [{
     name: String,
