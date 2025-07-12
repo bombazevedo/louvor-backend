@@ -41,8 +41,18 @@ const getSpotifyToken = async () => {
 // ✅ Busca YouTube com UMA chave
 const searchYouTube = async (query) => {
   try {
+    // 🟢 LOG: Query recebida
+    console.log('[musicApiService] 🔍 searchYouTube query:', query);
+
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
+    
+    // 🟢 LOG: URL final usada
+    console.log('[musicApiService] 🌐 YouTube API URL:', url);
+
     const res = await axios.get(url);
+
+    // 🟢 LOG: Retorno bruto
+    console.log('[musicApiService] ✅ YouTube API response:', JSON.stringify(res.data, null, 2));
 
     return res.data.items
       .filter(item => item.id?.videoId)
@@ -54,7 +64,11 @@ const searchYouTube = async (query) => {
         thumbnail: item.snippet.thumbnails?.medium?.url || ''
       }));
   } catch (err) {
-    console.error('❌ Erro ao buscar no YouTube:', err.message);
+    // 🟢 LOG: Erro detalhado
+    console.error(
+      '[musicApiService] ❌ Erro ao buscar no YouTube:',
+      err.response ? JSON.stringify(err.response.data, null, 2) : err.message
+    );
     return [];
   }
 };
