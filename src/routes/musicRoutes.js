@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const musicController = require('../controllers/musicController');
-const auth = require('../middlewares/auth'); // Importa middleware de autenticação
+const auth = require('../middleware/auth'); // Importa middleware de autenticação
 
 // GET /api/music/search/:platform?q=title+artist
 router.get('/search/:platform', musicController.searchPlatform);
