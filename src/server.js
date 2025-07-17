@@ -26,6 +26,7 @@ const utilsRoutes = require('./routes/utilsRoutes');
 const teamRoutes = require('./routes/teamRoutes'); // <-- ADICIONADO
 const unavailabilityRoutes = require('./routes/unavailabilityRoutes'); // <-- 🔥 ADICIONADO
 const musicRoutes = require('./routes/musicRoutes');
+const chordRoutes = require('./routes/chordRoutes');
 
 // Usando as rotas
 app.use('/api/auth', authRoutes);
@@ -40,6 +41,7 @@ app.use('/api/utils', utilsRoutes);
 app.use('/api/teams', teamRoutes); // <-- ADICIONADO
 app.use('/api/unavailability', unavailabilityRoutes); // <-- 🔥 ADICIONADO
 app.use('/api/music', musicRoutes);
+app.use('/api/chords', chordRoutes);
 
 // Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
