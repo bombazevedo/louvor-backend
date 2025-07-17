@@ -1,4 +1,3 @@
-// src/services/musicEnrichmentService.js
 const axios = require('axios');
 
 // 🔐 Gera token dinâmico do Spotify
@@ -57,21 +56,24 @@ async function fetchFromSpotify(title, artist) {
   }
 }
 
-// 🎧 Deezer
+// 🎧 Deezer com extração de BPM via /track/{id}
 async function fetchFromDeezer(title, artist) {
   try {
     const query = encodeURIComponent(`${title} ${artist}`);
-    const url = `https://api.deezer.com/search?q=${query}&limit=1`;
+    const searchUrl = `https://api.deezer.com/search?q=${query}&limit=1`;
 
-    const response = await axios.get(url);
-    const track = response.data.data?.[0];
-    if (!track) return {};
+    const searchRes = await axios.get(searchUrl);
+    const track = searchRes.data.data?.[0];
+    if (!track || !track.id) return {};
+
+    const detailedRes = await axios.get(`https://api.deezer.com/track/${track.id}`);
+    const detailed = detailedRes.data;
 
     return {
-      bpm: track.bpm || null,
-      duration: track.duration || null,
-      album: track.album?.title || null,
-      coverUrl: track.album?.cover_medium || null
+      bpm: detailed.bpm || null,
+      duration: detailed.duration || null,
+      album: detailed.album?.title || null,
+      coverUrl: detailed.album?.cover_medium || null
     };
   } catch (error) {
     console.error('[Enrichment] Deezer erro:', error?.response?.data || error.message);
