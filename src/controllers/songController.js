@@ -1,55 +1,7 @@
+// src/controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
-
-// 🔧 Função de enriquecimento (após salvar)
-const enrichSongData = async (songId) => {
-  try {
-    const song = await Song.findById(songId);
-    if (!song) return;
-
-    let updates = {};
-
-    // Deezer (se houver)
-    if (song.deezerUrl) {
-      const deezerMatch = song.deezerUrl.match(/track\/(\d+)/);
-      if (deezerMatch) {
-        const trackId = deezerMatch[1];
-        try {
-          const deezerRes = await axios.get(`https://api.deezer.com/track/${trackId}`);
-          if (deezerRes.data) {
-            updates.bpm = deezerRes.data.bpm || song.bpm;
-            updates.album = deezerRes.data.album?.title || song.album;
-            updates.key = deezerRes.data.key || song.key;
-          }
-        } catch (err) {
-          console.error('[enrichSongData] Deezer erro:', err.response?.data || err.message);
-        }
-      }
-    }
-
-    // Spotify (se houver)
-    if (song.spotifyUrl) {
-      try {
-        const spotifyMeta = await axios.get(`https://open.spotify.com/oembed?url=${song.spotifyUrl}`);
-        if (spotifyMeta.data) {
-          updates.album = updates.album || spotifyMeta.data.title;
-        }
-      } catch (err) {
-        console.error('[enrichSongData] Spotify erro:', err.response?.data || err.message);
-      }
-    }
-
-    // CifraClub fallback (se nada mais disponível)
-    if (!song.chordText && song.title && song.artist) {
-      const query = encodeURIComponent(`${song.title} ${song.artist}`);
-      updates.externalChordUrl = `https://www.cifraclub.com.br/busca/?q=${query}`;
-    }
-
-    await Song.findByIdAndUpdate(songId, updates, { new: true });
-  } catch (err) {
-    console.error('[enrichSongData] Erro geral:', err);
-  }
-};
+const { enrichSong } = require('../services/musicEnrichmentService');
 
 // Criar nova música
 exports.createSong = async (req, res) => {
@@ -63,6 +15,7 @@ exports.createSong = async (req, res) => {
       if (match) {
         coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
       }
+      // Preencher title e artist se não vierem do frontend
       extraData.title = req.body.title || 'Sem título';
       extraData.artist = req.body.artist || 'Desconhecido';
     }
@@ -75,9 +28,10 @@ exports.createSong = async (req, res) => {
         try {
           const deezerRes = await axios.get(`https://api.deezer.com/track/${trackId}`);
           if (deezerRes.data) {
-            if (deezerRes.data.album?.cover_medium) {
+            if (deezerRes.data.album && deezerRes.data.album.cover_medium) {
               coverUrl = deezerRes.data.album.cover_medium;
             }
+            // Extras Deezer
             extraData = {
               bpm: deezerRes.data.bpm,
               duration: deezerRes.data.duration,
@@ -87,6 +41,7 @@ exports.createSong = async (req, res) => {
           }
         } catch (err) {
           console.error('Erro ao buscar dados no Deezer:', err.response?.data || err.message);
+          // Garantir defaults mesmo que Deezer falhe
           extraData.title = 'Sem título';
           extraData.artist = 'Desconhecido';
         }
@@ -97,7 +52,7 @@ exports.createSong = async (req, res) => {
     else if (req.body.spotifyUrl) {
       try {
         const spotifyRes = await axios.get(`https://open.spotify.com/oembed?url=${req.body.spotifyUrl}`);
-        if (spotifyRes.data?.thumbnail_url) {
+        if (spotifyRes.data && spotifyRes.data.thumbnail_url) {
           coverUrl = spotifyRes.data.thumbnail_url;
           extraData = {
             title: spotifyRes.data.title || 'Sem título',
@@ -114,31 +69,43 @@ exports.createSong = async (req, res) => {
       }
     }
 
-    // Já vem completo
+    // Caso já venha pronto (ex: Spotify já salvo)
     else if (req.body.coverUrl) {
       coverUrl = req.body.coverUrl;
       extraData.title = req.body.title || 'Sem título';
       extraData.artist = req.body.artist || 'Desconhecido';
     }
 
-    // Segurança final
+    // Segurança final para garantir sempre preenchido
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
     const newSong = new Song({
       ...req.body,
       coverUrl,
-      ...extraData,
+      ...extraData
     });
 
     const savedSong = await newSong.save();
 
-    // ✅ Enriquecimento pós-criação
-    await enrichSongData(savedSong._id);
+    // 🔄 Enriquecimento cruzado (Spotify + Deezer)
+    try {
+      const enriched = await enrichSong(savedSong);
 
-    // Recarrega música com dados atualizados
-    const enrichedSong = await Song.findById(savedSong._id);
-    res.status(201).json(enrichedSong);
+      await Song.findByIdAndUpdate(savedSong._id, {
+        $set: {
+          bpm: enriched.bpm || savedSong.bpm,
+          key: enriched.key || savedSong.key,
+          album: enriched.album || savedSong.album,
+          duration: enriched.duration || savedSong.duration,
+          coverUrl: enriched.coverUrl || savedSong.coverUrl
+        }
+      });
+    } catch (enrichmentError) {
+      console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
+    }
+
+    res.status(201).json(savedSong);
   } catch (error) {
     console.error('Erro ao criar música:', error);
     res.status(500).json({ message: 'Erro ao criar música' });
