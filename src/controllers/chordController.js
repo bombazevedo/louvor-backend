@@ -26,7 +26,10 @@ const getChord = async (req, res) => {
       return res.status(200).json({ source: 'internal', chord: chord.chordsText });
     }
 
-    const externalUrl = `https://www.cifraclub.com.br/${gerarSlug(artist)}/${gerarSlug(name)}/`;
+    // 🔄 Atualização: redirecionar para página de busca no CifraClub
+    const searchQuery = encodeURIComponent(`${artist} ${name}`);
+    const externalUrl = `https://www.cifraclub.com.br/?q=${searchQuery}`;
+    
     return res.status(200).json({ source: 'external', url: externalUrl });
   } catch (error) {
     console.error('[ChordController] Erro em getChord:', error);
