@@ -1,12 +1,16 @@
+// src/controllers/chordController.js
+
 const Chord = require('../models/Chord');
+
+console.log('[ChordController] ✅ Controller carregado com sucesso');
 
 const gerarSlug = (texto) =>
   texto.normalize('NFD')
-       .replace(/[̀-ͯ]/g, '')
+       .replace(/[\u0300-\u036f]/g, '')
        .toLowerCase()
-       .replace(/[^a-z0-9\s]/g, '')
+       .replace(/[^a-z0-9\\s]/g, '')
        .trim()
-       .replace(/\s+/g, '-');
+       .replace(/\\s+/g, '-');
 
 const getChord = async (req, res) => {
   try {

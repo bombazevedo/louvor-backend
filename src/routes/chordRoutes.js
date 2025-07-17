@@ -1,12 +1,15 @@
+// src/routes/chordRoutes.js
+
 const express = require('express');
 const router = express.Router();
 const { getChord, saveChord } = require('../controllers/chordController');
-const auth = require('../middleware/auth');
 
-// Rota para buscar cifra (autenticada)
-router.get('/', auth, getChord);
+// DEBUG: verificar se os handlers foram importados corretamente
+console.log('[ChordRoutes] getChord:', typeof getChord);
+console.log('[ChordRoutes] saveChord:', typeof saveChord);
 
-// Rota para salvar nova cifra (autenticada)
-router.post('/', auth, saveChord);
+// Rota pública temporária para testes (remover auth depois)
+router.get('/', getChord);
+router.post('/', saveChord);
 
 module.exports = router;
