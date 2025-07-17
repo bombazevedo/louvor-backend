@@ -9,7 +9,8 @@ const SongSchema = new mongoose.Schema({
   deezerUrl: { type: String },
   key: { type: String },
   lyrics: { type: String },
-  coverUrl: { type: String },
+  coverUrl: { type: String },   
+album: { type: String },
   bpm: { type: Number },        // 🔹 Adicionado: BPM da música (opcional)
   duration: { type: Number }    // 🔹 Adicionado: Duração em segundos (opcional)
 });
