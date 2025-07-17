@@ -48,7 +48,7 @@ async function fetchFromSpotify(title, artist) {
     return {
       album: track.album?.name || null,
       duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
-      key: null, // Spotify não fornece diretamente
+      key: null,
       coverUrl: track.album?.images?.[0]?.url || null
     };
   } catch (error) {
@@ -61,4 +61,41 @@ async function fetchFromSpotify(title, artist) {
 async function fetchFromDeezer(title, artist) {
   try {
     const query = encodeURIComponent(`${title} ${artist}`);
-    const url = `https://
+    const url = `https://api.deezer.com/search?q=${query}&limit=1`;
+
+    const response = await axios.get(url);
+    const track = response.data.data?.[0];
+    if (!track) return {};
+
+    return {
+      bpm: track.bpm || null,
+      duration: track.duration || null,
+      album: track.album?.title || null,
+      coverUrl: track.album?.cover_medium || null
+    };
+  } catch (error) {
+    console.error('[Enrichment] Deezer erro:', error?.response?.data || error.message);
+    return {};
+  }
+}
+
+// 🔄 Enriquecimento cruzado
+async function enrichSong(song) {
+  const { title, artist } = song;
+  const [spotifyData, deezerData] = await Promise.all([
+    fetchFromSpotify(title, artist),
+    fetchFromDeezer(title, artist)
+  ]);
+
+  return {
+    bpm: deezerData.bpm || null,
+    key: spotifyData.key || null,
+    duration: spotifyData.duration || deezerData.duration || null,
+    album: spotifyData.album || deezerData.album || null,
+    coverUrl: spotifyData.coverUrl || deezerData.coverUrl || song.coverUrl
+  };
+}
+
+module.exports = {
+  enrichSong
+};
