@@ -2,44 +2,59 @@ const Chord = require('../models/Chord');
 
 const gerarSlug = (texto) =>
   texto.normalize('NFD')
-       .replace(/[\u0300-\u036f]/g, '')
+       .replace(/[̀-ͯ]/g, '')
        .toLowerCase()
        .replace(/[^a-z0-9\s]/g, '')
        .trim()
        .replace(/\s+/g, '-');
 
 const getChord = async (req, res) => {
-  const { name, artist } = req.query;
-  if (!name || !artist) return res.status(400).json({ error: 'Missing parameters' });
+  try {
+    const { name, artist } = req.query;
+    if (!name || !artist) {
+      return res.status(400).json({ error: 'Missing parameters: name and artist are required' });
+    }
 
-  const slug = `${gerarSlug(artist)}__${gerarSlug(name)}`;
-  const chord = await Chord.findOne({ slug });
+    const slug = `${gerarSlug(artist)}__${gerarSlug(name)}`;
+    const chord = await Chord.findOne({ slug });
 
-  if (chord) {
-    return res.json({ source: 'internal', chord: chord.chordsText });
+    if (chord) {
+      return res.status(200).json({ source: 'internal', chord: chord.chordsText });
+    }
+
+    const externalUrl = `https://www.cifraclub.com.br/${gerarSlug(artist)}/${gerarSlug(name)}/`;
+    return res.status(200).json({ source: 'external', url: externalUrl });
+  } catch (error) {
+    console.error('[ChordController] Erro em getChord:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const externalUrl = `https://www.cifraclub.com.br/${gerarSlug(artist)}/${gerarSlug(name)}/`;
-  return res.json({ source: 'external', url: externalUrl });
 };
 
 const saveChord = async (req, res) => {
-  const { name, artist, chordsText } = req.body;
-  if (!name || !artist || !chordsText) {
-    return res.status(400).json({ error: 'Missing fields' });
+  try {
+    const { name, artist, chordsText } = req.body;
+    if (!name || !artist || !chordsText) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    const slug = `${gerarSlug(artist)}__${gerarSlug(name)}`;
+
+    const newChord = await Chord.create({
+      name,
+      artist,
+      slug,
+      chordsText,
+      createdBy: req.user?.id || null
+    });
+
+    return res.status(201).json(newChord);
+  } catch (error) {
+    console.error('[ChordController] Erro em saveChord:', error);
+    return res.status(500).json({ error: 'Internal server error' });
   }
-
-  const slug = `${gerarSlug(artist)}__${gerarSlug(name)}`;
-
-  const newChord = await Chord.create({
-    name,
-    artist,
-    slug,
-    chordsText,
-    createdBy: req.user.id
-  });
-
-  res.status(201).json(newChord);
 };
 
-module.exports = { getChord, saveChord };
+module.exports = {
+  getChord,
+  saveChord
+};
