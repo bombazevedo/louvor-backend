@@ -8,7 +8,7 @@ const gerarSlug = (texto) =>
        .trim()
        .replace(/\s+/g, '-');
 
-exports.getChord = async (req, res) => {
+const getChord = async (req, res) => {
   const { name, artist } = req.query;
   if (!name || !artist) return res.status(400).json({ error: 'Missing parameters' });
 
@@ -23,7 +23,7 @@ exports.getChord = async (req, res) => {
   return res.json({ source: 'external', url: externalUrl });
 };
 
-exports.saveChord = async (req, res) => {
+const saveChord = async (req, res) => {
   const { name, artist, chordsText } = req.body;
   if (!name || !artist || !chordsText) {
     return res.status(400).json({ error: 'Missing fields' });
@@ -41,3 +41,5 @@ exports.saveChord = async (req, res) => {
 
   res.status(201).json(newChord);
 };
+
+module.exports = { getChord, saveChord };

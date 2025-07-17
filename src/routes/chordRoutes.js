@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const chordController = require('../controllers/chordController');
+const { getChord, saveChord } = require('../controllers/chordController');
 const auth = require('../middleware/auth');
 
-router.get('/', auth, chordController.getChord);
-router.post('/', auth, chordController.saveChord);
+router.get('/', auth, getChord);
+router.post('/', auth, saveChord);
 
 module.exports = router;
