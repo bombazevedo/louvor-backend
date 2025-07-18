@@ -85,26 +85,28 @@ exports.createSong = async (req, res) => {
 
     const savedSong = await newSong.save();
 
-    // 🔄 Enriquecimento cruzado
-    try {
-      const enriched = await enrichSong(savedSong);
+// 🔄 Enriquecimento cruzado (Spotify + Deezer)
+try {
+  const enriched = await enrichSong(savedSong);
 
-      await Song.findByIdAndUpdate(savedSong._id, {
-        $set: {
-          bpm: enriched?.bpm || savedSong.bpm,
-          key: enriched?.key || savedSong.key,
-          album: enriched?.album || savedSong.album,
-          duration: enriched?.duration || savedSong.duration,
-          coverUrl: enriched?.coverUrl || savedSong.coverUrl
-        }
-      });
+  const enrichedResult = await Song.findByIdAndUpdate(
+    savedSong._id,
+    {
+      $set: {
+        bpm: enriched.bpm || savedSong.bpm,
+        key: enriched.key ?? savedSong.key,
+        album: enriched.album || savedSong.album,
+        duration: enriched.duration || savedSong.duration,
+        coverUrl: enriched.coverUrl || savedSong.coverUrl
+      }
+    },
+    { new: true } // <-- Retorna o documento atualizado
+  );
 
-      const updatedSong = await Song.findById(savedSong._id);
-      res.status(201).json(updatedSong);
-
-    } catch (enrichmentError) {
-      console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
-      res.status(201).json(savedSong); // fallback mínimo
+  return res.status(201).json(enrichedResult); // <-- Retorna o enriquecido
+} catch (enrichmentError) {
+  console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
+  return res.status(201).json(savedSong); // fallback mínimo
     }
   } catch (error) {
     console.error('Erro ao criar música:', error);
