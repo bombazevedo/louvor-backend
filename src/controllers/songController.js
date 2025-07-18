@@ -15,7 +15,6 @@ exports.createSong = async (req, res) => {
       if (match) {
         coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
       }
-      // Preencher title e artist se não vierem do frontend
       extraData.title = req.body.title || 'Sem título';
       extraData.artist = req.body.artist || 'Desconhecido';
     }
@@ -31,7 +30,6 @@ exports.createSong = async (req, res) => {
             if (deezerRes.data.album && deezerRes.data.album.cover_medium) {
               coverUrl = deezerRes.data.album.cover_medium;
             }
-            // Extras Deezer
             extraData = {
               bpm: deezerRes.data.bpm,
               duration: deezerRes.data.duration,
@@ -41,7 +39,6 @@ exports.createSong = async (req, res) => {
           }
         } catch (err) {
           console.error('Erro ao buscar dados no Deezer:', err.response?.data || err.message);
-          // Garantir defaults mesmo que Deezer falhe
           extraData.title = 'Sem título';
           extraData.artist = 'Desconhecido';
         }
@@ -76,7 +73,7 @@ exports.createSong = async (req, res) => {
       extraData.artist = req.body.artist || 'Desconhecido';
     }
 
-    // Segurança final para garantir sempre preenchido
+    // Segurança final
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
@@ -88,19 +85,18 @@ exports.createSong = async (req, res) => {
 
     const savedSong = await newSong.save();
 
-    // 🔄 Enriquecimento cruzado (Spotify + Deezer)
+    // 🔄 Enriquecimento cruzado
     try {
       const enriched = await enrichSong(savedSong);
-
       await Song.findByIdAndUpdate(savedSong._id, {
         $set: {
-          bpm: enriched.bpm || savedSong.bpm,
-          key: enriched.key || savedSong.key,
-          album: enriched.album || savedSong.album,
-          duration: enriched.duration || savedSong.duration,
-          coverUrl: enriched.coverUrl || savedSong.coverUrl
+          bpm: enriched?.bpm || savedSong.bpm,
+          key: enriched?.key || savedSong.key,
+          album: enriched?.album || savedSong.album,
+          duration: enriched?.duration || savedSong.duration,
+          coverUrl: enriched?.coverUrl || savedSong.coverUrl
         }
-      });
+      }, { new: true });
     } catch (enrichmentError) {
       console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
     }
