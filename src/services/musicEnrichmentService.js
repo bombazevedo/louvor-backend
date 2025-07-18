@@ -21,7 +21,7 @@ async function getSpotifyToken() {
 
     return response.data.access_token;
   } catch (error) {
-    console.error('[Spotify Token] Erro ao obter token:', error?.response?.data || error.message);
+    console.error('[Spotify Token] ❌ Erro ao obter token:', error?.response?.data || error.message);
     return null;
   }
 }
@@ -42,16 +42,19 @@ async function fetchFromSpotify(title, artist) {
     });
 
     const track = response.data.tracks?.items?.[0];
-    if (!track) return {};
+    if (!track) {
+      console.warn('[Spotify] ⚠️ Nenhuma faixa encontrada.');
+      return {};
+    }
 
     return {
       album: track.album?.name || null,
       duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
-      key: null,
+      key: null, // 🔒 Spotify não fornece diretamente
       coverUrl: track.album?.images?.[0]?.url || null
     };
   } catch (error) {
-    console.error('[Enrichment] Spotify erro:', error?.response?.data || error.message);
+    console.error('[Enrichment] ❌ Spotify erro:', error?.response?.data || error.message);
     return {};
   }
 }
@@ -64,7 +67,10 @@ async function fetchFromDeezer(title, artist) {
 
     const searchRes = await axios.get(searchUrl);
     const track = searchRes.data.data?.[0];
-    if (!track || !track.id) return {};
+    if (!track || !track.id) {
+      console.warn('[Deezer] ⚠️ Nenhuma faixa encontrada.');
+      return {};
+    }
 
     const detailedRes = await axios.get(`https://api.deezer.com/track/${track.id}`);
     const detailed = detailedRes.data;
@@ -76,7 +82,7 @@ async function fetchFromDeezer(title, artist) {
       coverUrl: detailed.album?.cover_medium || null
     };
   } catch (error) {
-    console.error('[Enrichment] Deezer erro:', error?.response?.data || error.message);
+    console.error('[Enrichment] ❌ Deezer erro:', error?.response?.data || error.message);
     return {};
   }
 }
@@ -84,6 +90,7 @@ async function fetchFromDeezer(title, artist) {
 // 🔄 Enriquecimento cruzado
 async function enrichSong(song) {
   const { title, artist } = song;
+
   const [spotifyData, deezerData] = await Promise.all([
     fetchFromSpotify(title, artist),
     fetchFromDeezer(title, artist)
