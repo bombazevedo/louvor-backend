@@ -1,5 +1,7 @@
+// src/services/musicEnrichmentService.js
 const axios = require('axios');
 
+// 🔐 Gera token dinâmico do Spotify
 async function getSpotifyToken() {
   try {
     const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -24,6 +26,7 @@ async function getSpotifyToken() {
   }
 }
 
+// 🎧 Spotify → album, duration, coverUrl
 async function fetchFromSpotify(title, artist) {
   try {
     const token = await getSpotifyToken();
@@ -44,27 +47,10 @@ async function fetchFromSpotify(title, artist) {
       return {};
     }
 
-    // Segunda chamada para pegar `key`
-    let audioFeatures = {};
-    try {
-      const featuresRes = await axios.get(
-        `https://api.spotify.com/v1/audio-features/${track.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-      audioFeatures = featuresRes.data || {};
-    } catch (err) {
-      console.warn('[Spotify] ⚠️ Não foi possível obter Audio Features:', err.message);
-    }
-
     return {
       album: track.album?.name || null,
       duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
-      key: audioFeatures.key ?? null, // pode ser número (0 = C, 1 = C#/Db, etc.)
-      coverUrl: track.album?.images?.[0]?.url || null,
+      coverUrl: track.album?.images?.[0]?.url || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Spotify erro:', error?.response?.data || error.message);
@@ -72,6 +58,7 @@ async function fetchFromSpotify(title, artist) {
   }
 }
 
+// 🎧 Deezer → bpm, album, duration, coverUrl
 async function fetchFromDeezer(title, artist) {
   try {
     const query = encodeURIComponent(`${title} ${artist}`);
@@ -91,7 +78,7 @@ async function fetchFromDeezer(title, artist) {
       bpm: detailed.bpm || null,
       duration: detailed.duration || null,
       album: detailed.album?.title || null,
-      coverUrl: detailed.album?.cover_medium || null,
+      coverUrl: detailed.album?.cover_medium || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Deezer erro:', error?.response?.data || error.message);
@@ -110,10 +97,10 @@ async function enrichSong(song) {
 
   return {
     bpm: deezerData.bpm || null,
-    key: spotifyData.key ?? null,
+    key: null, // ❌ Desativado: Spotify não fornece com escopo atual
     duration: spotifyData.duration || deezerData.duration || null,
     album: spotifyData.album || deezerData.album || null,
-    coverUrl: spotifyData.coverUrl || deezerData.coverUrl || song.coverUrl,
+    coverUrl: spotifyData.coverUrl || deezerData.coverUrl || song.coverUrl
   };
 }
 

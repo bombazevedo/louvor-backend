@@ -88,7 +88,7 @@ exports.createSong = async (req, res) => {
 // 🔄 Enriquecimento cruzado (Spotify + Deezer)
 try {
   const enriched = await enrichSong(savedSong);
-
+console.log('[🔍 Enriched Result]', enriched);
   const enrichedResult = await Song.findByIdAndUpdate(
     savedSong._id,
     {
