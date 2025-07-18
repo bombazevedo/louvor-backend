@@ -88,6 +88,7 @@ exports.createSong = async (req, res) => {
     // 🔄 Enriquecimento cruzado
     try {
       const enriched = await enrichSong(savedSong);
+
       await Song.findByIdAndUpdate(savedSong._id, {
         $set: {
           bpm: enriched?.bpm || savedSong.bpm,
@@ -96,12 +97,15 @@ exports.createSong = async (req, res) => {
           duration: enriched?.duration || savedSong.duration,
           coverUrl: enriched?.coverUrl || savedSong.coverUrl
         }
-      }, { new: true });
+      });
+
+      const updatedSong = await Song.findById(savedSong._id);
+      res.status(201).json(updatedSong);
+
     } catch (enrichmentError) {
       console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
+      res.status(201).json(savedSong); // fallback mínimo
     }
-
-    res.status(201).json(savedSong);
   } catch (error) {
     console.error('Erro ao criar música:', error);
     res.status(500).json({ message: 'Erro ao criar música' });
