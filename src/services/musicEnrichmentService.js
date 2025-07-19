@@ -74,6 +74,8 @@ async function fetchFromDeezer(title, artist) {
     const detailedRes = await axios.get(`https://api.deezer.com/track/${track.id}`);
     const detailed = detailedRes.data;
 
+    console.log('[Deezer] 🎯 Faixa detalhada:', detailed);
+
     return {
       bpm: detailed.bpm || null,
       duration: detailed.duration || null,
