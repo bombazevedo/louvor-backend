@@ -1,39 +1,61 @@
-// src/controllers/eventController.js
 const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const Song = require('../models/Song');
-const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl' );
+const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
+
+// --- Função utilitária para limpar objetos mongoose
+function clean(obj) {
+  if (!obj) return obj;
+  if (typeof obj.toObject === 'function') obj = obj.toObject();
+  // Remove propriedades internas típicas do mongoose
+  const keysToRemove = ['__parentArray', '__index', '$__parent', '$__', '_doc', '$isNew'];
+  for (const key of keysToRemove) delete obj[key];
+  // Recursivamente limpa arrays e objetos aninhados
+  for (const k in obj) {
+    if (Array.isArray(obj[k])) obj[k] = obj[k].map(clean);
+    else if (obj[k] && typeof obj[k] === 'object') obj[k] = clean(obj[k]);
+  }
+  return obj;
+}
 
 // Buscar todos os eventos com escala e detalhes das músicas
 const getEventsWithScales = async (req, res) => {
   try {
     const events = await Event.find()
       .sort({ date: 1 })
-      .populate('musicLinks.song');
+      .populate('musicLinks.song')
+      .lean();
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
         const scale = await Scale.findOne({ eventId: event._id })
           .populate('members.user')
-          .populate('members.function');
+          .populate('members.function')
+          .lean();
 
+        // Limpa scale e membros
+        let cleanedScale = scale ? clean(scale) : null;
+
+        // Limpa musicLinks e popula detalhes relevantes das músicas
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          if (m.song && typeof m.song === 'object') {
-            return {
-              ...m,
-              name: m.song.title,
-              artist: m.song.artist,
-              coverUrl: m.song.coverUrl
-            };
-          }
-          return m;
+          let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
+          return {
+            ...m,
+            song: song ? song._id : m.song,
+            name: song?.title || m.name || '',
+            artist: song?.artist || m.artist || '',
+            coverUrl: song?.coverUrl || m.coverUrl || '',
+            // Remove sujidades que possam ter vindo
+            ...((song) ? {} : m)
+          };
         });
 
-        const eventObj = event.toObject();
-        eventObj.scale = scale;
-        eventObj.musicLinks = enrichedMusicLinks;
-
-        return eventObj;
+        // Retorna objeto limpo
+        return {
+          ...clean(event),
+          scale: cleanedScale,
+          musicLinks: enrichedMusicLinks
+        };
       })
     );
 
@@ -48,7 +70,8 @@ const getEventsWithScales = async (req, res) => {
 const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
-      .populate('musicLinks.song');
+      .populate('musicLinks.song')
+      .lean();
 
     if (!event) {
       return res.status(404).json({ message: 'Evento não encontrado' });
@@ -56,25 +79,28 @@ const getEventById = async (req, res) => {
 
     const scale = await Scale.findOne({ eventId: event._id })
       .populate('members.user')
-      .populate('members.function');
+      .populate('members.function')
+      .lean();
+
+    let cleanedScale = scale ? clean(scale) : null;
 
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      if (m.song && typeof m.song === 'object') {
-        return {
-          ...m,
-          name: m.song.title,
-          artist: m.song.artist,
-          coverUrl: m.song.coverUrl
-        };
-      }
-      return m;
+      let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
+      return {
+        ...m,
+        song: song ? song._id : m.song,
+        name: song?.title || m.name || '',
+        artist: song?.artist || m.artist || '',
+        coverUrl: song?.coverUrl || m.coverUrl || '',
+        ...((song) ? {} : m)
+      };
     });
 
-    const eventObj = event.toObject();
-    eventObj.scale = scale;
-    eventObj.musicLinks = enrichedMusicLinks;
-
-    res.json(eventObj);
+    res.json({
+      ...clean(event),
+      scale: cleanedScale,
+      musicLinks: enrichedMusicLinks
+    });
   } catch (error) {
     console.error('Erro ao buscar evento:', error);
     res.status(500).json({ message: 'Erro ao buscar evento' });
@@ -144,7 +170,8 @@ const createEvent = async (req, res) => {
     });
 
     const savedEvent = await newEvent.save();
-    res.status(201).json(savedEvent);
+    // Sempre retorna o evento limpo
+    res.status(201).json(clean(savedEvent));
   } catch (error) {
     console.error('Erro ao criar evento:', error);
     res.status(500).json({ message: 'Erro ao criar evento' });
@@ -217,7 +244,8 @@ const updateEvent = async (req, res) => {
       { new: true }
     );
 
-    res.json(updatedEvent);
+    // Sempre retorna o evento limpo
+    res.json(clean(updatedEvent));
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);
     res.status(500).json({ message: 'Erro ao atualizar evento' });
