@@ -85,28 +85,28 @@ exports.createSong = async (req, res) => {
 
     const savedSong = await newSong.save();
 
-// 🔄 Enriquecimento cruzado (Spotify + Deezer)
-try {
-  const enriched = await enrichSong(savedSong);
-console.log('[🔍 Enriched Result]', enriched);
-  const enrichedResult = await Song.findByIdAndUpdate(
-    savedSong._id,
-    {
-      $set: {
-        bpm: enriched.bpm || savedSong.bpm,
-        key: enriched.key ?? savedSong.key,
-        album: enriched.album || savedSong.album,
-        duration: enriched.duration || savedSong.duration,
-        coverUrl: enriched.coverUrl || savedSong.coverUrl
-      }
-    },
-    { new: true } // <-- Retorna o documento atualizado
-  );
+    // 🔄 Enriquecimento cruzado (Spotify + Deezer) — apenas ADICIONADO, sem remover nada
+    try {
+      const enriched = await enrichSong(savedSong);
+      console.log('[🔍 Enriched Result]', enriched);
+      // Só sobrescreve campos se vierem válidos
+      const enrichedFields = {};
+      if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
+      if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
+      if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
+      if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
+      if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
 
-  return res.status(201).json(enrichedResult); // <-- Retorna o enriquecido
-} catch (enrichmentError) {
-  console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
-  return res.status(201).json(savedSong); // fallback mínimo
+      const enrichedResult = await Song.findByIdAndUpdate(
+        savedSong._id,
+        { $set: enrichedFields },
+        { new: true }
+      );
+
+      return res.status(201).json(enrichedResult); // Retorna enriquecido
+    } catch (enrichmentError) {
+      console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
+      return res.status(201).json(savedSong); // fallback mínimo
     }
   } catch (error) {
     console.error('Erro ao criar música:', error);
@@ -126,8 +126,13 @@ exports.getAllSongs = async (req, res) => {
 };
 
 // Buscar música por ID (usado no GET /api/songs/:id)
-exports.getSongById = async (id) => {
-  const song = await Song.findById(id);
-  if (!song) throw new Error('Song não encontrado');
-  return song;
+exports.getSongById = async (req, res) => {
+  try {
+    const song = await Song.findById(req.params.id);
+    if (!song) return res.status(404).json({ message: 'Song não encontrado' });
+    res.status(200).json(song);
+  } catch (error) {
+    console.error('Erro ao buscar música:', error);
+    res.status(500).json({ message: 'Erro ao buscar música' });
+  }
 };

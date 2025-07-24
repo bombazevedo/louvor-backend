@@ -36,7 +36,7 @@ const getEventsWithScales = async (req, res) => {
         // Limpa scale e membros
         let cleanedScale = scale ? clean(scale) : null;
 
-        // Limpa musicLinks e popula detalhes relevantes das músicas
+        // Enriquecimento dinâmico dos musicLinks com todos os campos do Song
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
           let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
           return {
@@ -45,7 +45,13 @@ const getEventsWithScales = async (req, res) => {
             name: song?.title || m.name || '',
             artist: song?.artist || m.artist || '',
             coverUrl: song?.coverUrl || m.coverUrl || '',
-            // Remove sujidades que possam ter vindo
+            bpm: song?.bpm || null,
+            key: song?.key || null,
+            duration: song?.duration || null,
+            spotifyUrl: song?.spotifyUrl || null,
+            deezerUrl: song?.deezerUrl || null,
+            youtubeUrl: song?.youtubeUrl || null,
+            // Acrescente outros campos do Song, se existirem
             ...((song) ? {} : m)
           };
         });
@@ -84,6 +90,7 @@ const getEventById = async (req, res) => {
 
     let cleanedScale = scale ? clean(scale) : null;
 
+    // Enriquecimento dinâmico dos musicLinks com todos os campos do Song
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
       let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
       return {
@@ -92,6 +99,13 @@ const getEventById = async (req, res) => {
         name: song?.title || m.name || '',
         artist: song?.artist || m.artist || '',
         coverUrl: song?.coverUrl || m.coverUrl || '',
+        bpm: song?.bpm || null,
+        key: song?.key || null,
+        duration: song?.duration || null,
+        spotifyUrl: song?.spotifyUrl || null,
+        deezerUrl: song?.deezerUrl || null,
+        youtubeUrl: song?.youtubeUrl || null,
+        // Acrescente outros campos do Song, se existirem
         ...((song) ? {} : m)
       };
     });
