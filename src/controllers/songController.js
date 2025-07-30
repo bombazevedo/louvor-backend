@@ -24,6 +24,7 @@ exports.createSong = async (req, res) => {
 
     // 🔒 Se já existe, retorna imediatamente o Song existente (NÃO faz enrichment de novo!)
     if (existing) {
+      console.log('[SongController] Song já existente:', existing);
       return res.status(200).json(existing);
     }
 
@@ -110,7 +111,7 @@ exports.createSong = async (req, res) => {
     // 🔄 Enriquecimento cruzado (Spotify + Deezer) — apenas ADICIONADO, sem remover nada
     try {
       const enriched = await enrichSong(savedSong);
-      console.log('[🔍 Enriched Result]', enriched);
+      console.log('[SongController] [🔍 Enriched Result]', enriched);
       // Só sobrescreve campos se vierem válidos
       const enrichedFields = {};
       if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
@@ -118,7 +119,6 @@ exports.createSong = async (req, res) => {
       if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
       if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
       if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
-      // Correção: gravar spotifyUrl e deezerUrl se retornados do enrichment!
       if (enriched.spotifyUrl) enrichedFields.spotifyUrl = enriched.spotifyUrl;
       if (enriched.deezerUrl) enrichedFields.deezerUrl = enriched.deezerUrl;
 
@@ -127,6 +127,8 @@ exports.createSong = async (req, res) => {
         { $set: enrichedFields },
         { new: true }
       );
+
+      console.log('[SongController] [✅ Enrichment final salvo no Song]:', enrichedResult);
 
       return res.status(201).json(enrichedResult); // Retorna enriquecido
     } catch (enrichmentError) {
@@ -169,14 +171,16 @@ exports.updateSongEnrichment = async (req, res) => {
     const song = await Song.findById(req.params.id);
     if (!song) return res.status(404).json({ message: 'Song não encontrado' });
 
+    console.log('[SongController] Iniciando enrichment manual de metadados para Song:', song._id, song.title);
+
     const enriched = await enrichSong(song);
+    console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
     const enrichedFields = {};
     if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
     if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
     if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
     if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
     if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
-    // Correção: gravar spotifyUrl e deezerUrl se retornados do enrichment!
     if (enriched.spotifyUrl) enrichedFields.spotifyUrl = enriched.spotifyUrl;
     if (enriched.deezerUrl) enrichedFields.deezerUrl = enriched.deezerUrl;
 
@@ -185,6 +189,8 @@ exports.updateSongEnrichment = async (req, res) => {
       { $set: enrichedFields },
       { new: true }
     );
+
+    console.log('[SongController] [✅ Enrichment manual final salvo no Song]:', enrichedResult);
 
     return res.status(200).json(enrichedResult); // Retorna enriquecido atualizado
   } catch (error) {

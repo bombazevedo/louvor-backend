@@ -45,6 +45,7 @@ async function fetchKeyFromSpotify(spotifyUrl) {
       // Exemplo: key=2, mode=1 => "D" (maior), key=2, mode=0 => "Dm" (menor)
       const note = KEY_MAP[res.data.key];
       const keyName = note + (res.data.mode === 1 ? '' : 'm');
+      console.log(`[enrichment] 🎼 Key encontrada no Spotify: ${keyName} (raw=${res.data.key}, mode=${res.data.mode})`);
       return keyName;
     }
     return null;
@@ -74,6 +75,13 @@ async function fetchFromSpotify(title, artist) {
       console.warn('[Spotify] ⚠️ Nenhuma faixa encontrada.');
       return {};
     }
+    console.log('[Spotify] 🎧 Resultado do enrichment:', {
+      album: track.album?.name || null,
+      duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
+      coverUrl: track.album?.images?.[0]?.url || null,
+      spotifyUrl: track.external_urls?.spotify || null,
+      spotifyTrackId: track.id
+    });
 
     return {
       album: track.album?.name || null,
@@ -122,6 +130,7 @@ async function fetchFromDeezer(title, artist) {
 // 🔄 Enriquecimento cruzado
 async function enrichSong(song) {
   const { title, artist, spotifyUrl } = song;
+  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl });
 
   const [spotifyData, deezerData] = await Promise.all([
     fetchFromSpotify(title, artist),
@@ -134,6 +143,7 @@ async function enrichSong(song) {
   if (finalSpotifyUrl) {
     key = await fetchKeyFromSpotify(finalSpotifyUrl);
   }
+  console.log('[enrichSong] 🔍 Dados retornados:', { spotifyData, deezerData, key });
 
   return {
     bpm: deezerData.bpm || null,
