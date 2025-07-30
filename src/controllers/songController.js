@@ -3,9 +3,31 @@ const Song = require('../models/Song');
 const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
 
-// Criar nova música
+// Criar nova música (com enrich único)
 exports.createSong = async (req, res) => {
   try {
+    // 1. Busca por URL já cadastrada (YouTube, Spotify, Deezer)
+    const urls = [
+      req.body.youtubeUrl, req.body.spotifyUrl, req.body.deezerUrl
+    ].filter(Boolean);
+
+    let existing = null;
+    if (urls.length) {
+      existing = await Song.findOne({
+        $or: [
+          req.body.youtubeUrl ? { youtubeUrl: req.body.youtubeUrl } : null,
+          req.body.spotifyUrl ? { spotifyUrl: req.body.spotifyUrl } : null,
+          req.body.deezerUrl ? { deezerUrl: req.body.deezerUrl } : null
+        ].filter(q => q !== null)
+      });
+    }
+
+    // 🔒 Se já existe, retorna imediatamente o Song existente (NÃO faz enrichment de novo!)
+    if (existing) {
+      return res.status(200).json(existing);
+    }
+
+    // --- Fluxo normal: criação + enrichment
     let coverUrl = null;
     let extraData = {};
 
@@ -134,5 +156,33 @@ exports.getSongById = async (req, res) => {
   } catch (error) {
     console.error('Erro ao buscar música:', error);
     res.status(500).json({ message: 'Erro ao buscar música' });
+  }
+};
+
+// Atualizar metadados de um Song (enrichment manual, só para admins/coordenadores)
+exports.updateSongEnrichment = async (req, res) => {
+  try {
+    // (Premissa: middleware de auth já validou que o user é admin/coordenador)
+    const song = await Song.findById(req.params.id);
+    if (!song) return res.status(404).json({ message: 'Song não encontrado' });
+
+    const enriched = await enrichSong(song);
+    const enrichedFields = {};
+    if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
+    if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
+    if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
+    if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
+    if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
+
+    const enrichedResult = await Song.findByIdAndUpdate(
+      song._id,
+      { $set: enrichedFields },
+      { new: true }
+    );
+
+    return res.status(200).json(enrichedResult); // Retorna enriquecido atualizado
+  } catch (error) {
+    console.error('Erro ao atualizar metadados da música:', error);
+    res.status(500).json({ message: 'Erro ao atualizar metadados da música' });
   }
 };

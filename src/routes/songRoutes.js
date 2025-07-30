@@ -3,6 +3,9 @@ const router = express.Router();
 const songController = require('../controllers/songController');
 const { unifiedSearch, matchVersionsAcrossPlatforms } = require('../services/musicApiService');
 
+// Importe os middlewares de autenticação e autorização (ajuste o caminho conforme seu projeto)
+const { authenticate, isCoordinator } = require('../middleware/auth');
+
 router.post('/', songController.createSong);
 
 router.get('/', songController.getAllSongs);
@@ -40,15 +43,10 @@ router.post('/match', async (req, res) => {
   }
 });
 
-// ✅ NOVO endpoint GET /api/songs/:id
-router.get('/:id', async (req, res) => {
-  try {
-    const song = await songController.getSongById(req.params.id);
-    res.json(song);
-  } catch (err) {
-    console.error('Erro ao buscar Song por ID:', err.message);
-    res.status(500).json({ error: 'Erro ao buscar Song.' });
-  }
-});
+// ✅ Endpoint PATCH /api/songs/:id/enrich (protege para coordenadores/admins)
+router.patch('/:id/enrich', authenticate, isCoordinator, songController.updateSongEnrichment);
+
+// ✅ Endpoint GET /api/songs/:id (ajuste: use diretamente o controller padrão)
+router.get('/:id', songController.getSongById);
 
 module.exports = router;

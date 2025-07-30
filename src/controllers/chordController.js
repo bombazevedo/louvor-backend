@@ -8,9 +8,13 @@ const gerarSlug = (texto) =>
   texto.normalize('NFD')
        .replace(/[\u0300-\u036f]/g, '')
        .toLowerCase()
-       .replace(/[^a-z0-9\\s]/g, '')
+       .replace(/[^a-z0-9\s-]/g, '')  // 🔄 Corrigido para permitir hífen na slug
        .trim()
-       .replace(/\\s+/g, '-');
+       .replace(/\s+/g, '-');
+
+// 🔄 Função premium: monta URL direta para cifra no CifraClub
+const cifraClubUrl = (artist, name) =>
+  `https://www.cifraclub.com.br/${gerarSlug(artist)}/${gerarSlug(name)}/`;
 
 const getChord = async (req, res) => {
   try {
@@ -26,10 +30,9 @@ const getChord = async (req, res) => {
       return res.status(200).json({ source: 'internal', chord: chord.chordsText });
     }
 
-    // 🔄 Atualização: redirecionar para página de busca no CifraClub
-    const searchQuery = encodeURIComponent(`${artist} ${name}`);
-    const externalUrl = `https://www.cifraclub.com.br/?q=${searchQuery}`;
-    
+    // Agora monta o link direto para a cifra da música no CifraClub!
+    const externalUrl = cifraClubUrl(artist, name);
+
     return res.status(200).json({ source: 'external', url: externalUrl });
   } catch (error) {
     console.error('[ChordController] Erro em getChord:', error);
