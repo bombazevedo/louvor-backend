@@ -2,24 +2,32 @@
 const axios = require('axios');
 const { getValidAccessToken } = require('./src/services/spotifyTokenService');
 
-async function run() {
-  const token = await getValidAccessToken();
-  const trackId = '1EXbrQ9H2aXlttiL7Zy4fC'; // Exemplo: Evil Morty Rap
+// ID da música no Spotify para teste
+const TRACK_ID = '3n3Ppam7vgaVa1iaRUc9Lp'; // Exemplo: "Hey Ya!" - Outkast
 
+async function testAudioFeatures() {
   try {
-    const res = await axios.get(`https://api.spotify.com/v1/audio-features/${trackId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
+    const token = await getValidAccessToken();
 
-    console.log('🎧 Features da faixa:');
-    console.log('🎵 BPM:', res.data.tempo);
-    console.log('🎼 Key:', res.data.key);
-    console.log('🎹 Mode:', res.data.mode);
+    const response = await axios.get(
+      `https://api.spotify.com/v1/audio-features/${TRACK_ID}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+
+    const { tempo, key, mode, danceability, energy } = response.data;
+    console.log('🎧 Dados retornados pela API do Spotify:');
+    console.log(`- BPM: ${tempo}`);
+    console.log(`- Key: ${key}`);
+    console.log(`- Mode: ${mode}`);
+    console.log(`- Danceability: ${danceability}`);
+    console.log(`- Energy: ${energy}`);
   } catch (err) {
     console.error('❌ Erro ao buscar audio-features:', err.response?.data || err.message);
   }
 }
 
-run();
+testAudioFeatures();
