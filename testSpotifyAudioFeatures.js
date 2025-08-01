@@ -2,32 +2,40 @@
 const axios = require('axios');
 const { getValidAccessToken } = require('./src/services/spotifyTokenService');
 
-// ID da música no Spotify para teste
-const TRACK_ID = '3n3Ppam7vgaVa1iaRUc9Lp'; // Exemplo: "Hey Ya!" - Outkast
-
-async function testAudioFeatures() {
+async function testAudioFeatures(trackId) {
   try {
-    const token = await getValidAccessToken();
+    const accessToken = await getValidAccessToken();
+    console.log('🔐 Token OK! Fazendo requisição para audio-features...');
 
-    const response = await axios.get(
-      `https://api.spotify.com/v1/audio-features/${TRACK_ID}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+    const response = await axios.get(`https://api.spotify.com/v1/audio-features/${trackId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
       }
-    );
+    });
 
-    const { tempo, key, mode, danceability, energy } = response.data;
-    console.log('🎧 Dados retornados pela API do Spotify:');
-    console.log(`- BPM: ${tempo}`);
-    console.log(`- Key: ${key}`);
-    console.log(`- Mode: ${mode}`);
-    console.log(`- Danceability: ${danceability}`);
-    console.log(`- Energy: ${energy}`);
-  } catch (err) {
-    console.error('❌ Erro ao buscar audio-features:', err.response?.data || err.message);
+    const features = response.data;
+    console.log('\n🎵 [RESULTADO SPOTIFY AUDIO FEATURES]');
+    console.log(`🎧 Track ID: ${trackId}`);
+    console.log(`🎼 BPM: ${features.tempo}`);
+    console.log(`🎹 Key (Tonalidade): ${features.key}`);
+    console.log(`🔁 Mode (0 = menor, 1 = maior): ${features.mode}`);
+    console.log(`🎚️ Energy: ${features.energy}`);
+    console.log(`🎛️ Danceability: ${features.danceability}`);
+    console.log(`🎵 Acousticness: ${features.acousticness}`);
+    console.log(`🎶 Instrumentalness: ${features.instrumentalness}`);
+    console.log(`🔊 Loudness: ${features.loudness}`);
+    console.log(`🕒 Duration (ms): ${features.duration_ms}`);
+  } catch (error) {
+    console.error('\n❌ Erro ao buscar audio-features:');
+    if (error.response) {
+      console.error('📡 Status:', error.response.status);
+      console.error('🧾 Data:', error.response.data);
+    } else {
+      console.error(error.message);
+    }
   }
 }
 
-testAudioFeatures();
+// ID da música "Oceans" (Hillsong United)
+const trackId = '5SDcksP8En1l6RtTY1wzHc';
+testAudioFeatures(trackId);
