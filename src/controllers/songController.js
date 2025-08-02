@@ -124,8 +124,12 @@ exports.createSong = async (req, res) => {
       if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
       if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
       if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
-      if (enriched.spotifyUrl) enrichedFields.spotifyUrl = enriched.spotifyUrl;
-      if (enriched.deezerUrl) enrichedFields.deezerUrl = enriched.deezerUrl;
+      if (typeof enriched.spotifyUrl === 'string' && enriched.spotifyUrl.trim()) {
+        enrichedFields.spotifyUrl = enriched.spotifyUrl;
+      }
+      if (typeof enriched.deezerUrl === 'string' && enriched.deezerUrl.trim()) {
+        enrichedFields.deezerUrl = enriched.deezerUrl;
+      }
 
       const enrichedResult = await Song.findByIdAndUpdate(
         savedSong._id,
@@ -185,8 +189,12 @@ exports.updateSongEnrichment = async (req, res) => {
     if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
     if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
     if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
-    if (enriched.spotifyUrl) enrichedFields.spotifyUrl = enriched.spotifyUrl;
-    if (enriched.deezerUrl) enrichedFields.deezerUrl = enriched.deezerUrl;
+    if (typeof enriched.spotifyUrl === 'string' && enriched.spotifyUrl.trim()) {
+      enrichedFields.spotifyUrl = enriched.spotifyUrl;
+    }
+    if (typeof enriched.deezerUrl === 'string' && enriched.deezerUrl.trim()) {
+      enrichedFields.deezerUrl = enriched.deezerUrl;
+    }
 
     const enrichedResult = await Song.findByIdAndUpdate(
       song._id,
