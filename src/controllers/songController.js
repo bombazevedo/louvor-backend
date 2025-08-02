@@ -100,8 +100,14 @@ exports.createSong = async (req, res) => {
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
+    // 🔒 Proteção contra campos vazios sobrescrevendo enrichment posterior
+    const cleanBody = { ...req.body };
+    if (cleanBody.deezerUrl === '') delete cleanBody.deezerUrl;
+    if (cleanBody.spotifyUrl === '') delete cleanBody.spotifyUrl;
+    if (cleanBody.youtubeUrl === '') delete cleanBody.youtubeUrl;
+
     const newSong = new Song({
-      ...req.body,
+      ...cleanBody,
       coverUrl,
       ...extraData
     });
@@ -112,7 +118,6 @@ exports.createSong = async (req, res) => {
     try {
       const enriched = await enrichSong(savedSong);
       console.log('[SongController] [🔍 Enriched Result]', enriched);
-      // Só sobrescreve campos se vierem válidos
       const enrichedFields = {};
       if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
       if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
@@ -129,11 +134,10 @@ exports.createSong = async (req, res) => {
       );
 
       console.log('[SongController] [✅ Enrichment final salvo no Song]:', enrichedResult);
-
-      return res.status(201).json(enrichedResult); // Retorna enriquecido
+      return res.status(201).json(enrichedResult);
     } catch (enrichmentError) {
       console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
-      return res.status(201).json(savedSong); // fallback mínimo
+      return res.status(201).json(savedSong);
     }
   } catch (error) {
     console.error('Erro ao criar música:', error);
@@ -152,7 +156,7 @@ exports.getAllSongs = async (req, res) => {
   }
 };
 
-// Buscar música por ID (usado no GET /api/songs/:id)
+// Buscar música por ID
 exports.getSongById = async (req, res) => {
   try {
     const song = await Song.findById(req.params.id);
@@ -164,10 +168,9 @@ exports.getSongById = async (req, res) => {
   }
 };
 
-// Atualizar metadados de um Song (enrichment manual, só para admins/coordenadores)
+// Atualizar metadados manualmente
 exports.updateSongEnrichment = async (req, res) => {
   try {
-    // (Premissa: middleware de auth já validou que o user é admin/coordenador)
     const song = await Song.findById(req.params.id);
     if (!song) return res.status(404).json({ message: 'Song não encontrado' });
 
@@ -175,6 +178,7 @@ exports.updateSongEnrichment = async (req, res) => {
 
     const enriched = await enrichSong(song);
     console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
+
     const enrichedFields = {};
     if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
     if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
@@ -191,8 +195,7 @@ exports.updateSongEnrichment = async (req, res) => {
     );
 
     console.log('[SongController] [✅ Enrichment manual final salvo no Song]:', enrichedResult);
-
-    return res.status(200).json(enrichedResult); // Retorna enriquecido atualizado
+    return res.status(200).json(enrichedResult);
   } catch (error) {
     console.error('Erro ao atualizar metadados da música:', error);
     res.status(500).json({ message: 'Erro ao atualizar metadados da música' });
