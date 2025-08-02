@@ -38,9 +38,11 @@ async function fetchKeyFromSpotify(spotifyUrl) {
     const id = match[1];
     const token = await getSpotifyToken();
     if (!token) return null;
+
     const res = await axios.get(`https://api.spotify.com/v1/audio-features/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
+
     if (res.data && typeof res.data.key === 'number' && typeof res.data.mode === 'number') {
       const note = KEY_MAP[res.data.key];
       const keyName = note + (res.data.mode === 1 ? '' : 'm');
@@ -72,6 +74,7 @@ async function fetchFromSpotify(title, artist) {
       console.warn('[Spotify] ⚠️ Nenhuma faixa encontrada.');
       return {};
     }
+
     console.log('[Spotify] 🎧 Resultado do enrichment:', {
       album: track.album?.name || null,
       duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
@@ -126,7 +129,7 @@ async function fetchFromDeezer(title, artist) {
 
 // 🔄 Enriquecimento cruzado
 async function enrichSong(song) {
-  const { title, artist, spotifyUrl, deezerUrl } = song;
+  const { title, artist, spotifyUrl, deezerUrl, coverUrl } = song;
   console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl });
 
   const [spotifyData, deezerData] = await Promise.all([
@@ -135,7 +138,7 @@ async function enrichSong(song) {
   ]);
 
   let key = null;
-  let finalSpotifyUrl = spotifyUrl || spotifyData.spotifyUrl || null;
+  const finalSpotifyUrl = spotifyUrl || spotifyData.spotifyUrl || null;
   if (finalSpotifyUrl) {
     key = await fetchKeyFromSpotify(finalSpotifyUrl);
   }
@@ -147,10 +150,9 @@ async function enrichSong(song) {
     key: key || null,
     duration: spotifyData.duration || deezerData.duration || null,
     album: spotifyData.album || deezerData.album || null,
-    coverUrl: spotifyData.coverUrl || deezerData.coverUrl || song.coverUrl,
+    coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
     spotifyUrl: finalSpotifyUrl,
-    // ✅ Aqui está o ajuste preventivo blindado para deezerUrl:
-    deezerUrl: deezerData.deezerUrl || (deezerUrl && deezerUrl !== '' ? deezerUrl : null)
+    deezerUrl: deezerData.deezerUrl || (deezerUrl !== undefined ? deezerUrl : null)
   };
 }
 
