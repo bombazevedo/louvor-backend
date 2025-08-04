@@ -1,7 +1,17 @@
 // src/services/musicEnrichmentService.js
 const axios = require('axios');
 
-// 🔐 Gera token dinâmico do Spotify
+const KEY_MAP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+function normalize(text = '') {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 async function getSpotifyToken() {
   try {
     const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -24,17 +34,6 @@ async function getSpotifyToken() {
     console.error('[Spotify Token] ❌ Erro ao obter token:', error?.response?.data || error.message);
     return null;
   }
-}
-
-const KEY_MAP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-function normalize(text = '') {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
 }
 
 async function fetchKeyFromSpotify(spotifyUrl) {
@@ -69,8 +68,6 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
     if (!token) return {};
 
     let track;
-
-    // 👉 Usa ID direto, se fornecido
     const idFromUrl = spotifyUrl?.match(/track\/([a-zA-Z0-9]+)/)?.[1];
     const id = platformId || idFromUrl;
     if (id) {
@@ -80,7 +77,7 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
       track = detailRes.data;
     }
 
-    if (!track) {
+    if (!track && title && artist) {
       const query = encodeURIComponent(`${title} ${artist}`);
       const searchUrl = `https://api.spotify.com/v1/search?q=${query}&type=track&limit=1`;
 
@@ -107,7 +104,9 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
       duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
       coverUrl: track.album?.images?.[0]?.url || null,
       spotifyUrl: track.external_urls?.spotify || null,
-      spotifyTrackId: track.id
+      spotifyTrackId: track.id,
+      title: track.name || null,
+      artist: track.artists?.[0]?.name || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Spotify erro:', error?.response?.data || error.message);
@@ -118,7 +117,6 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
 async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = null) {
   try {
     let track;
-
     const idFromUrl = deezerUrl?.match(/track\/(\d+)/)?.[1];
     const id = platformId || idFromUrl;
     if (id) {
@@ -126,7 +124,7 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
       track = detailRes.data;
     }
 
-    if (!track) {
+    if (!track && title && artist) {
       const query = encodeURIComponent(`${title} ${artist}`);
       const searchUrl = `https://api.deezer.com/search?q=${query}&limit=1`;
 
@@ -167,21 +165,38 @@ async function enrichSong(song) {
     deezerUrl,
     coverUrl,
     spotifyTrackId,
-    deezerTrackId
+    deezerTrackId,
+    platform,
+    id
   } = song;
 
-  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl, deezerUrl });
+  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl, deezerUrl, platform, id });
 
-  const [spotifyData, deezerData] = await Promise.all([
-    fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId),
-    fetchFromDeezer(title, artist, deezerUrl, deezerTrackId)
-  ]);
+  let referenceData = {};
+  let spotifyData = {};
+  let deezerData = {};
 
-  let key = null;
-  const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
-  if (finalSpotifyUrl) {
-    key = await fetchKeyFromSpotify(finalSpotifyUrl);
+  // Etapa 1: Pega referência da plataforma original
+  if (platform === 'spotify' && id) {
+    referenceData = await fetchFromSpotify(null, null, null, id);
+  } else if (platform === 'deezer' && id) {
+    deezerData = await fetchFromDeezer(null, null, null, id);
+    referenceData.title = deezerData?.title || song.title;
+    referenceData.artist = deezerData?.artist || song.artist;
+  } else {
+    referenceData = { title, artist };
   }
+
+  // Etapa 2: Buscar nas plataformas cruzadas usando a referência
+  if (!spotifyData.spotifyUrl) {
+    spotifyData = await fetchFromSpotify(referenceData.title, referenceData.artist);
+  }
+  if (!deezerData.deezerUrl) {
+    deezerData = await fetchFromDeezer(referenceData.title, referenceData.artist);
+  }
+
+  const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
+  const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
   console.log('[enrichSong] 🔍 Dados retornados:', { spotifyData, deezerData, key });
 
