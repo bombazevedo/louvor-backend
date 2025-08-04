@@ -22,13 +22,12 @@ exports.createSong = async (req, res) => {
       });
     }
 
-    // 🔒 Se já existe, retorna imediatamente o Song existente (NÃO faz enrichment de novo!)
+    // 🔒 Se já existe, retorna imediatamente o Song existente
     if (existing) {
       console.log('[SongController] Song já existente:', existing);
       return res.status(200).json(existing);
     }
 
-    // --- Fluxo normal: criação + enrichment
     let coverUrl = null;
     let extraData = {};
 
@@ -43,14 +42,13 @@ exports.createSong = async (req, res) => {
     }
 
     // Deezer
-    else if (req.body.deezerUrl) {
-      const deezerMatch = req.body.deezerUrl.match(/track\/(\d+)/);
-      if (deezerMatch) {
-        const trackId = deezerMatch[1];
+    else if (req.body.deezerUrl || req.body.deezerTrackId) {
+      const deezerId = req.body.deezerTrackId || (req.body.deezerUrl?.match(/track\/(\d+)/)?.[1]);
+      if (deezerId) {
         try {
-          const deezerRes = await axios.get(`https://api.deezer.com/track/${trackId}`);
+          const deezerRes = await axios.get(`https://api.deezer.com/track/${deezerId}`);
           if (deezerRes.data) {
-            if (deezerRes.data.album && deezerRes.data.album.cover_medium) {
+            if (deezerRes.data.album?.cover_medium) {
               coverUrl = deezerRes.data.album.cover_medium;
             }
             extraData = {
@@ -58,6 +56,8 @@ exports.createSong = async (req, res) => {
               duration: deezerRes.data.duration,
               title: deezerRes.data.title || 'Sem título',
               artist: deezerRes.data.artist?.name || 'Desconhecido',
+              deezerUrl: deezerRes.data.link,
+              deezerTrackId: deezerRes.data.id
             };
           }
         } catch (err) {
@@ -69,38 +69,56 @@ exports.createSong = async (req, res) => {
     }
 
     // Spotify
-    else if (req.body.spotifyUrl) {
-      try {
-        const spotifyRes = await axios.get(`https://open.spotify.com/oembed?url=${req.body.spotifyUrl}`);
-        if (spotifyRes.data && spotifyRes.data.thumbnail_url) {
-          coverUrl = spotifyRes.data.thumbnail_url;
+    else if (req.body.spotifyUrl || req.body.spotifyTrackId) {
+      const spotifyId = req.body.spotifyTrackId || (req.body.spotifyUrl?.match(/track\/([a-zA-Z0-9]+)/)?.[1]);
+      if (spotifyId) {
+        try {
+          const tokenRes = await axios.post(
+            'https://accounts.spotify.com/api/token',
+            'grant_type=client_credentials',
+            {
+              headers: {
+                Authorization: `Basic ${Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64')}`,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+            }
+          );
+
+          const token = tokenRes.data.access_token;
+
+          const trackRes = await axios.get(`https://api.spotify.com/v1/tracks/${spotifyId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          const track = trackRes.data;
+
+          coverUrl = track.album?.images?.[0]?.url || null;
           extraData = {
-            title: spotifyRes.data.title || 'Sem título',
-            artist: spotifyRes.data.author_name || 'Desconhecido',
+            title: track.name || 'Sem título',
+            artist: track.artists?.[0]?.name || 'Desconhecido',
+            duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
+            spotifyUrl: track.external_urls?.spotify,
+            spotifyTrackId: track.id
           };
-        } else {
+        } catch (err) {
+          console.error('Erro ao buscar dados no Spotify:', err.response?.data || err.message);
           extraData.title = 'Sem título';
           extraData.artist = 'Desconhecido';
         }
-      } catch (err) {
-        console.error('Erro ao buscar dados no Spotify:', err.response?.data || err.message);
-        extraData.title = 'Sem título';
-        extraData.artist = 'Desconhecido';
       }
     }
 
-    // Caso já venha pronto (ex: Spotify já salvo)
+    // Caso venha pronto
     else if (req.body.coverUrl) {
       coverUrl = req.body.coverUrl;
       extraData.title = req.body.title || 'Sem título';
       extraData.artist = req.body.artist || 'Desconhecido';
     }
 
-    // Segurança final
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
-    // 🔒 Proteção contra campos vazios sobrescrevendo enrichment posterior
+    // Limpeza final
     const cleanBody = { ...req.body };
     if (cleanBody.deezerUrl === '') delete cleanBody.deezerUrl;
     if (cleanBody.spotifyUrl === '') delete cleanBody.spotifyUrl;
@@ -114,10 +132,11 @@ exports.createSong = async (req, res) => {
 
     const savedSong = await newSong.save();
 
-    // 🔄 Enriquecimento cruzado (Spotify + Deezer) — apenas ADICIONADO, sem remover nada
+    // Enriquecimento cruzado
     try {
       const enriched = await enrichSong(savedSong);
       console.log('[SongController] [🔍 Enriched Result]', enriched);
+
       const enrichedFields = {};
       if (enriched.bpm !== undefined && enriched.bpm !== null) enrichedFields.bpm = enriched.bpm;
       if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
@@ -178,8 +197,7 @@ exports.updateSongEnrichment = async (req, res) => {
     const song = await Song.findById(req.params.id);
     if (!song) return res.status(404).json({ message: 'Song não encontrado' });
 
-    console.log('[SongController] Iniciando enrichment manual de metadados para Song:', song._id, song.title);
-
+    console.log('[SongController] Iniciando enrichment manual:', song._id, song.title);
     const enriched = await enrichSong(song);
     console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
 
@@ -202,7 +220,7 @@ exports.updateSongEnrichment = async (req, res) => {
       { new: true }
     );
 
-    console.log('[SongController] [✅ Enrichment manual final salvo no Song]:', enrichedResult);
+    console.log('[SongController] [✅ Enrichment manual salvo no Song]:', enrichedResult);
     return res.status(200).json(enrichedResult);
   } catch (error) {
     console.error('Erro ao atualizar metadados da música:', error);

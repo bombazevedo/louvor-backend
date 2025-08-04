@@ -26,7 +26,6 @@ async function getSpotifyToken() {
   }
 }
 
-// 🎼 Mapeamento do número para nota musical
 const KEY_MAP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
 function normalize(text = '') {
@@ -38,7 +37,6 @@ function normalize(text = '') {
     .trim();
 }
 
-// 🔑 Busca a tonalidade (key) via Spotify Audio Features
 async function fetchKeyFromSpotify(spotifyUrl) {
   try {
     if (!spotifyUrl) return null;
@@ -55,7 +53,7 @@ async function fetchKeyFromSpotify(spotifyUrl) {
     if (res.data && typeof res.data.key === 'number' && typeof res.data.mode === 'number') {
       const note = KEY_MAP[res.data.key];
       const keyName = note + (res.data.mode === 1 ? '' : 'm');
-      console.log(`[enrichment] 🎼 Key encontrada no Spotify: ${keyName} (raw=${res.data.key}, mode=${res.data.mode})`);
+      console.log(`[enrichment] 🎼 Key encontrada no Spotify: ${keyName}`);
       return keyName;
     }
     return null;
@@ -65,22 +63,21 @@ async function fetchKeyFromSpotify(spotifyUrl) {
   }
 }
 
-// 🎧 Spotify → album, duration, coverUrl
-async function fetchFromSpotify(title, artist, spotifyUrl = null) {
+async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = null) {
   try {
     const token = await getSpotifyToken();
     if (!token) return {};
 
     let track;
-    if (spotifyUrl) {
-      const match = spotifyUrl.match(/track\/([a-zA-Z0-9]+)/);
-      if (match) {
-        const id = match[1];
-        const detailRes = await axios.get(`https://api.spotify.com/v1/tracks/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        track = detailRes.data;
-      }
+
+    // 👉 Usa ID direto, se fornecido
+    const idFromUrl = spotifyUrl?.match(/track\/([a-zA-Z0-9]+)/)?.[1];
+    const id = platformId || idFromUrl;
+    if (id) {
+      const detailRes = await axios.get(`https://api.spotify.com/v1/tracks/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      track = detailRes.data;
     }
 
     if (!track) {
@@ -118,18 +115,15 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null) {
   }
 }
 
-// 🎧 Deezer → bpm, album, duration, coverUrl
-async function fetchFromDeezer(title, artist, deezerUrl = null) {
+async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = null) {
   try {
     let track;
 
-    if (deezerUrl) {
-      const match = deezerUrl.match(/track\/(\d+)/);
-      if (match) {
-        const id = match[1];
-        const detailRes = await axios.get(`https://api.deezer.com/track/${id}`);
-        track = detailRes.data;
-      }
+    const idFromUrl = deezerUrl?.match(/track\/(\d+)/)?.[1];
+    const id = platformId || idFromUrl;
+    if (id) {
+      const detailRes = await axios.get(`https://api.deezer.com/track/${id}`);
+      track = detailRes.data;
     }
 
     if (!track) {
@@ -165,18 +159,26 @@ async function fetchFromDeezer(title, artist, deezerUrl = null) {
   }
 }
 
-// 🔄 Enriquecimento cruzado
 async function enrichSong(song) {
-  const { title, artist, spotifyUrl, deezerUrl, coverUrl } = song;
-  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl });
+  const {
+    title,
+    artist,
+    spotifyUrl,
+    deezerUrl,
+    coverUrl,
+    spotifyTrackId,
+    deezerTrackId
+  } = song;
+
+  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl, deezerUrl });
 
   const [spotifyData, deezerData] = await Promise.all([
-    fetchFromSpotify(title, artist, spotifyUrl),
-    fetchFromDeezer(title, artist, deezerUrl),
+    fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId),
+    fetchFromDeezer(title, artist, deezerUrl, deezerTrackId)
   ]);
 
   let key = null;
-  const finalSpotifyUrl = spotifyUrl || spotifyData.spotifyUrl || null;
+  const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   if (finalSpotifyUrl) {
     key = await fetchKeyFromSpotify(finalSpotifyUrl);
   }
