@@ -1,4 +1,3 @@
-// src/controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
@@ -134,7 +133,12 @@ exports.createSong = async (req, res) => {
 
     // Enriquecimento cruzado
     try {
-      const enriched = await enrichSong(savedSong);
+      const enriched = await enrichSong({
+        ...savedSong.toObject(),
+        platform: req.body.platform || null,
+        id: req.body.id || null
+      });
+
       console.log('[SongController] [🔍 Enriched Result]', enriched);
 
       const enrichedFields = {};

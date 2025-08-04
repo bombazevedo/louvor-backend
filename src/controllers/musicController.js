@@ -78,7 +78,9 @@ exports.createSong = async (req, res) => {
       coverUrl,
       album,
       spotifyUrl,
-      deezerUrl
+      deezerUrl,
+      platform,
+      id
     } = req.body;
 
     if (!title || !artist) {
@@ -90,7 +92,9 @@ exports.createSong = async (req, res) => {
       artist,
       spotifyUrl,
       deezerUrl,
-      coverUrl
+      coverUrl,
+      platform,
+      id
     });
 
     const newSong = new Song({

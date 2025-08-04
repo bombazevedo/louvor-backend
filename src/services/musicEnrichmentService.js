@@ -149,7 +149,9 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
       duration: track.duration || null,
       album: track.album?.title || null,
       coverUrl: track.album?.cover_medium || null,
-      deezerUrl: track.link || null
+      deezerUrl: track.link || null,
+      title: track.title || null,
+      artist: track.artist?.name || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Deezer erro:', error?.response?.data || error.message);
@@ -176,18 +178,16 @@ async function enrichSong(song) {
   let spotifyData = {};
   let deezerData = {};
 
-  // Etapa 1: Pega referência da plataforma original
   if (platform === 'spotify' && id) {
     referenceData = await fetchFromSpotify(null, null, null, id);
   } else if (platform === 'deezer' && id) {
     deezerData = await fetchFromDeezer(null, null, null, id);
-    referenceData.title = deezerData?.title || song.title;
-    referenceData.artist = deezerData?.artist || song.artist;
+    referenceData.title = deezerData?.title || title;
+    referenceData.artist = deezerData?.artist || artist;
   } else {
     referenceData = { title, artist };
   }
 
-  // Etapa 2: Buscar nas plataformas cruzadas usando a referência
   if (!spotifyData.spotifyUrl) {
     spotifyData = await fetchFromSpotify(referenceData.title, referenceData.artist);
   }
