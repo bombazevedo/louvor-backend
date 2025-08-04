@@ -1,6 +1,6 @@
-// utils/normalizeMusicMeta.js
+// backend/src/utils/normalizeMusicMeta.js
 
-export function normalizeTitle(title = '') {
+function normalizeTitle(title = '') {
   return title
     .normalize('NFD')                                // Remove acentos
     .replace(/[\u0300-\u036f]/g, '')
@@ -16,7 +16,7 @@ export function normalizeTitle(title = '') {
     .trim();
 }
 
-export function normalizeArtist(artist = '') {
+function normalizeArtist(artist = '') {
   return artist
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -29,3 +29,8 @@ export function normalizeArtist(artist = '') {
     .replace(/\s+/g, ' ')                            // Remove múltiplos espaços
     .trim();
 }
+
+module.exports = {
+  normalizeTitle,
+  normalizeArtist,
+};
