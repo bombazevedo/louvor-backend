@@ -3,10 +3,7 @@ const axios = require('axios');
 
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-
-// ✅ Agora só uma chave YouTube
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
-console.log('[musicApiService] 🟢 process.env.YOUTUBE_API_KEY:', YOUTUBE_API_KEY);
 
 let spotifyToken = null;
 let tokenExpiresAt = 0;
@@ -39,21 +36,17 @@ const getSpotifyToken = async () => {
   }
 };
 
-// ✅ Busca YouTube com UMA chave
+const normalize = (text = '') =>
+  text.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
 const searchYouTube = async (query) => {
   try {
-    // 🟢 LOG: Query recebida
-    console.log('[musicApiService] 🔍 searchYouTube query:', query);
-
     const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${YOUTUBE_API_KEY}`;
-    
-    // 🟢 LOG: URL final usada
-    console.log('[musicApiService] 🌐 YouTube API URL:', url);
-
     const res = await axios.get(url);
-
-    // 🟢 LOG: Retorno bruto
-    console.log('[musicApiService] ✅ YouTube API response:', JSON.stringify(res.data, null, 2));
 
     return res.data.items
       .filter(item => item.id?.videoId)
@@ -65,11 +58,8 @@ const searchYouTube = async (query) => {
         thumbnail: item.snippet.thumbnails?.medium?.url || ''
       }));
   } catch (err) {
-    // 🟢 LOG: Erro detalhado
-    console.error(
-      '[musicApiService] ❌ Erro ao buscar no YouTube:',
-      err.response ? JSON.stringify(err.response.data, null, 2) : err.message
-    );
+    console.error('[musicApiService] ❌ Erro ao buscar no YouTube:',
+      err.response ? JSON.stringify(err.response.data, null, 2) : err.message);
     return [];
   }
 };
@@ -117,23 +107,12 @@ const searchSpotify = async (query) => {
 
 const unifiedSearch = async (query) => {
   try {
-    console.log('[musicApiService] 🟢 unifiedSearch INICIADA com query:', query);
-
-const promises = [
-  searchYouTube(query),
-  searchDeezer(query),
-  searchSpotify(query),
-];
-
-console.log('[musicApiService] 🟢 Promises criadas:', promises.map(p => typeof p));
-
-const [yt, dz, sp] = await Promise.all(promises);
-
-console.log('[musicApiService] 🟢 Resultado YouTube:', yt);
-console.log('[musicApiService] 🟢 Resultado Deezer:', dz);
-console.log('[musicApiService] 🟢 Resultado Spotify:', sp);
-
-return [...yt, ...dz, ...sp];
+    const [yt, dz, sp] = await Promise.all([
+      searchYouTube(query),
+      searchDeezer(query),
+      searchSpotify(query),
+    ]);
+    return [...yt, ...dz, ...sp];
   } catch (err) {
     console.error('❌ unifiedSearch falhou:', err.message);
     return [];
@@ -144,13 +123,25 @@ const matchVersionsAcrossPlatforms = async ({ name, artist, platform, url }) => 
   const query = `${name} ${artist}`;
   const results = await unifiedSearch(query);
 
-  const isSameVersion = (a, b) =>
-    a.name.toLowerCase().includes(b.name.toLowerCase()) &&
-    a.artist.toLowerCase().includes(b.artist.toLowerCase());
+  const nameNorm = normalize(name);
+  const artistNorm = normalize(artist);
+  const urlBase = url?.split('?')[0]?.trim() || '';
 
-  const filtered = results.filter(
-    (r) => r.platform !== platform && isSameVersion(r, { name, artist })
-  );
+  const isSameVersion = (a) => {
+    const normName = normalize(a.name);
+    const normArtist = normalize(a.artist);
+    return (
+      (normName.includes(nameNorm) || nameNorm.includes(normName)) &&
+      (normArtist.includes(artistNorm) || artistNorm.includes(normArtist))
+    );
+  };
+
+  const filtered = results.filter(r => {
+    const resultUrl = r.url?.split('?')[0]?.trim() || '';
+    return r.platform !== platform &&
+           isSameVersion(r) &&
+           resultUrl !== urlBase;
+  });
 
   return {
     name,
