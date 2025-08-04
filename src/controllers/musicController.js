@@ -1,5 +1,3 @@
-// backend/controllers/musicController.js
-
 const {
   searchSpotify,
   searchYouTube,
@@ -7,8 +5,10 @@ const {
   matchVersionsAcrossPlatforms,
 } = require('../services/musicApiService');
 
-const SearchCache = require('../models/SearchCache'); // Importa o modelo do cache
-const SearchHistory = require('../models/SearchHistory'); // Importa o modelo do histórico de buscas
+const { enrichSong } = require('../services/musicEnrichmentService');
+const Song = require('../models/Song');
+const SearchCache = require('../models/SearchCache');
+const SearchHistory = require('../models/SearchHistory');
 
 // 🔍 Busca em plataforma única
 exports.searchPlatform = async (req, res) => {
@@ -34,7 +34,7 @@ exports.searchPlatform = async (req, res) => {
   }
 };
 
-// 🎯 Match direto de versões similares (usado internamente)
+// 🎯 Match direto de versões similares
 exports.matchVersions = async (req, res) => {
   try {
     const result = await matchVersionsAcrossPlatforms(req.body);
@@ -45,7 +45,7 @@ exports.matchVersions = async (req, res) => {
   }
 };
 
-// 🔥 Rota principal usada pelo frontend para sugerir versões alternativas
+// 🔥 Usado para sugerir versões alternativas no frontend
 exports.searchVersions = async (req, res) => {
   const { title, artist, excludePlatform, url } = req.body;
 
@@ -68,7 +68,53 @@ exports.searchVersions = async (req, res) => {
   }
 };
 
-// 🚀 Nova rota principal com cache e enriquecimento completo
+// 🚀 Enriquecimento + criação definitiva da música
+exports.createSong = async (req, res) => {
+  try {
+    const {
+      title,
+      artist,
+      youtubeUrl,
+      coverUrl,
+      album,
+      spotifyUrl,
+      deezerUrl
+    } = req.body;
+
+    if (!title || !artist) {
+      return res.status(400).json({ error: 'Campos obrigatórios ausentes.' });
+    }
+
+    const enrichment = await enrichSong({
+      title,
+      artist,
+      spotifyUrl,
+      deezerUrl,
+      coverUrl
+    });
+
+    const newSong = new Song({
+      title,
+      artist,
+      youtubeUrl: youtubeUrl || null,
+      coverUrl: enrichment.coverUrl || coverUrl || null,
+      album: enrichment.album || album || '',
+      bpm: enrichment.bpm || null,
+      duration: enrichment.duration || null,
+      key: enrichment.key || null,
+      spotifyUrl: enrichment.spotifyUrl || spotifyUrl || null,
+      deezerUrl: enrichment.deezerUrl || deezerUrl || null
+    });
+
+    await newSong.save();
+    res.status(201).json(newSong);
+  } catch (err) {
+    console.error('❌ Erro ao criar música:', err.message);
+    res.status(500).json({ error: 'Erro ao salvar música' });
+  }
+};
+
+// 🟢 Busca com cache e enriquecimento cruzado
 exports.searchMusic = async (req, res) => {
   let { query } = req.body;
 
@@ -76,7 +122,6 @@ exports.searchMusic = async (req, res) => {
     return res.status(400).json({ error: 'Campo "query" obrigatório.' });
   }
 
-  // ✅ Normaliza query para string mesmo se vier objeto { name, artist }
   if (typeof query === 'object' && query !== null) {
     const name = query.name || '';
     const artist = query.artist || '';
@@ -89,42 +134,25 @@ exports.searchMusic = async (req, res) => {
 
   try {
     const normalizedQuery = query.trim().toLowerCase();
-
-    console.log('[musicController] 🟢 Query normalizada:', normalizedQuery);
-
-    // Verifica cache
     const cached = await SearchCache.findOne({ query: normalizedQuery });
 
-    console.log('[musicController] 🟢 Cache encontrado:', cached);
-
     if (cached && cached.updatedAt > Date.now() - 24 * 60 * 60 * 1000) {
-      console.log('[musicController] 🟢 Retornando cache existente.');
       return res.json(cached.results);
     }
 
-    console.log('[musicController] 🟢 Executando Promise.all para busca externa.');
-
-    // Busca nas APIs externas
     const [ytResults, spResults, dzResults] = await Promise.all([
       searchYouTube(normalizedQuery),
       searchSpotify(normalizedQuery),
       searchDeezer(normalizedQuery),
     ]);
 
-    console.log('[musicController] 🟢 Resultado YouTube:', ytResults);
-    console.log('[musicController] 🟢 Resultado Spotify:', spResults);
-    console.log('[musicController] 🟢 Resultado Deezer:', dzResults);
-
     const allResults = [...ytResults, ...spResults, ...dzResults];
 
-    // Salva no cache
     await SearchCache.findOneAndUpdate(
       { query: normalizedQuery },
       { results: allResults, updatedAt: new Date() },
       { upsert: true }
     );
-
-    console.log('[musicController] 🟢 Resultados salvos no cache.');
 
     res.json(allResults);
   } catch (err) {
@@ -133,7 +161,7 @@ exports.searchMusic = async (req, res) => {
   }
 };
 
-// 🟢 Nova rota: Retorna histórico de buscas do usuário
+// 🔁 Histórico do usuário: GET
 exports.getUserSearchHistory = async (req, res) => {
   try {
     const history = await SearchHistory.find({ userId: req.user.id })
@@ -147,7 +175,7 @@ exports.getUserSearchHistory = async (req, res) => {
   }
 };
 
-// 🟢 Nova rota: Salva termo buscado pelo usuário
+// 🔁 Histórico do usuário: POST
 exports.saveUserSearchTerm = async (req, res) => {
   const { term } = req.body;
 
