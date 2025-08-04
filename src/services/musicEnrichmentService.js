@@ -1,5 +1,6 @@
 // src/services/musicEnrichmentService.js
 const axios = require('axios');
+const { normalizeTitle, normalizeArtist } = require('../utils/normalizeMusicMeta');
 
 const KEY_MAP = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -78,7 +79,10 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
     }
 
     if (!track && title && artist) {
-      const query = encodeURIComponent(`${title} ${artist}`);
+      const titleNormInput = normalizeTitle(title);
+      const artistNormInput = normalizeArtist(artist);
+
+      const query = encodeURIComponent(`${titleNormInput} ${artistNormInput}`);
       const searchUrl = `https://api.spotify.com/v1/search?q=${query}&type=track&limit=1`;
 
       const searchRes = await axios.get(searchUrl, {
@@ -88,13 +92,11 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
       const candidate = searchRes.data.tracks?.items?.[0];
       if (!candidate) return {};
 
-      const titleNorm = normalize(title);
-      const artistNorm = normalize(artist);
       const matchTitle = normalize(candidate.name);
       const matchArtist = normalize(candidate.artists?.[0]?.name || '');
 
-      if (!matchTitle.includes(titleNorm) && !titleNorm.includes(matchTitle)) return {};
-      if (!matchArtist.includes(artistNorm) && !artistNorm.includes(matchArtist)) return {};
+      if (!matchTitle.includes(normalize(titleNormInput)) && !normalize(titleNormInput).includes(matchTitle)) return {};
+      if (!matchArtist.includes(normalize(artistNormInput)) && !normalize(artistNormInput).includes(matchArtist)) return {};
 
       track = candidate;
     }
@@ -125,7 +127,10 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
     }
 
     if (!track && title && artist) {
-      const query = encodeURIComponent(`${title} ${artist}`);
+      const titleNormInput = normalizeTitle(title);
+      const artistNormInput = normalizeArtist(artist);
+
+      const query = encodeURIComponent(`${titleNormInput} ${artistNormInput}`);
       const searchUrl = `https://api.deezer.com/search?q=${query}&limit=1`;
 
       const searchRes = await axios.get(searchUrl);
@@ -134,11 +139,9 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
 
       const matchTitle = normalize(candidate.title);
       const matchArtist = normalize(candidate.artist?.name || '');
-      const titleNorm = normalize(title);
-      const artistNorm = normalize(artist);
 
-      if (!matchTitle.includes(titleNorm) && !titleNorm.includes(matchTitle)) return {};
-      if (!matchArtist.includes(artistNorm) && !artistNorm.includes(matchArtist)) return {};
+      if (!matchTitle.includes(normalize(titleNormInput)) && !normalize(titleNormInput).includes(matchTitle)) return {};
+      if (!matchArtist.includes(normalize(artistNormInput)) && !normalize(artistNormInput).includes(matchArtist)) return {};
 
       const detailRes = await axios.get(`https://api.deezer.com/track/${candidate.id}`);
       track = detailRes.data;
@@ -185,7 +188,10 @@ async function enrichSong(song) {
     referenceData.title = deezerData?.title || title;
     referenceData.artist = deezerData?.artist || artist;
   } else {
-    referenceData = { title, artist };
+    referenceData = {
+      title: normalizeTitle(title),
+      artist: normalizeArtist(artist)
+    };
   }
 
   if (!spotifyData.spotifyUrl) {
