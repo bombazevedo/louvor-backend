@@ -1,11 +1,11 @@
 const Song = require('../models/Song');
 const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
+const { normalizeSongTitle, normalizeArtistName } = require('../utils/normalizeUtils');
 
 // Criar nova música (com enrich único)
 exports.createSong = async (req, res) => {
   try {
-    // 1. Busca por URL já cadastrada (YouTube, Spotify, Deezer)
     const urls = [
       req.body.youtubeUrl, req.body.spotifyUrl, req.body.deezerUrl
     ].filter(Boolean);
@@ -21,7 +21,6 @@ exports.createSong = async (req, res) => {
       });
     }
 
-    // 🔒 Se já existe, retorna imediatamente o Song existente
     if (existing) {
       console.log('[SongController] Song já existente:', existing);
       return res.status(200).json(existing);
@@ -30,7 +29,6 @@ exports.createSong = async (req, res) => {
     let coverUrl = null;
     let extraData = {};
 
-    // YouTube
     if (req.body.youtubeUrl) {
       const match = req.body.youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
       if (match) {
@@ -40,7 +38,6 @@ exports.createSong = async (req, res) => {
       extraData.artist = req.body.artist || 'Desconhecido';
     }
 
-    // Deezer
     else if (req.body.deezerUrl || req.body.deezerTrackId) {
       const deezerId = req.body.deezerTrackId || (req.body.deezerUrl?.match(/track\/(\d+)/)?.[1]);
       if (deezerId) {
@@ -67,7 +64,6 @@ exports.createSong = async (req, res) => {
       }
     }
 
-    // Spotify
     else if (req.body.spotifyUrl || req.body.spotifyTrackId) {
       const spotifyId = req.body.spotifyTrackId || (req.body.spotifyUrl?.match(/track\/([a-zA-Z0-9]+)/)?.[1]);
       if (spotifyId) {
@@ -107,7 +103,6 @@ exports.createSong = async (req, res) => {
       }
     }
 
-    // Caso venha pronto
     else if (req.body.coverUrl) {
       coverUrl = req.body.coverUrl;
       extraData.title = req.body.title || 'Sem título';
@@ -117,7 +112,6 @@ exports.createSong = async (req, res) => {
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
-    // Limpeza final
     const cleanBody = { ...req.body };
     if (cleanBody.deezerUrl === '') delete cleanBody.deezerUrl;
     if (cleanBody.spotifyUrl === '') delete cleanBody.spotifyUrl;
@@ -131,10 +125,15 @@ exports.createSong = async (req, res) => {
 
     const savedSong = await newSong.save();
 
-    // Enriquecimento cruzado
+    // 🧠 Normalização aplicada antes do enrichment
+    const normalizedTitle = normalizeSongTitle(savedSong.title);
+    const normalizedArtist = normalizeArtistName(savedSong.artist);
+
     try {
       const enriched = await enrichSong({
         ...savedSong.toObject(),
+        title: normalizedTitle,
+        artist: normalizedArtist,
         platform: req.body.platform || null,
         id: req.body.id || null
       });
