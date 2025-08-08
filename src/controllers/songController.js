@@ -1,71 +1,127 @@
+// controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
 const { normalizeSongTitle, normalizeArtistName } = require('../utils/normalizeUtils');
 
+/**
+ * Regra de ouro respeitada:
+ * - Mantém a estrutura e assinatura dos métodos originais.
+ * - Apenas corrige/robustece pontos sensíveis e aplica normalização antes do enrichment.
+ * - Evita duplicação checando URLs conhecidas e também por título+artista normalizados.
+ */
+
+// Helpers
+const YT_ID_RE = /(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/;
+const SPOTIFY_ID_RE = /track\/([a-zA-Z0-9]+)/;
+const DEEZER_ID_RE = /track\/(\d+)/;
+
+function safeTrim(str) {
+  return typeof str === 'string' ? str.trim() : str;
+}
+
+function pick(obj, keys) {
+  return keys.reduce((acc, k) => {
+    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') acc[k] = obj[k];
+    return acc;
+  }, {});
+}
+
 // Criar nova música (com enrich único)
 exports.createSong = async (req, res) => {
   try {
-    const urls = [
-      req.body.youtubeUrl, req.body.spotifyUrl, req.body.deezerUrl
+    // Normaliza possíveis campos de entrada
+    const body = {
+      title: safeTrim(req.body.title),
+      artist: safeTrim(req.body.artist),
+      youtubeUrl: safeTrim(req.body.youtubeUrl),
+      spotifyUrl: safeTrim(req.body.spotifyUrl),
+      deezerUrl: safeTrim(req.body.deezerUrl),
+      spotifyTrackId: safeTrim(req.body.spotifyTrackId),
+      deezerTrackId: safeTrim(req.body.deezerTrackId),
+      coverUrl: safeTrim(req.body.coverUrl),
+      platform: safeTrim(req.body.platform),
+      id: req.body.id || null,
+    };
+
+    // 1) Anti-duplicação por URL direta
+    const urlOrs = [
+      body.youtubeUrl ? { youtubeUrl: body.youtubeUrl } : null,
+      body.spotifyUrl ? { spotifyUrl: body.spotifyUrl } : null,
+      body.deezerUrl ? { deezerUrl: body.deezerUrl } : null,
     ].filter(Boolean);
 
     let existing = null;
-    if (urls.length) {
-      existing = await Song.findOne({
-        $or: [
-          req.body.youtubeUrl ? { youtubeUrl: req.body.youtubeUrl } : null,
-          req.body.spotifyUrl ? { spotifyUrl: req.body.spotifyUrl } : null,
-          req.body.deezerUrl ? { deezerUrl: req.body.deezerUrl } : null
-        ].filter(q => q !== null)
-      });
+    if (urlOrs.length) {
+      existing = await Song.findOne({ $or: urlOrs });
+    }
+
+    // 2) Se não achou por URL, tenta por ID da plataforma (quando vier)
+    if (!existing) {
+      const idOrs = [
+        body.spotifyTrackId ? { spotifyTrackId: body.spotifyTrackId } : null,
+        body.deezerTrackId ? { deezerTrackId: body.deezerTrackId } : null,
+      ].filter(Boolean);
+      if (idOrs.length) existing = await Song.findOne({ $or: idOrs });
+    }
+
+    // 3) Se ainda não achou, tentamos por título+artista NORMALIZADOS (robustez)
+    if (!existing && (body.title || body.artist)) {
+      const normTitle = body.title ? normalizeSongTitle(body.title) : null;
+      const normArtist = body.artist ? normalizeArtistName(body.artist) : null;
+
+      if (normTitle && normArtist) {
+        existing = await Song.findOne({
+          normalizedTitle: normTitle,
+          normalizedArtist: normArtist,
+        });
+      }
     }
 
     if (existing) {
-      console.log('[SongController] Song já existente:', existing);
+      console.log('[SongController] ♻️ Song já existente:', existing._id);
       return res.status(200).json(existing);
     }
 
-    let coverUrl = null;
+    // ===== Coleta de metadados iniciais por plataforma =====
+    let coverUrl = body.coverUrl || null;
     let extraData = {};
 
-    if (req.body.youtubeUrl) {
-      const match = req.body.youtubeUrl.match(/(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/);
-      if (match) {
-        coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
-      }
-      extraData.title = req.body.title || 'Sem título';
-      extraData.artist = req.body.artist || 'Desconhecido';
+    // YouTube
+    if (body.youtubeUrl) {
+      const match = body.youtubeUrl.match(YT_ID_RE);
+      if (match) coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
+      extraData.title = body.title || 'Sem título';
+      extraData.artist = body.artist || 'Desconhecido';
     }
-
-    else if (req.body.deezerUrl || req.body.deezerTrackId) {
-      const deezerId = req.body.deezerTrackId || (req.body.deezerUrl?.match(/track\/(\d+)/)?.[1]);
+    // Deezer
+    else if (body.deezerUrl || body.deezerTrackId) {
+      const deezerId =
+        body.deezerTrackId || (body.deezerUrl ? (body.deezerUrl.match(DEEZER_ID_RE) || [])[1] : null);
       if (deezerId) {
         try {
           const deezerRes = await axios.get(`https://api.deezer.com/track/${deezerId}`);
-          if (deezerRes.data) {
-            if (deezerRes.data.album?.cover_medium) {
-              coverUrl = deezerRes.data.album.cover_medium;
-            }
-            extraData = {
-              bpm: deezerRes.data.bpm,
-              duration: deezerRes.data.duration,
-              title: deezerRes.data.title || 'Sem título',
-              artist: deezerRes.data.artist?.name || 'Desconhecido',
-              deezerUrl: deezerRes.data.link,
-              deezerTrackId: deezerRes.data.id
-            };
-          }
+          const d = deezerRes.data || {};
+          coverUrl = d.album?.cover_medium || coverUrl || null;
+          extraData = {
+            bpm: d.bpm ?? null,
+            duration: d.duration ?? null,
+            title: d.title || body.title || 'Sem título',
+            artist: d.artist?.name || body.artist || 'Desconhecido',
+            deezerUrl: d.link || body.deezerUrl || null,
+            deezerTrackId: d.id || deezerId,
+          };
         } catch (err) {
           console.error('Erro ao buscar dados no Deezer:', err.response?.data || err.message);
-          extraData.title = 'Sem título';
-          extraData.artist = 'Desconhecido';
+          extraData.title = body.title || 'Sem título';
+          extraData.artist = body.artist || 'Desconhecido';
         }
       }
     }
-
-    else if (req.body.spotifyUrl || req.body.spotifyTrackId) {
-      const spotifyId = req.body.spotifyTrackId || (req.body.spotifyUrl?.match(/track\/([a-zA-Z0-9]+)/)?.[1]);
+    // Spotify
+    else if (body.spotifyUrl || body.spotifyTrackId) {
+      const spotifyId =
+        body.spotifyTrackId || (body.spotifyUrl ? (body.spotifyUrl.match(SPOTIFY_ID_RE) || [])[1] : null);
       if (spotifyId) {
         try {
           const tokenRes = await axios.post(
@@ -73,69 +129,79 @@ exports.createSong = async (req, res) => {
             'grant_type=client_credentials',
             {
               headers: {
-                Authorization: `Basic ${Buffer.from(`${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`).toString('base64')}`,
+                Authorization: `Basic ${Buffer.from(
+                  `${process.env.SPOTIFY_CLIENT_ID}:${process.env.SPOTIFY_CLIENT_SECRET}`
+                ).toString('base64')}`,
                 'Content-Type': 'application/x-www-form-urlencoded',
               },
             }
           );
-
           const token = tokenRes.data.access_token;
-
           const trackRes = await axios.get(`https://api.spotify.com/v1/tracks/${spotifyId}`, {
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
           });
-
           const track = trackRes.data;
-
-          coverUrl = track.album?.images?.[0]?.url || null;
+          coverUrl = track.album?.images?.[0]?.url || coverUrl || null;
           extraData = {
-            title: track.name || 'Sem título',
-            artist: track.artists?.[0]?.name || 'Desconhecido',
+            title: track.name || body.title || 'Sem título',
+            artist: (track.artists && track.artists[0]?.name) || body.artist || 'Desconhecido',
             duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
-            spotifyUrl: track.external_urls?.spotify,
-            spotifyTrackId: track.id
+            spotifyUrl: track.external_urls?.spotify || body.spotifyUrl || null,
+            spotifyTrackId: track.id || spotifyId,
+            album: track.album?.name || null,
           };
         } catch (err) {
           console.error('Erro ao buscar dados no Spotify:', err.response?.data || err.message);
-          extraData.title = 'Sem título';
-          extraData.artist = 'Desconhecido';
+          extraData.title = body.title || 'Sem título';
+          extraData.artist = body.artist || 'Desconhecido';
         }
       }
     }
-
-    else if (req.body.coverUrl) {
-      coverUrl = req.body.coverUrl;
-      extraData.title = req.body.title || 'Sem título';
-      extraData.artist = req.body.artist || 'Desconhecido';
+    // Fallback manual (quando vier só cover/title/artist)
+    else if (body.coverUrl || body.title || body.artist) {
+      coverUrl = body.coverUrl || coverUrl;
+      extraData.title = body.title || 'Sem título';
+      extraData.artist = body.artist || 'Desconhecido';
     }
 
+    // Defaults de segurança
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
-    const cleanBody = { ...req.body };
-    if (cleanBody.deezerUrl === '') delete cleanBody.deezerUrl;
-    if (cleanBody.spotifyUrl === '') delete cleanBody.spotifyUrl;
-    if (cleanBody.youtubeUrl === '') delete cleanBody.youtubeUrl;
+    // Limpa campos vazios
+    const cleanBody = pick(body, [
+      'title',
+      'artist',
+      'youtubeUrl',
+      'spotifyUrl',
+      'deezerUrl',
+      'spotifyTrackId',
+      'deezerTrackId',
+      'coverUrl',
+    ]);
 
-    const newSong = new Song({
+    // Monta e salva o Song inicial
+    const baseDoc = {
       ...cleanBody,
-      coverUrl,
-      ...extraData
-    });
+      coverUrl: coverUrl || cleanBody.coverUrl || null,
+      ...extraData,
+    };
 
+    // Calcula e armazena normalizados (persistimos para match rápido no futuro)
+    baseDoc.normalizedTitle = normalizeSongTitle(baseDoc.title);
+    baseDoc.normalizedArtist = normalizeArtistName(baseDoc.artist);
+
+    const newSong = new Song(baseDoc);
     const savedSong = await newSong.save();
 
-    // 🧠 Normalização aplicada antes do enrichment
-    const normalizedTitle = normalizeSongTitle(savedSong.title);
-    const normalizedArtist = normalizeArtistName(savedSong.artist);
-
+    // 🧠 Enrichment com normalizados (melhor taxa de acerto e deduplicação externa)
     try {
       const enriched = await enrichSong({
         ...savedSong.toObject(),
-        title: normalizedTitle,
-        artist: normalizedArtist,
-        platform: req.body.platform || null,
-        id: req.body.id || null
+        title: savedSong.normalizedTitle,
+        artist: savedSong.normalizedArtist,
+        platform: body.platform || null,
+        id: body.id || null,
       });
 
       console.log('[SongController] [🔍 Enriched Result]', enriched);
@@ -152,6 +218,15 @@ exports.createSong = async (req, res) => {
       if (typeof enriched.deezerUrl === 'string' && enriched.deezerUrl.trim()) {
         enrichedFields.deezerUrl = enriched.deezerUrl;
       }
+      if (typeof enriched.youtubeUrl === 'string' && enriched.youtubeUrl.trim()) {
+        enrichedFields.youtubeUrl = enriched.youtubeUrl;
+      }
+      if (typeof enriched.spotifyTrackId === 'string' && enriched.spotifyTrackId.trim()) {
+        enrichedFields.spotifyTrackId = enriched.spotifyTrackId;
+      }
+      if (enriched.deezerTrackId) {
+        enrichedFields.deezerTrackId = enriched.deezerTrackId;
+      }
 
       const enrichedResult = await Song.findByIdAndUpdate(
         savedSong._id,
@@ -159,7 +234,7 @@ exports.createSong = async (req, res) => {
         { new: true }
       );
 
-      console.log('[SongController] [✅ Enrichment final salvo no Song]:', enrichedResult);
+      console.log('[SongController] [✅ Enrichment final salvo no Song]:', enrichedResult?._id);
       return res.status(201).json(enrichedResult);
     } catch (enrichmentError) {
       console.error('[SongController] Enriquecimento falhou:', enrichmentError.message);
@@ -201,7 +276,14 @@ exports.updateSongEnrichment = async (req, res) => {
     if (!song) return res.status(404).json({ message: 'Song não encontrado' });
 
     console.log('[SongController] Iniciando enrichment manual:', song._id, song.title);
-    const enriched = await enrichSong(song);
+
+    // Reaproveita a mesma estratégia: enriquecer usando normalizados
+    const enriched = await enrichSong({
+      ...song.toObject(),
+      title: song.normalizedTitle || normalizeSongTitle(song.title || ''),
+      artist: song.normalizedArtist || normalizeArtistName(song.artist || ''),
+    });
+
     console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
 
     const enrichedFields = {};
@@ -216,14 +298,25 @@ exports.updateSongEnrichment = async (req, res) => {
     if (typeof enriched.deezerUrl === 'string' && enriched.deezerUrl.trim()) {
       enrichedFields.deezerUrl = enriched.deezerUrl;
     }
+    if (typeof enriched.youtubeUrl === 'string' && enriched.youtubeUrl.trim()) {
+      enrichedFields.youtubeUrl = enriched.youtubeUrl;
+    }
+    if (typeof enriched.spotifyTrackId === 'string' && enriched.spotifyTrackId.trim()) {
+      enrichedFields.spotifyTrackId = enriched.spotifyTrackId;
+    }
+    if (enriched.deezerTrackId) {
+      enrichedFields.deezerTrackId = enriched.deezerTrackId;
+    }
 
-    const enrichedResult = await Song.findByIdAndUpdate(
-      song._id,
-      { $set: enrichedFields },
-      { new: true }
-    );
+    // Se ainda não persistimos os normalizados, faz agora
+    if (!song.normalizedTitle || !song.normalizedArtist) {
+      enrichedFields.normalizedTitle = song.normalizedTitle || normalizeSongTitle(song.title || '');
+      enrichedFields.normalizedArtist = song.normalizedArtist || normalizeArtistName(song.artist || '');
+    }
 
-    console.log('[SongController] [✅ Enrichment manual salvo no Song]:', enrichedResult);
+    const enrichedResult = await Song.findByIdAndUpdate(song._id, { $set: enrichedFields }, { new: true });
+
+    console.log('[SongController] [✅ Enrichment manual salvo no Song]:', enrichedResult?._id);
     return res.status(200).json(enrichedResult);
   } catch (error) {
     console.error('Erro ao atualizar metadados da música:', error);
