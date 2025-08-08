@@ -79,10 +79,7 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
     }
 
     if (!track && title && artist) {
-      const titleNormInput = normalizeTitle(title);
-      const artistNormInput = normalizeArtist(artist);
-
-      const query = encodeURIComponent(`${titleNormInput} ${artistNormInput}`);
+      const query = encodeURIComponent(`${normalizeTitle(title)} ${normalizeArtist(artist)}`);
       const searchUrl = `https://api.spotify.com/v1/search?q=${query}&type=track&limit=1`;
 
       const searchRes = await axios.get(searchUrl, {
@@ -95,20 +92,23 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
       const matchTitle = normalize(candidate.name);
       const matchArtist = normalize(candidate.artists?.[0]?.name || '');
 
-      if (!matchTitle.includes(normalize(titleNormInput)) && !normalize(titleNormInput).includes(matchTitle)) return {};
-      if (!matchArtist.includes(normalize(artistNormInput)) && !normalize(artistNormInput).includes(matchArtist)) return {};
+      const originalTitle = normalize(title);
+      const originalArtist = normalize(artist);
+
+      if (!matchTitle.includes(originalTitle) && !originalTitle.includes(matchTitle)) return {};
+      if (!matchArtist.includes(originalArtist) && !originalArtist.includes(matchArtist)) return {};
 
       track = candidate;
     }
 
     return {
-      album: track.album?.name || null,
-      duration: track.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
-      coverUrl: track.album?.images?.[0]?.url || null,
-      spotifyUrl: track.external_urls?.spotify || null,
-      spotifyTrackId: track.id,
-      title: track.name || null,
-      artist: track.artists?.[0]?.name || null
+      album: track?.album?.name || null,
+      duration: track?.duration_ms ? Math.floor(track.duration_ms / 1000) : null,
+      coverUrl: track?.album?.images?.[0]?.url || null,
+      spotifyUrl: track?.external_urls?.spotify || null,
+      spotifyTrackId: track?.id,
+      title: track?.name || null,
+      artist: track?.artists?.[0]?.name || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Spotify erro:', error?.response?.data || error.message);
@@ -127,10 +127,7 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
     }
 
     if (!track && title && artist) {
-      const titleNormInput = normalizeTitle(title);
-      const artistNormInput = normalizeArtist(artist);
-
-      const query = encodeURIComponent(`${titleNormInput} ${artistNormInput}`);
+      const query = encodeURIComponent(`${normalizeTitle(title)} ${normalizeArtist(artist)}`);
       const searchUrl = `https://api.deezer.com/search?q=${query}&limit=1`;
 
       const searchRes = await axios.get(searchUrl);
@@ -140,21 +137,24 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
       const matchTitle = normalize(candidate.title);
       const matchArtist = normalize(candidate.artist?.name || '');
 
-      if (!matchTitle.includes(normalize(titleNormInput)) && !normalize(titleNormInput).includes(matchTitle)) return {};
-      if (!matchArtist.includes(normalize(artistNormInput)) && !normalize(artistNormInput).includes(matchArtist)) return {};
+      const originalTitle = normalize(title);
+      const originalArtist = normalize(artist);
+
+      if (!matchTitle.includes(originalTitle) && !originalTitle.includes(matchTitle)) return {};
+      if (!matchArtist.includes(originalArtist) && !originalArtist.includes(matchArtist)) return {};
 
       const detailRes = await axios.get(`https://api.deezer.com/track/${candidate.id}`);
       track = detailRes.data;
     }
 
     return {
-      bpm: track.bpm || null,
-      duration: track.duration || null,
-      album: track.album?.title || null,
-      coverUrl: track.album?.cover_medium || null,
-      deezerUrl: track.link || null,
-      title: track.title || null,
-      artist: track.artist?.name || null
+      bpm: track?.bpm || null,
+      duration: track?.duration || null,
+      album: track?.album?.title || null,
+      coverUrl: track?.album?.cover_medium || null,
+      deezerUrl: track?.link || null,
+      title: track?.title || null,
+      artist: track?.artist?.name || null
     };
   } catch (error) {
     console.error('[Enrichment] ❌ Deezer erro:', error?.response?.data || error.message);
@@ -189,8 +189,8 @@ async function enrichSong(song) {
     referenceData.artist = deezerData?.artist || artist;
   } else {
     referenceData = {
-      title: normalizeTitle(title),
-      artist: normalizeArtist(artist)
+      title,
+      artist
     };
   }
 
