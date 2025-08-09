@@ -6,3 +6,4 @@ node_modules/
 .DS_Store 
 spotify_token.json
 /src/config/firebaseServiceAccount.json
+"/src/config/firebaseServiceAccount.json.json" 
