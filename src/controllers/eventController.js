@@ -5,7 +5,7 @@ const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 
 // --- Firebase Admin para Firestore ---
 const admin = require('firebase-admin');
-const serviceAccount = require('../src/config/firebaseServiceAccount.json');
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 if (!admin.apps.length) {
   admin.initializeApp({
