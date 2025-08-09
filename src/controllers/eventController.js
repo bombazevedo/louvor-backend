@@ -3,6 +3,17 @@ const Scale = require('../models/Scale');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 
+// --- Firebase Admin para Firestore ---
+const admin = require('firebase-admin');
+const serviceAccount = require('../config/firebaseServiceAccount.json');
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+}
+const firestoreDb = admin.firestore();
+
 // --- Função utilitária para limpar objetos mongoose
 function clean(obj) {
   if (!obj) return obj;
@@ -121,7 +132,7 @@ const getEventById = async (req, res) => {
   }
 };
 
-// Criar evento com salvamento automático do Song
+// Criar evento com salvamento automático do Song + sincronização com Firestore
 const createEvent = async (req, res) => {
   try {
     const { title, description, date, location, type, musicLinks } = req.body;
@@ -184,6 +195,22 @@ const createEvent = async (req, res) => {
     });
 
     const savedEvent = await newEvent.save();
+
+    // 🔄 Sincronizar no Firestore
+    try {
+      await firestoreDb.collection('events').doc(savedEvent._id.toString()).set({
+        title: savedEvent.title,
+        description: savedEvent.description || '',
+        date: savedEvent.date || null,
+        location: savedEvent.location || '',
+        type: savedEvent.type || '',
+        createdAt: new Date()
+      });
+      console.log(`[Firestore] Evento ${savedEvent._id} sincronizado com sucesso`);
+    } catch (fireErr) {
+      console.error('[Firestore] Erro ao sincronizar evento:', fireErr);
+    }
+
     // Sempre retorna o evento limpo
     res.status(201).json(clean(savedEvent));
   } catch (error) {
