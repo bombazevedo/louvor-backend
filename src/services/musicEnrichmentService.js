@@ -12,19 +12,46 @@ function normalize(text = '') {
     .trim();
 }
 
-// 🔹 Limpa termos poluentes comuns
+// 🔹 Remove termos poluentes comuns (sem agressividade)
 function removePollution(text = '') {
   const pollutionTerms = [
     /\boficial\b/gi,
+    /\bofficial\b/gi,
     /\bao vivo\b/gi,
-    /\bvers[aã]o portugues\b/gi,
-    /\bcover\b/gi
+    /\blive\b/gi,
+    /\bvers[aã]o\b/gi,
+    /\bportugu[eê]s\b/gi,
+    /\bpt[-\s]?br\b/gi,
+    /\bac[uú]stic[ao]\b/gi,
   ];
   let cleaned = text;
-  pollutionTerms.forEach(regex => {
+  pollutionTerms.forEach((regex) => {
     cleaned = cleaned.replace(regex, '').trim();
   });
   return cleaned;
+}
+
+// 🔹 Reduz título: remove parênteses/colchetes/chaves e corta em separadores comuns
+function reduceTitle(text = '') {
+  let t = text || '';
+  // remove conteúdo entre (), [], {}
+  t = t.replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
+  // corta pelo primeiro separador comum (ordem importa)
+  t = t.split('|')[0];
+  t = t.split(' - ')[0];
+  t = t.split(' — ')[0];
+  return t.trim();
+}
+
+// 🔹 Similaridade simples por interseção de tokens
+function tokenOverlapRatio(a = '', b = '') {
+  const A = new Set(normalize(a).split(' ').filter(Boolean));
+  const B = new Set(normalize(b).split(' ').filter(Boolean));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  A.forEach((tok) => { if (B.has(tok)) inter++; });
+  // razão em relação ao menor conjunto (mais rígido)
+  return inter / Math.min(A.size, B.size);
 }
 
 async function getSpotifyToken() {
@@ -121,27 +148,86 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
   }
 }
 
+// 🔧 Deezer com buscas progressivas e seleção por similaridade
 async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = null) {
   try {
     let track;
     const idFromUrl = deezerUrl?.match(/track\/(\d+)/)?.[1];
     const id = platformId || idFromUrl;
+
+    // 1) Se temos ID → detalhe direto
     if (id) {
       const detailRes = await axios.get(`https://api.deezer.com/track/${id}`);
       track = detailRes.data;
     }
 
-    if (!track && title && artist) {
-      const query = encodeURIComponent(`${normalizeTitle(title)} ${normalizeArtist(artist)}`);
-      const searchUrl = `https://api.deezer.com/search?q=${query}&limit=1`;
+    // 2) Busca progressiva se não achou via ID
+    if (!track && (title || artist)) {
+      const baseTitle = removePollution(title || '');
+      const baseArtist = removePollution(artist || '');
+      const reduced = reduceTitle(baseTitle);
 
-      const searchRes = await axios.get(searchUrl);
-      const candidate = searchRes.data.data?.[0];
-      if (!candidate || !candidate.id) return {};
+      // Queries em ordem de precisão (da mais específica para a mais ampla)
+      const queries = [
+        `${normalizeTitle(baseTitle)} ${normalizeArtist(baseArtist)}`.trim(),
+        `${normalizeTitle(reduced)} ${normalizeArtist(baseArtist)}`.trim(),
+        `${normalizeTitle(reduced)}`.trim(),
+        `${normalizeTitle(baseTitle)}`.trim(),
+      ].filter(Boolean);
 
-      const detailRes = await axios.get(`https://api.deezer.com/track/${candidate.id}`);
-      track = detailRes.data;
+      // Função para escolher o melhor candidato por similaridade
+      const pickBestCandidate = (items) => {
+        if (!Array.isArray(items) || items.length === 0) return null;
+        const target = reduced || baseTitle;
+        const targetArtist = baseArtist;
+
+        let best = null;
+        let bestScore = 0;
+
+        for (const it of items) {
+          const ct = it.title || '';
+          const ca = it.artist?.name || '';
+
+          const titleRatio = tokenOverlapRatio(ct, target);         // similaridade de título
+          const artistRatio = tokenOverlapRatio(ca, targetArtist);  // similaridade de artista
+
+          // score: título pesa mais; artista ajuda quando presente
+          const score = titleRatio * 0.85 + artistRatio * 0.15;
+
+          // Pequena bonificação se artista bater exatamente
+          const exactArtist = normalize(ca) === normalize(targetArtist);
+          const finalScore = exactArtist ? score + 0.05 : score;
+
+          if (finalScore > bestScore) {
+            bestScore = finalScore;
+            best = it;
+          }
+        }
+
+        // Aceita apenas se o título for suficientemente semelhante
+        // Limiares escolhidos para não "grudar" em faixas erradas:
+        return bestScore >= 0.6 ? best : null;
+      };
+
+      for (const q of queries) {
+        try {
+          const searchUrl = `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`;
+          const searchRes = await axios.get(searchUrl);
+          const items = searchRes.data?.data || [];
+          const candidate = pickBestCandidate(items);
+          if (candidate?.id) {
+            const detailRes = await axios.get(`https://api.deezer.com/track/${candidate.id}`);
+            track = detailRes.data;
+            if (track) break; // achou
+          }
+        } catch (innerErr) {
+          // Continua para próxima query
+          console.warn('[Enrichment] Deezer tentativa falhou para query:', q, innerErr?.message);
+        }
+      }
     }
+
+    if (!track) return {};
 
     return {
       bpm: track?.bpm || null,
@@ -226,18 +312,19 @@ async function enrichSong(song) {
     }
   }
 
-  // 2️⃣ Busca cruzada normal
+  // 2️⃣ Buscas cruzadas normais (com dados limpos/atuais)
   spotifyData = await fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId) || spotifyData;
   deezerData = await fetchFromDeezer(title, artist, deezerUrl, deezerTrackId) || deezerData;
 
-  // 3️⃣ Fallback se não achou nada
-  if (!spotifyData.spotifyUrl) {
+  // 3️⃣ Fallback com originais do frontend (em último caso)
+  if (!spotifyData.spotifyUrl && (rawTitle || rawArtist)) {
     spotifyData = await fetchFromSpotify(removePollution(rawTitle), removePollution(rawArtist));
   }
-  if (!deezerData.deezerUrl) {
+  if (!deezerData.deezerUrl && (rawTitle || rawArtist)) {
     deezerData = await fetchFromDeezer(removePollution(rawTitle), removePollution(rawArtist));
   }
 
+  // 🎼 Key via Spotify (se disponível)
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
