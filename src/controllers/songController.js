@@ -1,10 +1,8 @@
-// controllers/songController.js
 const Song = require('../models/Song');
 const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
 const { normalizeSongTitle, normalizeArtistName } = require('../utils/normalizeUtils');
 
-// Helpers
 const YT_ID_RE = /(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/;
 const SPOTIFY_ID_RE = /track\/([a-zA-Z0-9]+)/;
 const DEEZER_ID_RE = /track\/(\d+)/;
@@ -20,7 +18,7 @@ function pick(obj, keys) {
   }, {});
 }
 
-// Criar nova música (com enrich único)
+// Criar nova música
 exports.createSong = async (req, res) => {
   try {
     const body = {
@@ -36,7 +34,6 @@ exports.createSong = async (req, res) => {
       id: req.body.id || null,
     };
 
-    // 1) Anti-duplicação por URL
     const urlOrs = [
       body.youtubeUrl ? { youtubeUrl: body.youtubeUrl } : null,
       body.spotifyUrl ? { spotifyUrl: body.spotifyUrl } : null,
@@ -48,7 +45,6 @@ exports.createSong = async (req, res) => {
       existing = await Song.findOne({ $or: urlOrs });
     }
 
-    // 2) Anti-duplicação por ID de plataforma
     if (!existing) {
       const idOrs = [
         body.spotifyTrackId ? { spotifyTrackId: body.spotifyTrackId } : null,
@@ -57,7 +53,6 @@ exports.createSong = async (req, res) => {
       if (idOrs.length) existing = await Song.findOne({ $or: idOrs });
     }
 
-    // 3) Anti-duplicação por título+artista normalizados
     if (!existing && (body.title || body.artist)) {
       const normTitle = body.title ? normalizeSongTitle(body.title) : null;
       const normArtist = body.artist ? normalizeArtistName(body.artist) : null;
@@ -75,18 +70,15 @@ exports.createSong = async (req, res) => {
       return res.status(200).json(existing);
     }
 
-    // ===== Coleta de metadados iniciais =====
     let coverUrl = body.coverUrl || null;
     let extraData = {};
 
-    // YouTube
     if (body.youtubeUrl) {
       const match = body.youtubeUrl.match(YT_ID_RE);
       if (match) coverUrl = `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg`;
       extraData.title = body.title || 'Sem título';
       extraData.artist = body.artist || 'Desconhecido';
     }
-    // Deezer
     else if (body.deezerUrl || body.deezerTrackId) {
       const deezerId =
         body.deezerTrackId || (body.deezerUrl ? (body.deezerUrl.match(DEEZER_ID_RE) || [])[1] : null);
@@ -110,7 +102,6 @@ exports.createSong = async (req, res) => {
         }
       }
     }
-    // Spotify
     else if (body.spotifyUrl || body.spotifyTrackId) {
       const spotifyId =
         body.spotifyTrackId || (body.spotifyUrl ? (body.spotifyUrl.match(SPOTIFY_ID_RE) || [])[1] : null);
@@ -149,7 +140,6 @@ exports.createSong = async (req, res) => {
         }
       }
     }
-    // Fallback manual
     else if (body.coverUrl || body.title || body.artist) {
       coverUrl = body.coverUrl || coverUrl;
       extraData.title = body.title || 'Sem título';
@@ -182,24 +172,12 @@ exports.createSong = async (req, res) => {
     const newSong = new Song(baseDoc);
     const savedSong = await newSong.save();
 
-    // 🧠 Enrichment com prioridade: ID + plataforma primeiro
     try {
-      let enriched = null;
-
-      if (body.platform && body.id) {
-        enriched = await enrichSong({
-          platform: body.platform,
-          id: body.id,
-        });
-      }
-
-      // fallback para title+artist normalizados
-      if (!enriched || Object.keys(enriched).length === 0) {
-        enriched = await enrichSong({
-          title: savedSong.normalizedTitle,
-          artist: savedSong.normalizedArtist,
-        });
-      }
+      const enriched = await enrichSong({
+        ...savedSong.toObject(),
+        platform: body.platform || null,
+        id: body.id || null
+      });
 
       console.log('[SongController] [🔍 Enriched Result]', enriched);
 
@@ -208,7 +186,7 @@ exports.createSong = async (req, res) => {
       if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
       if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
       if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
-      if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
+      if (enriched.coverUrl) enrichedFields.coverUrl = enriched.coverUrl;
       if (typeof enriched.spotifyUrl === 'string' && enriched.spotifyUrl.trim()) {
         enrichedFields.spotifyUrl = enriched.spotifyUrl;
       }
@@ -274,21 +252,11 @@ exports.updateSongEnrichment = async (req, res) => {
 
     console.log('[SongController] Iniciando enrichment manual:', song._id, song.title);
 
-    // prioridade: ID + plataforma primeiro
-    let enriched = null;
-    if (song.spotifyTrackId || song.deezerTrackId) {
-      enriched = await enrichSong({
-        platform: song.spotifyTrackId ? 'spotify' : 'deezer',
-        id: song.spotifyTrackId || song.deezerTrackId,
-      });
-    }
-
-    if (!enriched || Object.keys(enriched).length === 0) {
-      enriched = await enrichSong({
-        title: song.normalizedTitle || normalizeSongTitle(song.title || ''),
-        artist: song.normalizedArtist || normalizeArtistName(song.artist || ''),
-      });
-    }
+    const enriched = await enrichSong({
+      ...song.toObject(),
+      platform: req.body.platform || null,
+      id: req.body.id || null
+    });
 
     console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
 
@@ -297,7 +265,7 @@ exports.updateSongEnrichment = async (req, res) => {
     if (enriched.key !== undefined && enriched.key !== null) enrichedFields.key = enriched.key;
     if (enriched.album !== undefined && enriched.album !== null) enrichedFields.album = enriched.album;
     if (enriched.duration !== undefined && enriched.duration !== null) enrichedFields.duration = enriched.duration;
-    if (enriched.coverUrl !== undefined && enriched.coverUrl !== null) enrichedFields.coverUrl = enriched.coverUrl;
+    if (enriched.coverUrl) enrichedFields.coverUrl = enriched.coverUrl;
     if (typeof enriched.spotifyUrl === 'string' && enriched.spotifyUrl.trim()) {
       enrichedFields.spotifyUrl = enriched.spotifyUrl;
     }
