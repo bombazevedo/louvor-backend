@@ -4,13 +4,6 @@ const axios = require('axios');
 const { enrichSong } = require('../services/musicEnrichmentService');
 const { normalizeSongTitle, normalizeArtistName } = require('../utils/normalizeUtils');
 
-/**
- * Regra de ouro respeitada:
- * - Mantém a estrutura e assinatura dos métodos originais.
- * - Apenas corrige/robustece pontos sensíveis e aplica normalização antes do enrichment.
- * - Evita duplicação checando URLs conhecidas e também por título+artista normalizados.
- */
-
 // Helpers
 const YT_ID_RE = /(?:v=|youtu\.be\/|embed\/)([a-zA-Z0-9_-]{11})/;
 const SPOTIFY_ID_RE = /track\/([a-zA-Z0-9]+)/;
@@ -30,7 +23,6 @@ function pick(obj, keys) {
 // Criar nova música (com enrich único)
 exports.createSong = async (req, res) => {
   try {
-    // Normaliza possíveis campos de entrada
     const body = {
       title: safeTrim(req.body.title),
       artist: safeTrim(req.body.artist),
@@ -44,7 +36,7 @@ exports.createSong = async (req, res) => {
       id: req.body.id || null,
     };
 
-    // 1) Anti-duplicação por URL direta
+    // 1) Anti-duplicação por URL
     const urlOrs = [
       body.youtubeUrl ? { youtubeUrl: body.youtubeUrl } : null,
       body.spotifyUrl ? { spotifyUrl: body.spotifyUrl } : null,
@@ -56,7 +48,7 @@ exports.createSong = async (req, res) => {
       existing = await Song.findOne({ $or: urlOrs });
     }
 
-    // 2) Se não achou por URL, tenta por ID da plataforma (quando vier)
+    // 2) Anti-duplicação por ID de plataforma
     if (!existing) {
       const idOrs = [
         body.spotifyTrackId ? { spotifyTrackId: body.spotifyTrackId } : null,
@@ -65,7 +57,7 @@ exports.createSong = async (req, res) => {
       if (idOrs.length) existing = await Song.findOne({ $or: idOrs });
     }
 
-    // 3) Se ainda não achou, tentamos por título+artista NORMALIZADOS (robustez)
+    // 3) Anti-duplicação por título+artista normalizados
     if (!existing && (body.title || body.artist)) {
       const normTitle = body.title ? normalizeSongTitle(body.title) : null;
       const normArtist = body.artist ? normalizeArtistName(body.artist) : null;
@@ -83,7 +75,7 @@ exports.createSong = async (req, res) => {
       return res.status(200).json(existing);
     }
 
-    // ===== Coleta de metadados iniciais por plataforma =====
+    // ===== Coleta de metadados iniciais =====
     let coverUrl = body.coverUrl || null;
     let extraData = {};
 
@@ -157,18 +149,16 @@ exports.createSong = async (req, res) => {
         }
       }
     }
-    // Fallback manual (quando vier só cover/title/artist)
+    // Fallback manual
     else if (body.coverUrl || body.title || body.artist) {
       coverUrl = body.coverUrl || coverUrl;
       extraData.title = body.title || 'Sem título';
       extraData.artist = body.artist || 'Desconhecido';
     }
 
-    // Defaults de segurança
     if (!extraData.title) extraData.title = 'Sem título';
     if (!extraData.artist) extraData.artist = 'Desconhecido';
 
-    // Limpa campos vazios
     const cleanBody = pick(body, [
       'title',
       'artist',
@@ -180,29 +170,36 @@ exports.createSong = async (req, res) => {
       'coverUrl',
     ]);
 
-    // Monta e salva o Song inicial
     const baseDoc = {
       ...cleanBody,
       coverUrl: coverUrl || cleanBody.coverUrl || null,
       ...extraData,
     };
 
-    // Calcula e armazena normalizados (persistimos para match rápido no futuro)
     baseDoc.normalizedTitle = normalizeSongTitle(baseDoc.title);
     baseDoc.normalizedArtist = normalizeArtistName(baseDoc.artist);
 
     const newSong = new Song(baseDoc);
     const savedSong = await newSong.save();
 
-    // 🧠 Enrichment com normalizados (melhor taxa de acerto e deduplicação externa)
+    // 🧠 Enrichment com prioridade: ID + plataforma primeiro
     try {
-      const enriched = await enrichSong({
-        ...savedSong.toObject(),
-        title: savedSong.normalizedTitle,
-        artist: savedSong.normalizedArtist,
-        platform: body.platform || null,
-        id: body.id || null,
-      });
+      let enriched = null;
+
+      if (body.platform && body.id) {
+        enriched = await enrichSong({
+          platform: body.platform,
+          id: body.id,
+        });
+      }
+
+      // fallback para title+artist normalizados
+      if (!enriched || Object.keys(enriched).length === 0) {
+        enriched = await enrichSong({
+          title: savedSong.normalizedTitle,
+          artist: savedSong.normalizedArtist,
+        });
+      }
 
       console.log('[SongController] [🔍 Enriched Result]', enriched);
 
@@ -277,12 +274,21 @@ exports.updateSongEnrichment = async (req, res) => {
 
     console.log('[SongController] Iniciando enrichment manual:', song._id, song.title);
 
-    // Reaproveita a mesma estratégia: enriquecer usando normalizados
-    const enriched = await enrichSong({
-      ...song.toObject(),
-      title: song.normalizedTitle || normalizeSongTitle(song.title || ''),
-      artist: song.normalizedArtist || normalizeArtistName(song.artist || ''),
-    });
+    // prioridade: ID + plataforma primeiro
+    let enriched = null;
+    if (song.spotifyTrackId || song.deezerTrackId) {
+      enriched = await enrichSong({
+        platform: song.spotifyTrackId ? 'spotify' : 'deezer',
+        id: song.spotifyTrackId || song.deezerTrackId,
+      });
+    }
+
+    if (!enriched || Object.keys(enriched).length === 0) {
+      enriched = await enrichSong({
+        title: song.normalizedTitle || normalizeSongTitle(song.title || ''),
+        artist: song.normalizedArtist || normalizeArtistName(song.artist || ''),
+      });
+    }
 
     console.log('[SongController] [🔍 Enriched Result - MANUAL]', enriched);
 
@@ -308,7 +314,6 @@ exports.updateSongEnrichment = async (req, res) => {
       enrichedFields.deezerTrackId = enriched.deezerTrackId;
     }
 
-    // Se ainda não persistimos os normalizados, faz agora
     if (!song.normalizedTitle || !song.normalizedArtist) {
       enrichedFields.normalizedTitle = song.normalizedTitle || normalizeSongTitle(song.title || '');
       enrichedFields.normalizedArtist = song.normalizedArtist || normalizeArtistName(song.artist || '');

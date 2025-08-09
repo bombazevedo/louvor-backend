@@ -1,4 +1,3 @@
-// src/services/musicEnrichmentService.js
 const axios = require('axios');
 const { normalizeTitle, normalizeArtist } = require('../utils/normalizeMusicMeta');
 
@@ -153,6 +152,7 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
       album: track?.album?.title || null,
       coverUrl: track?.album?.cover_medium || null,
       deezerUrl: track?.link || null,
+      deezerTrackId: track?.id || null,
       title: track?.title || null,
       artist: track?.artist?.name || null
     };
@@ -177,30 +177,46 @@ async function enrichSong(song) {
 
   console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl, deezerUrl, platform, id });
 
-  let referenceData = {};
   let spotifyData = {};
   let deezerData = {};
+  let referenceData = { title, artist };
 
+  // 1️⃣ Prioridade: ID + plataforma
   if (platform === 'spotify' && id) {
-    referenceData = await fetchFromSpotify(null, null, null, id);
+    spotifyData = await fetchFromSpotify(null, null, null, id);
+    if (spotifyData.title && spotifyData.artist) {
+      referenceData = { title: spotifyData.title, artist: spotifyData.artist };
+    }
   } else if (platform === 'deezer' && id) {
     deezerData = await fetchFromDeezer(null, null, null, id);
-    referenceData.title = deezerData?.title || title;
-    referenceData.artist = deezerData?.artist || artist;
-  } else {
-    referenceData = {
-      title,
-      artist
-    };
+    if (deezerData.title && deezerData.artist) {
+      referenceData = { title: deezerData.title, artist: deezerData.artist };
+    }
   }
 
+  // 2️⃣ Busca cruzada usando ID da outra plataforma se disponível
+  if (!spotifyData.spotifyUrl && deezerTrackId) {
+    spotifyData = await fetchFromSpotify(null, null, null, spotifyTrackId);
+  }
+  if (!deezerData.deezerUrl && spotifyTrackId) {
+    deezerData = await fetchFromDeezer(null, null, null, deezerTrackId);
+  }
+
+  // 3️⃣ Fallback: título + artista normalizados
   if (!spotifyData.spotifyUrl) {
-    spotifyData = await fetchFromSpotify(referenceData.title, referenceData.artist);
+    spotifyData = await fetchFromSpotify(
+      normalizeTitle(referenceData.title || title),
+      normalizeArtist(referenceData.artist || artist)
+    );
   }
   if (!deezerData.deezerUrl) {
-    deezerData = await fetchFromDeezer(referenceData.title, referenceData.artist);
+    deezerData = await fetchFromDeezer(
+      normalizeTitle(referenceData.title || title),
+      normalizeArtist(referenceData.artist || artist)
+    );
   }
 
+  // 🎼 Pega tonalidade via Spotify
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
@@ -213,7 +229,9 @@ async function enrichSong(song) {
     album: spotifyData.album || deezerData.album || null,
     coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
     spotifyUrl: finalSpotifyUrl,
-    deezerUrl: deezerData.deezerUrl || (deezerUrl !== undefined ? deezerUrl : null)
+    spotifyTrackId: spotifyData.spotifyTrackId || spotifyTrackId || null,
+    deezerUrl: deezerData.deezerUrl || deezerUrl || null,
+    deezerTrackId: deezerData.deezerTrackId || deezerTrackId || null
   };
 }
 
