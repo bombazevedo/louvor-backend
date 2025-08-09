@@ -12,6 +12,21 @@ function normalize(text = '') {
     .trim();
 }
 
+// 🔹 Limpa termos poluentes comuns
+function removePollution(text = '') {
+  const pollutionTerms = [
+    /\boficial\b/gi,
+    /\bao vivo\b/gi,
+    /\bvers[aã]o portugues\b/gi,
+    /\bcover\b/gi
+  ];
+  let cleaned = text;
+  pollutionTerms.forEach(regex => {
+    cleaned = cleaned.replace(regex, '').trim();
+  });
+  return cleaned;
+}
+
 async function getSpotifyToken() {
   try {
     const clientId = process.env.SPOTIFY_CLIENT_ID;
@@ -88,15 +103,6 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
       const candidate = searchRes.data.tracks?.items?.[0];
       if (!candidate) return {};
 
-      const matchTitle = normalize(candidate.name);
-      const matchArtist = normalize(candidate.artists?.[0]?.name || '');
-
-      const originalTitle = normalize(title);
-      const originalArtist = normalize(artist);
-
-      if (!matchTitle.includes(originalTitle) && !originalTitle.includes(matchTitle)) return {};
-      if (!matchArtist.includes(originalArtist) && !originalArtist.includes(matchArtist)) return {};
-
       track = candidate;
     }
 
@@ -133,15 +139,6 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
       const candidate = searchRes.data.data?.[0];
       if (!candidate || !candidate.id) return {};
 
-      const matchTitle = normalize(candidate.title);
-      const matchArtist = normalize(candidate.artist?.name || '');
-
-      const originalTitle = normalize(title);
-      const originalArtist = normalize(artist);
-
-      if (!matchTitle.includes(originalTitle) && !originalTitle.includes(matchTitle)) return {};
-      if (!matchArtist.includes(originalArtist) && !originalArtist.includes(matchArtist)) return {};
-
       const detailRes = await axios.get(`https://api.deezer.com/track/${candidate.id}`);
       track = detailRes.data;
     }
@@ -162,8 +159,28 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
   }
 }
 
+async function fetchFromYouTube(youtubeUrl) {
+  try {
+    const match = youtubeUrl?.match(/v=([a-zA-Z0-9_\-]+)/);
+    if (!match) return {};
+    const videoId = match[1];
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const ytRes = await axios.get(`https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet&key=${apiKey}`);
+    const item = ytRes.data.items?.[0];
+    if (!item) return {};
+    return {
+      title: removePollution(item.snippet?.title || ''),
+      artist: removePollution(item.snippet?.channelTitle || ''),
+      coverUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+    };
+  } catch (err) {
+    console.error('[Enrichment] ❌ YouTube erro:', err?.response?.data || err.message);
+    return {};
+  }
+}
+
 async function enrichSong(song) {
-  const {
+  let {
     title,
     artist,
     spotifyUrl,
@@ -172,10 +189,13 @@ async function enrichSong(song) {
     spotifyTrackId,
     deezerTrackId,
     platform,
-    id
+    id,
+    youtubeUrl
   } = song;
 
-  console.log(`[enrichSong] Iniciando enrichment:`, { title, artist, spotifyUrl, deezerUrl, platform, id });
+  // Guarda originais para fallback
+  const rawTitle = title;
+  const rawArtist = artist;
 
   let spotifyData = {};
   let deezerData = {};
@@ -186,41 +206,40 @@ async function enrichSong(song) {
     spotifyData = await fetchFromSpotify(null, null, null, id);
     if (spotifyData.title && spotifyData.artist) {
       referenceData = { title: spotifyData.title, artist: spotifyData.artist };
+      title = spotifyData.title;
+      artist = spotifyData.artist;
     }
   } else if (platform === 'deezer' && id) {
     deezerData = await fetchFromDeezer(null, null, null, id);
     if (deezerData.title && deezerData.artist) {
       referenceData = { title: deezerData.title, artist: deezerData.artist };
+      title = deezerData.title;
+      artist = deezerData.artist;
+    }
+  } else if (platform === 'youtube' && youtubeUrl) {
+    const ytData = await fetchFromYouTube(youtubeUrl);
+    if (ytData.title && ytData.artist) {
+      referenceData = { title: ytData.title, artist: ytData.artist };
+      title = ytData.title;
+      artist = ytData.artist;
+      if (!coverUrl) coverUrl = ytData.coverUrl;
     }
   }
 
-  // 2️⃣ Busca cruzada usando ID da outra plataforma se disponível
-  if (!spotifyData.spotifyUrl && deezerTrackId) {
-    spotifyData = await fetchFromSpotify(null, null, null, spotifyTrackId);
-  }
-  if (!deezerData.deezerUrl && spotifyTrackId) {
-    deezerData = await fetchFromDeezer(null, null, null, deezerTrackId);
-  }
+  // 2️⃣ Busca cruzada normal
+  spotifyData = await fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId) || spotifyData;
+  deezerData = await fetchFromDeezer(title, artist, deezerUrl, deezerTrackId) || deezerData;
 
-  // 3️⃣ Fallback: título + artista normalizados
+  // 3️⃣ Fallback se não achou nada
   if (!spotifyData.spotifyUrl) {
-    spotifyData = await fetchFromSpotify(
-      normalizeTitle(referenceData.title || title),
-      normalizeArtist(referenceData.artist || artist)
-    );
+    spotifyData = await fetchFromSpotify(removePollution(rawTitle), removePollution(rawArtist));
   }
   if (!deezerData.deezerUrl) {
-    deezerData = await fetchFromDeezer(
-      normalizeTitle(referenceData.title || title),
-      normalizeArtist(referenceData.artist || artist)
-    );
+    deezerData = await fetchFromDeezer(removePollution(rawTitle), removePollution(rawArtist));
   }
 
-  // 🎼 Pega tonalidade via Spotify
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
-
-  console.log('[enrichSong] 🔍 Dados retornados:', { spotifyData, deezerData, key });
 
   return {
     bpm: deezerData.bpm || null,
@@ -231,10 +250,10 @@ async function enrichSong(song) {
     spotifyUrl: finalSpotifyUrl,
     spotifyTrackId: spotifyData.spotifyTrackId || spotifyTrackId || null,
     deezerUrl: deezerData.deezerUrl || deezerUrl || null,
-    deezerTrackId: deezerData.deezerTrackId || deezerTrackId || null
+    deezerTrackId: deezerData.deezerTrackId || deezerTrackId || null,
+    title: title,
+    artist: artist
   };
 }
 
-module.exports = {
-  enrichSong,
-};
+module.exports = { enrichSong };
