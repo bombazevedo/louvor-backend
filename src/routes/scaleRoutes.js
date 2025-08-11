@@ -4,28 +4,32 @@ const router = express.Router();
 const { authenticate, isCoordinator } = require('../middleware/auth');
 const scaleController = require('../controllers/scaleController');
 
-// Todas as rotas abaixo exigem autenticação
+// Todas as rotas exigem autenticação
 router.use(authenticate);
 
-// Listar todas as escalas
-router.get('/', scaleController.getAllScales);
+// CRUD
+if (typeof scaleController.getAllScales === 'function') {
+  router.get('/', scaleController.getAllScales);
+}
+if (typeof scaleController.getScaleByEventId === 'function') {
+  router.get('/event/:eventId', scaleController.getScaleByEventId);
+}
+if (typeof scaleController.getScaleById === 'function') {
+  router.get('/:id', scaleController.getScaleById);
+}
+if (typeof scaleController.createScale === 'function') {
+  router.post('/', scaleController.createScale);
+}
+if (typeof scaleController.updateScale === 'function') {
+  router.patch('/:id', scaleController.updateScale);
+}
+if (typeof scaleController.deleteScale === 'function') {
+  router.delete('/:id', scaleController.deleteScale);
+}
 
-// Detalhes de uma escala pelo ID
-router.get('/:id', scaleController.getScaleById);
-
-// Escala associada a um evento
-router.get('/event/:eventId', scaleController.getScaleByEventId);
-
-// Criar nova escala (apenas coordenador)
-router.post('/', isCoordinator, scaleController.createScale);
-
-// Atualizar escala existente (apenas coordenador)
-router.patch('/:id', isCoordinator, scaleController.updateScale);
-
-// Remover escala (apenas coordenador)
-router.delete('/:id', isCoordinator, scaleController.deleteScale);
-
-// Exportar escalas em PDF (apenas coordenador)
-router.get('/export/pdf', isCoordinator, scaleController.exportScalesPDF);
+// Exportar escalas em PDF (somente coordenador)
+if (typeof scaleController.exportScalesPDF === 'function') {
+  router.get('/export/pdf', isCoordinator, scaleController.exportScalesPDF);
+}
 
 module.exports = router;

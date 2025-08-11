@@ -3,9 +3,8 @@ const Scale = require('../models/Scale');
 const Event = require('../models/Event');
 const moment = require('moment');
 const puppeteer = require('puppeteer');
-const path = require('path');
 
-// Listar todas as escalas
+// ======================= CRUD Padrão =======================
 exports.getAllScales = async (req, res) => {
   try {
     const scales = await Scale.find()
@@ -13,26 +12,24 @@ exports.getAllScales = async (req, res) => {
       .populate('members.function', 'name');
     res.json(scales);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[getAllScales] Erro:', err.message);
+    res.status(500).json({ message: 'Erro ao buscar escalas' });
   }
 };
 
-// Obter detalhes de uma escala por ID
 exports.getScaleById = async (req, res) => {
   try {
     const scale = await Scale.findById(req.params.id)
       .populate('members.user', 'name email')
       .populate('members.function', 'name');
-    if (!scale) {
-      return res.status(404).json({ message: 'Escala não encontrada' });
-    }
+    if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
     res.json(scale);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[getScaleById] Erro:', err.message);
+    res.status(500).json({ message: 'Erro ao buscar escala' });
   }
 };
 
-// Obter escala associada a um evento
 exports.getScaleByEventId = async (req, res) => {
   try {
     const event = await Event.findById(req.params.eventId)
@@ -43,58 +40,72 @@ exports.getScaleByEventId = async (req, res) => {
           { path: 'members.function', select: 'name' }
         ]
       });
-    if (!event || !event.scale) {
+  if (!event || !event.scale) {
       return res.status(404).json({ message: 'Escala não encontrada para este evento' });
     }
     res.json(event.scale);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[getScaleByEventId] Erro:', err.message);
+    res.status(500).json({ message: 'Erro ao buscar escala do evento' });
   }
 };
 
-// Criar nova escala
 exports.createScale = async (req, res) => {
-  const scale = new Scale({
-    members: req.body.members
-  });
   try {
+    // eventId é obrigatório no schema
+    const scale = new Scale({
+      eventId: req.body.eventId,
+      members: req.body.members || [],
+      notes: req.body.notes || ''
+    });
     const newScale = await scale.save();
+
+    // opcional: vincula no evento, se fornecido
+    if (req.body.eventId) {
+      await Event.findByIdAndUpdate(req.body.eventId, { scale: newScale._id });
+    }
+
     res.status(201).json(newScale);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error('[createScale] Erro:', err.message);
+    res.status(400).json({ message: 'Erro ao criar escala' });
   }
 };
 
-// Atualizar escala existente
 exports.updateScale = async (req, res) => {
   try {
     const scale = await Scale.findById(req.params.id);
-    if (!scale) {
-      return res.status(404).json({ message: 'Escala não encontrada' });
-    }
-    scale.members = req.body.members || scale.members;
-    const updatedScale = await scale.save();
-    res.json(updatedScale);
+    if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
+
+    if (req.body.members) scale.members = req.body.members;
+    if (typeof req.body.notes === 'string') scale.notes = req.body.notes;
+    if (req.body.eventId) scale.eventId = req.body.eventId;
+
+    const updated = await scale.save();
+    res.json(updated);
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    console.error('[updateScale] Erro:', err.message);
+    res.status(400).json({ message: 'Erro ao atualizar escala' });
   }
 };
 
-// Remover escala
 exports.deleteScale = async (req, res) => {
   try {
     const scale = await Scale.findById(req.params.id);
-    if (!scale) {
-      return res.status(404).json({ message: 'Escala não encontrada' });
-    }
+    if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
+
+    // remove referência no Event, se houver
+    await Event.updateMany({ scale: scale._id }, { $unset: { scale: '' } });
     await scale.deleteOne();
+
     res.json({ message: 'Escala removida com sucesso' });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    console.error('[deleteScale] Erro:', err.message);
+    res.status(500).json({ message: 'Erro ao remover escala' });
   }
 };
 
-// ======================= Funções auxiliares para exportScalesPDF =======================
+// ======================= Exportar PDF =======================
 function resolveDateRange(query) {
   if (query.start && query.end) {
     const start = new Date(query.start);
@@ -170,43 +181,51 @@ function htmlTemplate({ events, label, coordinatorName }) {
       return (a.user?.name || '').localeCompare(b.user?.name || '');
     });
 
-    const memberRows = members.map((m) => {
-      const role = safe(m.function?.name);
-      const user = safe(m.user?.name);
-      return `
+    const membersHtml = members.length === 0
+      ? `<div class="event-meta" style="opacity:.7">Nenhum membro escalado.</div>`
+      : members.map(m => `
         <div class="member-row">
-          <div class="member-role">• ${role}</div>
-          <div class="member-user">${user}</div>
-        </div>`;
-    }).join('');
+          <div class="member-role">🎵 ${safe(m.function?.name)}</div>
+          <div class="member-user">${safe(m.user?.name)}</div>
+        </div>
+      `).join('');
 
     return `
       <div class="event">
-        <div class="event-title">${safe(ev.title) || 'Evento'} 
-          <span class="badge">${fmt(ev.date)}</span>
-        </div>
-        <div class="event-meta">📍 ${safe(ev.location) || 'Local não informado'}</div>
-        <div class="members">${memberRows || '<em>Sem membros escalados.</em>'}</div>
-      </div>`;
+        <div class="event-title">${safe(ev.title)} <span class="badge">${safe(ev.type || 'evento')}</span></div>
+        <div class="event-meta">📅 ${fmt(ev.date)} ${ev.location ? ` • 📍 ${safe(ev.location)}` : ''}</div>
+        <div class="members">${membersHtml}</div>
+      </div>
+    `;
   }).join('');
 
   return `
-    <html>
-      <head><meta charset="utf-8" /><style>${style()}</style></head>
+    <!DOCTYPE html>
+    <html lang="pt-br">
+      <head>
+        <meta charset="utf-8" />
+        <style>${style()}</style>
+        <title>Escalas — ${label}</title>
+      </head>
       <body>
         <div class="header">
-          <div class="title">Escalas — WorshipHub</div>
-          <div class="period">${label}${coordinatorName ? ` • Coord.: ${coordinatorName}` : ''}</div>
+          <div>
+            <div class="title">Escalas — WorshipHub</div>
+            <div class="period">${label}</div>
+          </div>
+          <div style="font-size:12px;text-align:right;">
+            Gerado em ${moment().format('DD/MM/YYYY HH:mm')}<br/>
+            ${coordinatorName ? `Coord.: ${coordinatorName}` : ''}
+          </div>
         </div>
-        ${blocks || '<p style="margin-top:16px;">Nenhum evento encontrado no período selecionado.</p>'}
-        <div class="footer">
-          Gerado automaticamente pelo WorshipHub em ${moment().format('DD/MM/YYYY HH:mm')}
-        </div>
+        ${blocks || '<p style="margin-top:16px;opacity:.8">Sem eventos neste período.</p>'}
+        <div class="footer">Relatório gerado automaticamente — WorshipHub</div>
       </body>
-    </html>`;
+    </html>
+  `;
 }
 
-async function exportScalesPDF(req, res) {
+exports.exportScalesPDF = async (req, res) => {
   try {
     const { start, end, label } = resolveDateRange(req.query);
 
@@ -217,12 +236,10 @@ async function exportScalesPDF(req, res) {
       .populate({
         path: 'scale',
         populate: [
-          { path: 'members.user', select: 'name email photoUrl' },
+          { path: 'members.user', select: 'name email' },
           { path: 'members.function', select: 'name' }
         ]
-      })
-      .select('title date location scale')
-      .lean();
+      });
 
     const html = htmlTemplate({
       events,
@@ -233,28 +250,21 @@ async function exportScalesPDF(req, res) {
     const browser = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdf = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '14mm', right: '10mm', bottom: '14mm', left: '10mm' }
+    });
+    await browser.close();
 
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '20mm', bottom: '20mm', left: '12mm', right: '12mm' }
-      });
-
-      const filenameSafe = `escalas_${moment(start).format('YYYYMMDD')}_${moment(end).format('YYYYMMDD')}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${filenameSafe}"`);
-      return res.status(200).send(pdfBuffer);
-    } finally {
-      await browser.close();
-    }
+    const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+    res.status(200).send(pdf);
   } catch (err) {
-    console.error('[exportScalesPDF] Erro:', err?.message || err);
-    return res.status(500).json({ message: 'Falha ao gerar PDF de escalas.' });
+    console.error('[exportScalesPDF] Erro:', err.message);
+    res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
   }
-}
-
-// Exporta tudo junto
-module.exports.exportScalesPDF = exportScalesPDF;
+};
