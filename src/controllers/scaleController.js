@@ -40,7 +40,7 @@ exports.getScaleByEventId = async (req, res) => {
           { path: 'members.function', select: 'name' }
         ]
       });
-  if (!event || !event.scale) {
+    if (!event || !event.scale) {
       return res.status(404).json({ message: 'Escala não encontrada para este evento' });
     }
     res.json(event.scale);
@@ -52,7 +52,6 @@ exports.getScaleByEventId = async (req, res) => {
 
 exports.createScale = async (req, res) => {
   try {
-    // eventId é obrigatório no schema
     const scale = new Scale({
       eventId: req.body.eventId,
       members: req.body.members || [],
@@ -60,7 +59,6 @@ exports.createScale = async (req, res) => {
     });
     const newScale = await scale.save();
 
-    // opcional: vincula no evento, se fornecido
     if (req.body.eventId) {
       await Event.findByIdAndUpdate(req.body.eventId, { scale: newScale._id });
     }
@@ -94,7 +92,6 @@ exports.deleteScale = async (req, res) => {
     const scale = await Scale.findById(req.params.id);
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
-    // remove referência no Event, se houver
     await Event.updateMany({ scale: scale._id }, { $unset: { scale: '' } });
     await scale.deleteOne();
 
@@ -252,7 +249,7 @@ exports.exportScalesPDF = async (req, res) => {
     });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdf = await page.pdf({
+    const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: { top: '14mm', right: '10mm', bottom: '14mm', left: '10mm' }
@@ -262,7 +259,8 @@ exports.exportScalesPDF = async (req, res) => {
     const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
-    res.status(200).send(pdf);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer, 'binary');
   } catch (err) {
     console.error('[exportScalesPDF] Erro:', err.message);
     res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
