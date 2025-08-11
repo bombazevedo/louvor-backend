@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+- const { authenticate } = require('../middleware/auth');
++ const { authenticate, isCoordinator } = require('../middleware/auth');
 
 const scaleController = require('../controllers/scaleController');
 
@@ -23,5 +24,10 @@ if (typeof scaleController.updateScale === 'function') {
 if (typeof scaleController.deleteScale === 'function') {
   router.delete('/:id', authenticate, scaleController.deleteScale);
 }
+
++ // ✅ NOVA rota: exportação de escalas em PDF (somente coordenador)
++ if (typeof scaleController.exportScalesPDF === 'function') {
++   router.get('/export', authenticate, isCoordinator, scaleController.exportScalesPDF);
++ }
 
 module.exports = router;
