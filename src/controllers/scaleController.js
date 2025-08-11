@@ -1,17 +1,100 @@
 // src/controllers/scaleController.js
-// ⬇️ (mantenha seus requires existentes)
+const Scale = require('../models/Scale');
 const Event = require('../models/Event');
-const moment = require('moment'); // já usado no projeto; se não, remova e use Date puro
-const puppeteer = require('puppeteer'); // utiliza dep já existente
+const moment = require('moment');
+const puppeteer = require('puppeteer');
 const path = require('path');
 
-/**
- * Traduz query em intervalo de datas.
- * Suporta:
- *  - period=month|quarter|semester
- *  - ref=YYYY-MM-DD (opcional; default = hoje)
- *  - OU start=YYYY-MM-DD&end=YYYY-MM-DD (prioritário)
- */
+// Listar todas as escalas
+exports.getAllScales = async (req, res) => {
+  try {
+    const scales = await Scale.find()
+      .populate('members.user', 'name email')
+      .populate('members.function', 'name');
+    res.json(scales);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Obter detalhes de uma escala por ID
+exports.getScaleById = async (req, res) => {
+  try {
+    const scale = await Scale.findById(req.params.id)
+      .populate('members.user', 'name email')
+      .populate('members.function', 'name');
+    if (!scale) {
+      return res.status(404).json({ message: 'Escala não encontrada' });
+    }
+    res.json(scale);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Obter escala associada a um evento
+exports.getScaleByEventId = async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.eventId)
+      .populate({
+        path: 'scale',
+        populate: [
+          { path: 'members.user', select: 'name email' },
+          { path: 'members.function', select: 'name' }
+        ]
+      });
+    if (!event || !event.scale) {
+      return res.status(404).json({ message: 'Escala não encontrada para este evento' });
+    }
+    res.json(event.scale);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Criar nova escala
+exports.createScale = async (req, res) => {
+  const scale = new Scale({
+    members: req.body.members
+  });
+  try {
+    const newScale = await scale.save();
+    res.status(201).json(newScale);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Atualizar escala existente
+exports.updateScale = async (req, res) => {
+  try {
+    const scale = await Scale.findById(req.params.id);
+    if (!scale) {
+      return res.status(404).json({ message: 'Escala não encontrada' });
+    }
+    scale.members = req.body.members || scale.members;
+    const updatedScale = await scale.save();
+    res.json(updatedScale);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Remover escala
+exports.deleteScale = async (req, res) => {
+  try {
+    const scale = await Scale.findById(req.params.id);
+    if (!scale) {
+      return res.status(404).json({ message: 'Escala não encontrada' });
+    }
+    await scale.deleteOne();
+    res.json({ message: 'Escala removida com sucesso' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ======================= Funções auxiliares para exportScalesPDF =======================
 function resolveDateRange(query) {
   if (query.start && query.end) {
     const start = new Date(query.start);
@@ -25,7 +108,7 @@ function resolveDateRange(query) {
   const m = moment(ref);
 
   if (period === 'quarter' || period === 'trimestre') {
-    const q = Math.floor(m.month() / 3); // 0..3
+    const q = Math.floor(m.month() / 3);
     const start = moment(m).month(q * 3).startOf('month').startOf('day').toDate();
     const end = moment(m).month(q * 3 + 2).endOf('month').endOf('day').toDate();
     return { start, end, label: `Trimestre ${q + 1}/${m.year()}` };
@@ -38,14 +121,12 @@ function resolveDateRange(query) {
     return { start, end, label: `Semestre ${s}/${m.year()}` };
   }
 
-  // default: month
   const start = moment(m).startOf('month').startOf('day').toDate();
   const end = moment(m).endOf('month').endOf('day').toDate();
   return { start, end, label: `${m.format('MMMM [de] YYYY')}` };
 }
 
 function style() {
-  // Identidade Visual WorshipHub
   const roxo = '#4B0082';
   const dourado = '#FFD700';
   const preto = '#000000';
@@ -58,7 +139,7 @@ function style() {
       background: ${roxo}; color: ${branco}; padding: 14px 16px; border-radius: 10px;
       display:flex; align-items:center; justify-content:space-between;
     }
-    .title { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+    .title { font-size: 20px; font-weight: 700; }
     .period { font-size: 12px; opacity: .9; }
     .event {
       border: 1px solid ${dourado}; border-radius: 12px; padding: 12px; margin: 12px 0;
@@ -83,7 +164,6 @@ function htmlTemplate({ events, label, coordinatorName }) {
 
   const blocks = events.map((ev) => {
     const members = (ev.scale?.members || []).filter(m => m?.user && m?.function);
-    // Ordena por função -> nome do usuário
     members.sort((a, b) => {
       const fa = (a.function?.name || '').localeCompare(b.function?.name || '');
       if (fa !== 0) return fa;
@@ -126,19 +206,10 @@ function htmlTemplate({ events, label, coordinatorName }) {
     </html>`;
 }
 
-/**
- * GET /api/scales/export
- * Query:
- *   - period=month|quarter|semester (default: month)
- *   - ref=YYYY-MM-DD (opcional; base para o período)
- *   - OU start/end (YYYY-MM-DD) para intervalo custom
- * Retorna: application/pdf (attachment)
- */
 async function exportScalesPDF(req, res) {
   try {
     const { start, end, label } = resolveDateRange(req.query);
 
-    // Busca eventos no intervalo com escala e membros populados
     const events = await Event.find({
       date: { $gte: start, $lte: end }
     })
@@ -159,7 +230,6 @@ async function exportScalesPDF(req, res) {
       coordinatorName: req.user?.name || ''
     });
 
-    // Renderiza com headless Chromium já disponível via puppeteer
     const browser = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
@@ -186,5 +256,5 @@ async function exportScalesPDF(req, res) {
   }
 }
 
-// ⬇️ Acrescente este export ao que você já possui
+// Exporta tudo junto
 module.exports.exportScalesPDF = exportScalesPDF;
