@@ -178,14 +178,12 @@ function htmlTemplate({ events, label, coordinatorName }) {
       return (a.user?.name || '').localeCompare(b.user?.name || '');
     });
 
-    const membersHtml = members.length === 0
-      ? `<div class="event-meta" style="opacity:.7">Nenhum membro escalado.</div>`
-      : members.map(m => `
-        <div class="member-row">
-          <div class="member-role">🎵 ${safe(m.function?.name)}</div>
-          <div class="member-user">${safe(m.user?.name)}</div>
-        </div>
-      `).join('');
+    const membersHtml = members.map(m => `
+      <div class="member-row">
+        <div class="member-role">🎵 ${safe(m.function?.name)}</div>
+        <div class="member-user">${safe(m.user?.name)}</div>
+      </div>
+    `).join('');
 
     return `
       <div class="event">
@@ -238,8 +236,37 @@ exports.exportScalesPDF = async (req, res) => {
         ]
       });
 
+    // 🔍 Reforço na busca de membros e filtro de eventos sem escala
+    const finalEvents = [];
+    for (const event of events) {
+      let scaleData = event.scale;
+
+      if (!scaleData || !scaleData.members || scaleData.members.length === 0) {
+        const foundScale = await Scale.findOne({ eventId: event._id })
+          .populate('members.user', 'name email')
+          .populate('members.function', 'name');
+
+        if (foundScale && foundScale.members.length > 0) {
+          scaleData = foundScale;
+        }
+      }
+
+      if (!scaleData || !scaleData.members || scaleData.members.length === 0) {
+        continue;
+      }
+
+      finalEvents.push({
+        ...event.toObject(),
+        scale: scaleData
+      });
+    }
+
+    if (finalEvents.length === 0) {
+      return res.status(404).json({ message: 'Nenhum evento com membros escalados encontrado no período.' });
+    }
+
     const html = htmlTemplate({
-      events,
+      events: finalEvents,
       label,
       coordinatorName: req.user?.name || ''
     });
