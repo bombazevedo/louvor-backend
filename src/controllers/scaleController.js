@@ -4,6 +4,8 @@ const Event = require('../models/Event');
 const moment = require('moment');
 const puppeteer = require('puppeteer');
 
+moment.locale('pt-br');
+
 // ======================= CRUD Padrão =======================
 exports.getAllScales = async (req, res) => {
   try {
@@ -36,7 +38,7 @@ exports.getScaleByEventId = async (req, res) => {
       .populate({
         path: 'scale',
         populate: [
-          { path: 'members.user', select: 'name email' },
+          { path: 'members.user', select: 'name email photoUrl' },
           { path: 'members.function', select: 'name' }
         ]
       });
@@ -102,13 +104,22 @@ exports.deleteScale = async (req, res) => {
   }
 };
 
-// ======================= Exportar PDF =======================
+// ======================= Exportar PDF (Premium) =======================
+
+/**
+ * Preferência futura: permitir DD/MM/YYYY ou "D de MMMM de YYYY".
+ * Por ora, usamos DD/MM/YYYY.
+ */
+function fmtDate(d) {
+  return d ? moment(d).format('DD/MM/YYYY') : '';
+}
+
 function resolveDateRange(query) {
   if (query.start && query.end) {
     const start = new Date(query.start);
     const end = new Date(query.end);
     end.setHours(23, 59, 59, 999);
-    return { start, end, label: `De ${query.start} a ${query.end}` };
+    return { start, end, label: `${fmtDate(start)} - ${fmtDate(end)}` };
   }
 
   const period = String(query.period || 'month').toLowerCase();
@@ -134,62 +145,241 @@ function resolveDateRange(query) {
   return { start, end, label: `${m.format('MMMM [de] YYYY')}` };
 }
 
+/**
+ * Paleta WorshipHub
+ */
+const COLORS = {
+  roxo: '#4B0082',
+  dourado: '#FFD700',
+  preto: '#000000',
+  branco: '#FFFFFF',
+  cinzaClaro: '#F7F7FB',
+  cinzaMedio: '#EAEAF2'
+};
+
+/**
+ * Ordem fixa de funções (nomes EXATOS, como estão salvos no banco).
+ * Funções não listadas aqui vão para o final (ordem alfabética).
+ */
+const FIXED_FUNCTION_ORDER = [
+  'Ministro',
+  'Voz',
+  'Back Vocal',
+  'Guitarra',
+  'Violão',
+  'Baixo',
+  'Teclado',
+  'Piano',
+  'Bateria',
+  'Percussão',
+  'Sopro',
+  'Sax',
+  'Trompete',
+  'Violino',
+  'Cello',
+  'Multimídia',
+  'Projeção',
+  'Som',
+  'Áudio',
+  'Luz',
+  'Transmissão'
+];
+
+/**
+ * Ícones de funções conhecidos (matching por nome exato; fallback 🎵)
+ */
+const KNOWN_ICONS = {
+  'Ministro': '🎤',
+  'Voz': '🎤',
+  'Back Vocal': '🎤',
+  'Guitarra': '🎸',
+  'Violão': '🎸',
+  'Baixo': '🎸',
+  'Teclado': '🎹',
+  'Piano': '🎹',
+  'Bateria': '🥁',
+  'Percussão': '🥁',
+  'Sopro': '🎺',
+  'Sax': '🎷',
+  'Trompete': '🎺',
+  'Violino': '🎻',
+  'Cello': '🎻',
+  'Multimídia': '🖥️',
+  'Projeção': '🖥️',
+  'Som': '🎚️',
+  'Áudio': '🎚️',
+  'Luz': '💡',
+  'Transmissão': '📡'
+};
+
+function getIconForFunctionName(name) {
+  if (!name) return '🎵';
+  return KNOWN_ICONS[name] || '🎵';
+}
+
+/**
+ * CSS Premium (cards, cabeçalho, rodapé, alternância de cores, ícones, avatar)
+ */
 function style() {
-  const roxo = '#4B0082';
-  const dourado = '#FFD700';
-  const preto = '#000000';
-  const branco = '#FFFFFF';
+  const { roxo, dourado, preto, branco, cinzaClaro, cinzaMedio } = COLORS;
 
   return `
-    @page { size: A4; margin: 20mm 12mm; }
+    @page { size: A4; margin: 18mm 12mm; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { font-family: Arial, Helvetica, sans-serif; color: ${preto}; }
+
     .header {
-      background: ${roxo}; color: ${branco}; padding: 14px 16px; border-radius: 10px;
+      background: linear-gradient(90deg, ${roxo} 0%, ${preto} 100%);
+      color: ${branco}; padding: 16px 18px; border-radius: 12px;
+      display:flex; align-items:center; justify-content:space-between;
+      margin-bottom: 14px;
+    }
+    .header .title { font-size: 22px; font-weight: 800; letter-spacing: .3px; }
+    .header .period { font-size: 12px; opacity: .95; text-align:right; }
+    .header .period strong { color: ${dourado}; }
+
+    .week-title {
+      font-size: 14px; font-weight:700; color:${roxo};
+      margin: 10px 0 6px 2px;
+    }
+    .event-card {
+      border: 1px solid ${dourado};
+      border-radius: 14px;
+      margin: 10px 0;
+      overflow: hidden;
+      background: ${branco};
+    }
+    .event-card.alt { background: ${cinzaClaro}; border-color: ${cinzaMedio}; }
+    .event-header {
+      background: ${roxo}; color: ${branco}; padding: 10px 12px;
       display:flex; align-items:center; justify-content:space-between;
     }
-    .title { font-size: 20px; font-weight: 700; }
-    .period { font-size: 12px; opacity: .9; }
-    .event {
-      border: 1px solid ${dourado}; border-radius: 12px; padding: 12px; margin: 12px 0;
-    }
-    .event-title { font-size: 16px; font-weight: 700; margin: 0 0 6px 0; }
-    .event-meta { font-size: 13px; margin: 2px 0; }
-    .members { margin-top: 8px; }
-    .member-row { display:flex; font-size: 13px; margin: 2px 0; }
-    .member-role { width: 45%; font-weight: 600; }
-    .member-user { width: 55%; }
-    .footer { margin-top: 16px; font-size: 11px; color: #555; text-align: center; }
+    .event-title { font-size: 16px; font-weight: 800; }
+    .event-info { font-size: 12px; opacity: .95; }
     .badge {
-      display:inline-block; padding: 2px 8px; font-size: 11px; border:1px solid ${dourado};
-      border-radius: 999px; color: ${roxo}; margin-left: 8px; background: #fffbe6;
+      display:inline-block; padding: 2px 8px; font-size: 11px;
+      border: 1px solid ${dourado}; border-radius: 999px; color: ${dourado}; background: #1f1033;
+      margin-left: 8px;
     }
+    .event-body { padding: 10px 12px; }
+    .row { display:flex; align-items:center; margin: 6px 0; }
+    .role { width: 44%; font-weight:700; font-size: 13px; color:${roxo}; display:flex; align-items:center; }
+    .role .icon { margin-right:6px; }
+    .member { width: 56%; font-size: 13px; display:flex; align-items:center; }
+    .avatar {
+      width:18px; height:18px; border-radius: 50%; margin-right: 6px; object-fit: cover; border: 1px solid ${cinzaMedio};
+    }
+
+    .footer {
+      margin-top: 12px; font-size: 11px; color: #555; text-align: center;
+    }
+    .muted { opacity:.75; }
+
+    .separator { height:1px; background:${cinzaMedio}; margin: 8px 0 6px 0; }
   `;
 }
 
-function htmlTemplate({ events, label, coordinatorName }) {
-  const safe = (v) => (v == null ? '' : String(v));
-  const fmt = (d) => (d ? moment(d).format('DD/MM/YYYY') : '');
+/**
+ * Agrupa eventos por semana (ISO week)
+ */
+function groupEventsByWeek(events) {
+  const groups = {};
+  events.forEach(ev => {
+    const week = moment(ev.date).isoWeek();
+    const year = moment(ev.date).isoWeekYear();
+    const key = `${year}-W${week}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(ev);
+  });
 
-  const blocks = events.map((ev) => {
-    const members = (ev.scale?.members || []).filter(m => m?.user && m?.function);
-    members.sort((a, b) => {
-      const fa = (a.function?.name || '').localeCompare(b.function?.name || '');
-      if (fa !== 0) return fa;
-      return (a.user?.name || '').localeCompare(b.user?.name || '');
-    });
+  // ordenar semanas por data
+  const orderedKeys = Object.keys(groups).sort((a, b) => {
+    const [ay, aw] = a.split('-W').map(Number);
+    const [by, bw] = b.split('-W').map(Number);
+    if (ay !== by) return ay - by;
+    return aw - bw;
+  });
 
-    const membersHtml = members.map(m => `
-      <div class="member-row">
-        <div class="member-role">🎵 ${safe(m.function?.name)}</div>
-        <div class="member-user">${safe(m.user?.name)}</div>
-      </div>
-    `).join('');
+  return orderedKeys.map(key => {
+    const [year, wk] = key.split('-W').map(Number);
+    const start = moment().isoWeekYear(year).isoWeek(wk).startOf('isoWeek');
+    const end = moment().isoWeekYear(year).isoWeek(wk).endOf('isoWeek');
+    const label = `Semana ${wk} • ${fmtDate(start)} a ${fmtDate(end)}`;
+    const evs = groups[key].sort((a, b) => new Date(a.date) - new Date(b.date));
+    return { key, label, events: evs };
+  });
+}
+
+/**
+ * Ordena membros por ordem fixa de função (FIXED_FUNCTION_ORDER) e depois por nome
+ */
+function sortMembersFixed(members) {
+  const orderIndex = new Map(FIXED_FUNCTION_ORDER.map((name, idx) => [name, idx]));
+  return [...(members || [])].sort((a, b) => {
+    const fa = a?.function?.name || '';
+    const fb = b?.function?.name || '';
+    const ia = orderIndex.has(fa) ? orderIndex.get(fa) : Number.MAX_SAFE_INTEGER;
+    const ib = orderIndex.has(fb) ? orderIndex.get(fb) : Number.MAX_SAFE_INTEGER;
+    if (ia !== ib) return ia - ib;
+    // se mesma função, ordenar por nome do usuário
+    const ua = (a?.user?.name || '').localeCompare(b?.user?.name || '');
+    return ua;
+  });
+}
+
+function safe(v) {
+  return v == null ? '' : String(v);
+}
+
+/**
+ * Template premium em HTML (para render no Puppeteer)
+ */
+function htmlTemplate({ grouped, label, coordinatorName }) {
+  const blocks = grouped.map((grp, groupIdx) => {
+    const eventCards = grp.events.map((ev, idx) => {
+      const alt = (idx % 2 === 1) ? ' alt' : '';
+      const members = sortMembersFixed(ev.scale?.members || []);
+
+      const membersHtml = members.length
+        ? members.map(m => {
+            const roleName = safe(m.function?.name);
+            const icon = getIconForFunctionName(roleName);
+            const userName = safe(m.user?.name);
+            const avatar = safe(m.user?.photoUrl);
+            return `
+              <div class="row">
+                <div class="role"><span class="icon">${icon}</span>${roleName}</div>
+                <div class="member">
+                  ${avatar ? `<img class="avatar" src="${avatar}" />` : ''}
+                  <span>${userName}</span>
+                </div>
+              </div>
+            `;
+          }).join('')
+        : `<div class="row muted"><div>Sem membros escalados.</div></div>`;
+
+      return `
+        <div class="event-card${alt}">
+          <div class="event-header">
+            <div class="event-title">
+              ${safe(ev.title) || 'Evento'}
+              <span class="badge">${fmtDate(ev.date)}</span>
+            </div>
+            <div class="event-info">
+              ${ev.location ? `📍 ${safe(ev.location)}` : ''}
+            </div>
+          </div>
+          <div class="event-body">
+            ${membersHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
 
     return `
-      <div class="event">
-        <div class="event-title">${safe(ev.title)} <span class="badge">${safe(ev.type || 'evento')}</span></div>
-        <div class="event-meta">📅 ${fmt(ev.date)} ${ev.location ? ` • 📍 ${safe(ev.location)}` : ''}</div>
-        <div class="members">${membersHtml}</div>
+      <div class="week">
+        <div class="week-title">${grp.label}</div>
+        ${eventCards}
       </div>
     `;
   }).join('');
@@ -204,17 +394,18 @@ function htmlTemplate({ events, label, coordinatorName }) {
       </head>
       <body>
         <div class="header">
-          <div>
-            <div class="title">Escalas — WorshipHub</div>
-            <div class="period">${label}</div>
-          </div>
-          <div style="font-size:12px;text-align:right;">
-            Gerado em ${moment().format('DD/MM/YYYY HH:mm')}<br/>
-            ${coordinatorName ? `Coord.: ${coordinatorName}` : ''}
+          <div class="title">Escalas — WorshipHub</div>
+          <div class="period">
+            Período: <strong>${label}</strong><br/>
+            ${coordinatorName ? `Coord.: ${safe(coordinatorName)} • ` : ''}Gerado em ${moment().format('DD/MM/YYYY HH:mm')}
           </div>
         </div>
-        ${blocks || '<p style="margin-top:16px;opacity:.8">Sem eventos neste período.</p>'}
-        <div class="footer">Relatório gerado automaticamente — WorshipHub</div>
+
+        ${blocks || '<p class="muted">Sem eventos neste período.</p>'}
+
+        <div class="footer">
+          WorshipHub • Relatório premium de escalas
+        </div>
       </body>
     </html>
   `;
@@ -224,72 +415,70 @@ exports.exportScalesPDF = async (req, res) => {
   try {
     const { start, end, label } = resolveDateRange(req.query);
 
+    // 1) Buscar eventos no período com escala e membros populados
     const events = await Event.find({
       date: { $gte: start, $lte: end }
     })
       .sort({ date: 1 })
+      .select('title date location scale')
       .populate({
         path: 'scale',
         populate: [
-          { path: 'members.user', select: 'name email' },
+          { path: 'members.user', select: 'name email photoUrl' },
           { path: 'members.function', select: 'name' }
         ]
-      });
+      })
+      .lean();
 
-    // 🔍 Reforço na busca de membros e filtro de eventos sem escala
+    // 2) Reforço: se por algum motivo o populate acima não trouxe a escala, tentar pela Scale (legado)
     const finalEvents = [];
-    for (const event of events) {
-      let scaleData = event.scale;
-
-      if (!scaleData || !scaleData.members || scaleData.members.length === 0) {
-        const foundScale = await Scale.findOne({ eventId: event._id })
-          .populate('members.user', 'name email')
-          .populate('members.function', 'name');
-
-        if (foundScale && foundScale.members.length > 0) {
-          scaleData = foundScale;
-        }
+    for (const ev of events) {
+      let scaleData = ev.scale;
+      if (!scaleData || !Array.isArray(scaleData.members)) {
+        const foundScale = await Scale.findOne({ eventId: ev._id })
+          .populate('members.user', 'name email photoUrl')
+          .populate('members.function', 'name')
+          .lean();
+        if (foundScale) scaleData = foundScale;
       }
-
-      if (!scaleData || !scaleData.members || scaleData.members.length === 0) {
-        continue;
-      }
-
-      finalEvents.push({
-        ...event.toObject(),
-        scale: scaleData
-      });
+      finalEvents.push({ ...ev, scale: scaleData || { members: [] } });
     }
 
-    if (finalEvents.length === 0) {
-      return res.status(404).json({ message: 'Nenhum evento com membros escalados encontrado no período.' });
-    }
+    // 3) Agrupar por semana
+    const grouped = groupEventsByWeek(finalEvents);
 
+    // 4) Montar HTML premium
     const html = htmlTemplate({
-      events: finalEvents,
+      grouped,
       label,
       coordinatorName: req.user?.name || ''
     });
 
+    // 5) Gerar PDF via Puppeteer
     const browser = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '14mm', right: '10mm', bottom: '14mm', left: '10mm' }
-    });
-    await browser.close();
+    try {
+      const page = await browser.newPage();
+      // Permitir carregar avatars externos (Cloudinary etc.)
+      await page.setContent(html, { waitUntil: 'networkidle0' });
 
-    const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.end(pdfBuffer, 'binary');
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '18mm', right: '12mm', bottom: '18mm', left: '12mm' }
+      });
+
+      const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer); // sem 'binary' para evitar charset injection
+    } finally {
+      await browser.close();
+    }
   } catch (err) {
-    console.error('[exportScalesPDF] Erro:', err.message);
-    res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
+    console.error('[exportScalesPDF] Erro:', err?.stack || err?.message || err);
+    return res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
   }
 };
