@@ -4,6 +4,8 @@ const Event = require('../models/Event');
 const moment = require('moment');
 const puppeteer = require('puppeteer');
 
+moment.locale('pt-br');
+
 // ======================= CRUD Padrão =======================
 exports.getAllScales = async (req, res) => {
   try {
@@ -104,60 +106,16 @@ exports.deleteScale = async (req, res) => {
 
 // ======================= Exportar PDF (Premium) =======================
 
-/** Mapa fixo de ícones por função (nomes exatos + variações comuns) */
-const FUNCTION_ICONS = {
-  'Ministro': '🎤',
-  'Líder de Louvor': '🎤',
-  'Vocal': '🎤',
-  'Back Vocal': '🎶',
-  'Guitarra': '🎸',
-  'Guitarrista': '🎸',
-  'Violão': '🎸',
-  'Baixo': '🪕',
-  'Bateria': '🥁',
-  'Baterista': '🥁',
-  'Teclado': '🎹',
-  'Tecladista': '🎹',
-  'Percussão': '🪘',
-  'Saxofone': '🎷',
-  'Trompete': '🎺',
-  'Violino': '🎻',
-  'Som/Áudio': '🎚️',
-  'Áudio': '🎚️',
-  'Projeção': '🖥️',
-  'Mídia': '🖥️'
-};
-const DEFAULT_ICON = '🎵';
+function fmtDate(d) {
+  return d ? moment(d).format('DD/MM/YYYY') : '';
+}
 
-/** Ordem fixa de funções (as não listadas entram depois, em ordem alfabética) */
-const FUNCTION_ORDER = [
-  'Ministro',
-  'Líder de Louvor',
-  'Vocal',
-  'Back Vocal',
-  'Guitarra',
-  'Violão',
-  'Baixo',
-  'Teclado',
-  'Bateria',
-  'Percussão',
-  'Saxofone',
-  'Trompete',
-  'Violino',
-  'Som/Áudio',
-  'Áudio',
-  'Projeção',
-  'Mídia'
-];
-
-/** Resolve o intervalo a partir da query; exibe label com DD/MM/AAAA */
 function resolveDateRange(query) {
   if (query.start && query.end) {
     const start = new Date(query.start);
     const end = new Date(query.end);
     end.setHours(23, 59, 59, 999);
-    const label = `De ${moment(start).format('DD/MM/YYYY')} a ${moment(end).format('DD/MM/YYYY')}`;
-    return { start, end, label };
+    return { start, end, label: `${fmtDate(start)} - ${fmtDate(end)}` };
   }
 
   const period = String(query.period || 'month').toLowerCase();
@@ -165,157 +123,203 @@ function resolveDateRange(query) {
   const m = moment(ref);
 
   if (period === 'quarter' || period === 'trimestre') {
-    const q = Math.floor(m.month() / 3); // 0..3
+    const q = Math.floor(m.month() / 3);
     const start = moment(m).month(q * 3).startOf('month').startOf('day').toDate();
     const end = moment(m).month(q * 3 + 2).endOf('month').endOf('day').toDate();
-    const label = `Trimestre ${q + 1}/${m.year()}`;
-    return { start, end, label };
+    return { start, end, label: `Trimestre ${q + 1}/${m.year()}` };
   }
 
   if (period === 'semester' || period === 'semestre') {
     const s = m.month() < 6 ? 1 : 2;
     const start = moment(m).month(s === 1 ? 0 : 6).startOf('month').startOf('day').toDate();
     const end = moment(m).month(s === 1 ? 5 : 11).endOf('month').endOf('day').toDate();
-    const label = `Semestre ${s}/${m.year()}`;
-    return { start, end, label };
+    return { start, end, label: `Semestre ${s}/${m.year()}` };
   }
 
   const start = moment(m).startOf('month').startOf('day').toDate();
   const end = moment(m).endOf('month').endOf('day').toDate();
-  const label = `${m.format('MMMM [de] YYYY')}`;
-  return { start, end, label };
+  return { start, end, label: `${m.format('MMMM [de] YYYY')}` };
 }
 
-/** Estilos premium (WorshipHub) */
+// ---------- ÍCONES (SVG inline) ----------
+const SVG_ICONS = {
+  // instrumentos / funções
+  minister: `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zm-7 16a7 7 0 1114 0H5z"/></svg>`,
+  voice:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zM6 14a6 6 0 1112 0v2H6v-2z"/></svg>`,
+  guitar:   `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M21 3l-2 2-1-1 2-2 1 1zM17 5l2 2-7.5 7.5a3 3 0 11-4.24-4.24L17 5zM5 19l3-3"/></svg>`,
+  bass:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M5 3h2v18H5zM11 3h2v18h-2zM17 3h2v18h-2z"/></svg>`,
+  piano:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM7 19v-6h2v6M11 19v-6h2v6M15 19v-6h2v6"/></svg>`,
+  keys:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM8 19v-6h1v6M11.5 19v-6h1v6M15 19v-6h1v6"/></svg>`,
+  drums:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M4 7l8-3 8 3-8 3-8-3zm2 6h12v6H6z"/></svg>`,
+  perc:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="12" r="3"/><circle cx="17" cy="12" r="3"/></svg>`,
+  brass:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 13h10l7 3v-8l-7 3H3z"/></svg>`,
+  strings:  `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M6 4h2v16H6zM10 4h2v16h-2zM14 4h2v16h-2z"/></svg>`,
+  proj:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M12 17v2"/></svg>`,
+  audio:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M5 10v4l4 3V7l-4 3zM15 9a3 3 0 010 6"/></svg>`,
+  light:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a7 7 0 00-7 7c0 3.1 2 5.7 4.8 6.6L10 21h4l.2-4.4A7 7 0 0019 10a7 7 0 00-7-7z"/></svg>`,
+  stream:   `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M4 7h16v10H4z"/><path d="M10 9l6 4-6 4z"/></svg>`,
+  // localização
+  location: `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>`,
+  // fallback genérico
+  note:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M9 3v12a4 4 0 104 4V9h4V3H9z"/></svg>`
+};
+
+// Ordem fixa de funções (nomes EXATOS)
+const FIXED_FUNCTION_ORDER = [
+  'Ministro',
+  'Voz',
+  'Back Vocal',
+  'Guitarra',
+  'Violão',
+  'Baixo',
+  'Teclado',
+  'Piano',
+  'Bateria',
+  'Percussão',
+  'Sopro',
+  'Sax',
+  'Trompete',
+  'Violino',
+  'Cello',
+  'Multimídia',
+  'Projeção',
+  'Som',
+  'Áudio',
+  'Luz',
+  'Transmissão'
+];
+
+function functionIconSvg(name) {
+  if (!name) return SVG_ICONS.note;
+  const n = name.toLowerCase();
+  if (n === 'ministro' || n === 'voz' || n === 'back vocal') return SVG_ICONS.minister;
+  if (n === 'guitarra' || n === 'violão') return SVG_ICONS.guitar;
+  if (n === 'baixo') return SVG_ICONS.bass;
+  if (n === 'teclado') return SVG_ICONS.keys;
+  if (n === 'piano') return SVG_ICONS.piano;
+  if (n === 'bateria') return SVG_ICONS.drums;
+  if (n === 'percussão') return SVG_ICONS.perc;
+  if (n === 'sopro' || n === 'trompete') return SVG_ICONS.brass;
+  if (n === 'sax' || n === 'violino' || n === 'cello') return SVG_ICONS.strings;
+  if (n === 'multimídia' || n === 'projeção') return SVG_ICONS.proj;
+  if (n === 'som' || n === 'áudio') return SVG_ICONS.audio;
+  if (n === 'luz') return SVG_ICONS.light;
+  if (n === 'transmissão') return SVG_ICONS.stream;
+  return SVG_ICONS.note;
+}
+
+function safe(v) {
+  return v == null ? '' : String(v);
+}
+
+function sortMembersFixed(members) {
+  const orderIndex = new Map(FIXED_FUNCTION_ORDER.map((nm, i) => [nm, i]));
+  return [...(members || [])].sort((a, b) => {
+    const fa = a?.function?.name || '';
+    const fb = b?.function?.name || '';
+    const ia = orderIndex.has(fa) ? orderIndex.get(fa) : Number.MAX_SAFE_INTEGER;
+    const ib = orderIndex.has(fb) ? orderIndex.get(fb) : Number.MAX_SAFE_INTEGER;
+    if (ia !== ib) return ia - ib;
+    return (a?.user?.name || '').localeCompare(b?.user?.name || '');
+  });
+}
+
+// ---------- CSS ----------
 function style() {
   const roxo = '#4B0082';
   const dourado = '#FFD700';
   const preto = '#000000';
   const branco = '#FFFFFF';
+  const cinzaClaro = '#F7F7FB';
+  const cinzaMedio = '#EAEAF2';
 
   return `
     @page { size: A4; margin: 18mm 12mm; }
-    * { box-sizing: border-box; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { font-family: Arial, Helvetica, sans-serif; color: ${preto}; }
+    .svg { width: 14px; height: 14px; fill: currentColor; vertical-align: -2px; }
+
     .header {
-      background: ${roxo};
-      color: ${branco};
-      padding: 14px 16px;
-      border-radius: 12px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-    }
-    .title {
-      font-size: 20px; font-weight: 800; letter-spacing: .3px;
-      display:flex; align-items:center; gap:8px;
-    }
-    .title .dot { width:10px; height:10px; background:${dourado}; border-radius:999px; display:inline-block; }
-    .period { font-size: 12px; opacity: .9; text-align:right; }
-    .container { margin-top: 12px; }
-
-    .event {
-      background: #FFFFFF;
-      border: 2px solid ${dourado};
-      border-radius: 12px;
-      padding: 12px;
-      margin: 12px 0;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.08);
-    }
-
-    .event-title {
+      background: linear-gradient(90deg, ${roxo} 0%, ${preto} 100%);
+      color: ${branco}; padding: 16px 18px; border-radius: 12px;
       display:flex; align-items:center; justify-content:space-between;
-      margin-bottom: 8px;
+      margin-bottom: 14px;
     }
-    .event-name { font-size: 16px; font-weight: 800; color:${roxo}; }
+    .header .title { font-size: 22px; font-weight: 800; letter-spacing: .3px; }
+    .header .period { font-size: 12px; opacity: .95; text-align:right; }
+    .header .period strong { color: ${dourado}; }
+
+    .event-card {
+      border: 1px solid ${dourado};
+      border-radius: 14px;
+      margin: 10px 0;
+      overflow: hidden;
+      background: ${branco};
+    }
+    .event-card.alt { background: ${cinzaClaro}; border-color: ${cinzaMedio}; }
+
+    .event-header {
+      background: ${roxo}; color: ${branco}; padding: 10px 12px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .event-title { font-size: 16px; font-weight: 800; display:flex; align-items:center; gap:8px; }
     .badge {
-      display:inline-block; padding: 2px 10px; font-size: 11px;
-      border:1px solid ${dourado}; border-radius: 999px; color: ${roxo};
-      background: #fffbe6; font-weight:700;
+      display:inline-block; padding: 2px 8px; font-size: 11px;
+      border: 1px solid ${dourado}; border-radius: 999px; color: ${dourado}; background: #1f1033;
+      margin-left: 8px;
     }
+    .event-info { font-size: 12px; opacity: .95; display:flex; align-items:center; gap:6px; }
 
-    .meta {
-      font-size: 13px; margin-bottom: 8px; display:flex; gap:12px; flex-wrap:wrap;
-      color:#333;
-    }
-    .meta .item { display:flex; align-items:center; gap:6px; }
-    .meta .icon { color:${dourado}; font-weight:700; }
+    .event-body { padding: 10px 12px; }
+    .row { display:flex; align-items:center; margin: 6px 0; }
+    .role { width: 44%; font-weight:700; font-size: 13px; color:${roxo}; display:flex; align-items:center; gap:6px; }
+    .member { width: 56%; font-size: 13px; display:flex; align-items:center; gap:6px; }
+    .avatar { width:18px; height:18px; border-radius: 50%; object-fit: cover; border: 1px solid ${cinzaMedio}; }
 
-    .members { border-top: 1px dashed ${dourado}; padding-top: 8px; margin-top: 6px; }
-    .member-row {
-      display:flex; gap:8px; font-size: 13px; padding:6px 8px; border-radius:8px;
-    }
-    .member-row.alt { background:#f9f9f9; }
-    .member-role { width: 48%; font-weight: 700; color:${roxo}; display:flex; gap:8px; }
-    .member-user { width: 52%; }
-    .note {
-      margin-top: 8px; background: #fffbe6; border:1px solid ${dourado};
-      border-radius:8px; padding:8px 10px; font-size:12px; color:#333;
-    }
-    .footer { margin-top: 14px; font-size: 11px; color: #555; text-align: center; }
+    .footer { margin-top: 12px; font-size: 11px; color: #555; text-align: center; }
+    .muted { opacity:.75; }
   `;
 }
 
-/** Ordena os membros pela ordem fixa de função e, depois, por nome */
-function sortMembers(members = []) {
-  const orderIndex = (fnName = '') => {
-    const idx = FUNCTION_ORDER.findIndex(item => item.toLowerCase() === String(fnName).toLowerCase());
-    return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
-  };
-  return [...members].sort((a, b) => {
-    const fa = orderIndex(a?.function?.name);
-    const fb = orderIndex(b?.function?.name);
-    if (fa !== fb) return fa - fb;
-    return String(a?.user?.name || '').localeCompare(String(b?.user?.name || ''), 'pt-BR');
-  });
-}
-
+// ---------- HTML (sem semanas; lista linear por data) ----------
 function htmlTemplate({ events, label, coordinatorName }) {
-  const safe = (v) => (v == null ? '' : String(v));
-  const fmt = (d) => (d ? moment(d).format('DD/MM/YYYY') : '');
+  const blocks = events.map((ev, idx) => {
+    const alt = (idx % 2 === 1) ? ' alt' : '';
+    const members = sortMembersFixed(ev.scale?.members || []);
 
-  const blocks = events.map((ev) => {
-    const members = sortMembers((ev.scale?.members || []).filter(m => m?.user && m?.function));
-
-    const memberRows = members.length
-      ? members.map((m, i) => {
-          const fn = safe(m.function?.name);
-          const icon = FUNCTION_ICONS[fn] || DEFAULT_ICON;
-          const user = safe(m.user?.name);
-          const alt = i % 2 === 1 ? ' alt' : '';
+    const membersHtml = members.length
+      ? members.map(m => {
+          const roleName = safe(m.function?.name);
+          const iconSvg = functionIconSvg(roleName);
+          const userName = safe(m.user?.name);
+          const avatar = safe(m.user?.photoUrl);
           return `
-            <div class="member-row${alt}">
-              <div class="member-role">${icon} ${fn}</div>
-              <div class="member-user">${user}</div>
+            <div class="row">
+              <div class="role">${iconSvg}<span>${roleName}</span></div>
+              <div class="member">
+                ${avatar ? `<img class="avatar" src="${avatar}" />` : ''}
+                <span>${userName}</span>
+              </div>
             </div>
           `;
         }).join('')
-      : `<div class="member-row alt"><div class="member-role">—</div><div class="member-user">Sem membros escalados.</div></div>`;
-
-    const tipo = safe(ev.type || 'Evento');
-    const local = ev.location ? safe(ev.location) : 'Local não informado';
+      : `<div class="row muted"><div>Sem membros escalados.</div></div>`;
 
     return `
-      <div class="event">
-        <div class="event-title">
-          <div class="event-name">${safe(ev.title || 'Evento')}</div>
-          <div class="badge">${tipo}</div>
+      <div class="event-card${alt}">
+        <div class="event-header">
+          <div class="event-title">
+            <span>${safe(ev.title) || 'Evento'}</span>
+            <span class="badge">${fmtDate(ev.date)}</span>
+          </div>
+          <div class="event-info">
+            ${SVG_ICONS.location}
+            <span>${ev.location ? safe(ev.location) : 'Local não informado'}</span>
+          </div>
         </div>
-
-        <div class="meta">
-          <div class="item"><span class="icon">📅</span> ${fmt(ev.date)}</div>
-          <div class="item"><span class="icon">📍</span> ${local}</div>
+        <div class="event-body">
+          ${membersHtml}
         </div>
-
-        <div class="members">
-          ${memberRows}
-        </div>
-
-        ${
-          ev.scale?.notes
-            ? `<div class="note">📝 ${safe(ev.scale.notes)}</div>`
-            : ''
-        }
       </div>
     `;
   }).join('');
@@ -330,19 +334,17 @@ function htmlTemplate({ events, label, coordinatorName }) {
       </head>
       <body>
         <div class="header">
-          <div class="title"><span class="dot"></span> Escalas — WorshipHub</div>
+          <div class="title">Escalas — WorshipHub</div>
           <div class="period">
-            ${label}<br/>
-            ${coordinatorName ? `Coord.: ${coordinatorName}` : ''}
+            Período: <strong>${label}</strong><br/>
+            ${coordinatorName ? `Coord.: ${safe(coordinatorName)} • ` : ''}Gerado em ${moment().format('DD/MM/YYYY HH:mm')}
           </div>
         </div>
 
-        <div class="container">
-          ${blocks || '<p style="margin-top:16px;opacity:.8">Sem eventos neste período.</p>'}
-        </div>
+        ${blocks || '<p class="muted">Sem eventos neste período.</p>'}
 
         <div class="footer">
-          Gerado automaticamente em ${moment().format('DD/MM/YYYY HH:mm')}
+          WorshipHub • Relatório premium de escalas
         </div>
       </body>
     </html>
@@ -353,11 +355,12 @@ exports.exportScalesPDF = async (req, res) => {
   try {
     const { start, end, label } = resolveDateRange(req.query);
 
-    // Busca eventos no período com escala populada
+    // 1) Buscar eventos no período com escala e membros populados
     const events = await Event.find({
       date: { $gte: start, $lte: end }
     })
       .sort({ date: 1 })
+      .select('title date location scale')
       .populate({
         path: 'scale',
         populate: [
@@ -365,53 +368,53 @@ exports.exportScalesPDF = async (req, res) => {
           { path: 'members.function', select: 'name' }
         ]
       })
-      .select('title type date location scale')
       .lean();
 
-    // Reforço: se algum evento não trouxe escala via reference, tenta buscar por eventId
+    // 2) Reforço: se populate não trouxe a escala, tentar pela Scale (legado)
     const finalEvents = [];
     for (const ev of events) {
       let scaleData = ev.scale;
-      if (!scaleData || !Array.isArray(scaleData.members) || scaleData.members.length === 0) {
+      if (!scaleData || !Array.isArray(scaleData.members)) {
         const foundScale = await Scale.findOne({ eventId: ev._id })
           .populate('members.user', 'name email photoUrl')
           .populate('members.function', 'name')
           .lean();
-        if (foundScale && Array.isArray(foundScale.members) && foundScale.members.length > 0) {
-          scaleData = foundScale;
-        }
+        if (foundScale) scaleData = foundScale;
       }
-
-      // Não exclui eventos vazios: mostramos “Sem membros escalados” para o coordenador ter visão completa
       finalEvents.push({ ...ev, scale: scaleData || { members: [] } });
     }
 
+    // 3) Montar HTML premium (sem semanas)
     const html = htmlTemplate({
       events: finalEvents,
       label,
       coordinatorName: req.user?.name || ''
     });
 
-    // Geração do PDF
+    // 4) Gerar PDF via Puppeteer
     const browser = await puppeteer.launch({
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '18mm', right: '12mm', bottom: '16mm', left: '12mm' }
-    });
-    await browser.close();
+    try {
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: 'networkidle0' });
 
-    const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
-    res.setHeader('Content-Type', 'application/pdf'); // sem charset
-    res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.end(pdfBuffer, 'binary');
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: { top: '18mm', right: '12mm', bottom: '18mm', left: '12mm' }
+      });
+
+      const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');        // sem charset
+      res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      return res.end(pdfBuffer); // sem 'binary' para evitar charset injection
+    } finally {
+      await browser.close();
+    }
   } catch (err) {
-    console.error('[exportScalesPDF] Erro:', err.message);
-    res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
+    console.error('[exportScalesPDF] Erro:', err?.stack || err?.message || err);
+    return res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
   }
 };
