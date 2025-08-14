@@ -147,7 +147,8 @@ const SVG_ICONS = {
   minister: `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zm-7 16a7 7 0 1114 0H5z"/></svg>`,
   voice:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zM6 14a6 6 0 1112 0v2H6v-2z"/></svg>`,
   guitar:   `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M21 3l-2 2-1-1 2-2 1 1zM17 5l2 2-7.5 7.5a3 3 0 11-4.24-4.24L17 5zM5 19l3-3"/></svg>`,
-  bass:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M5 3h2v18H5zM11 3h2v18h-2zM17 3h2v18h-2z"/></svg>`,
+  // baixo elétrico: solicitado para usar o mesmo ícone de guitarra (🎸)
+  bass:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M21 3l-2 2-1-1 2-2 1 1zM17 5l2 2-7.5 7.5a3 3 0 11-4.24-4.24L17 5zM5 19l3-3"/></svg>`,
   piano:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM7 19v-6h2v6M11 19v-6h2v6M15 19v-6h2v6"/></svg>`,
   keys:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM8 19v-6h1v6M11.5 19v-6h1v6M15 19v-6h1v6"/></svg>`,
   drums:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M4 7l8-3 8 3-8 3-8-3zm2 6h12v6H6z"/></svg>`,
@@ -194,8 +195,10 @@ function functionIconSvg(name) {
   const n = name.toLowerCase();
   if (n === 'ministro' || n === 'voz' || n === 'back vocal') return SVG_ICONS.minister;
   if (n === 'guitarra' || n === 'violão') return SVG_ICONS.guitar;
-  if (n === 'baixo') return SVG_ICONS.bass;
-  if (n === 'teclado') return SVG_ICONS.keys;
+  // Baixo elétrico deve usar o mesmo ícone de guitarra (🎸)
+  if (n === 'baixo') return SVG_ICONS.guitar;
+  // Garantir teclado como 🎹 (teclas/piano)
+  if (n === 'teclado') return SVG_ICONS.piano;
   if (n === 'piano') return SVG_ICONS.piano;
   if (n === 'bateria') return SVG_ICONS.drums;
   if (n === 'percussão') return SVG_ICONS.perc;
@@ -266,7 +269,6 @@ function style() {
     .badge {
       display:inline-block; padding: 2px 8px; font-size: 11px;
       border: 1px solid ${dourado}; border-radius: 999px; color: ${dourado}; background: #1f1033;
-      margin-left: 8px;
     }
     .event-info { font-size: 12px; opacity: .95; display:flex; align-items:center; gap:6px; }
 
@@ -305,12 +307,13 @@ function htmlTemplate({ events, label, coordinatorName }) {
         }).join('')
       : `<div class="row muted"><div>Sem membros escalados.</div></div>`;
 
+    // 🔁 Título invertido: DATA — NOME DO EVENTO
     return `
       <div class="event-card${alt}">
         <div class="event-header">
           <div class="event-title">
-            <span>${safe(ev.title) || 'Evento'}</span>
             <span class="badge">${fmtDate(ev.date)}</span>
+            <span>— ${safe(ev.title) || 'Evento'}</span>
           </div>
           <div class="event-info">
             ${SVG_ICONS.location}
@@ -324,6 +327,7 @@ function htmlTemplate({ events, label, coordinatorName }) {
     `;
   }).join('');
 
+  // 🔇 Removida a menção “Gerado em …” do topo
   return `
     <!DOCTYPE html>
     <html lang="pt-br">
@@ -336,8 +340,7 @@ function htmlTemplate({ events, label, coordinatorName }) {
         <div class="header">
           <div class="title">Escalas — WorshipHub</div>
           <div class="period">
-            Período: <strong>${label}</strong><br/>
-            ${coordinatorName ? `Coord.: ${safe(coordinatorName)} • ` : ''}Gerado em ${moment().format('DD/MM/YYYY HH:mm')}
+            Período: <strong>${label}</strong>${coordinatorName ? `<br/>Coord.: ${safe(coordinatorName)}` : ''}
           </div>
         </div>
 
