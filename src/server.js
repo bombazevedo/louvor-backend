@@ -10,8 +10,8 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json()); // ✅ Necessário para req.body em DELETE
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Rotas
 const authRoutes = require('./routes/authRoutes');
