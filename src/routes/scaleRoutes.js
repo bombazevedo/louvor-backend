@@ -28,8 +28,10 @@ if (typeof scaleController.deleteScale === 'function') {
 }
 
 // Exportar escalas em PDF (somente coordenador)
+// ✅ alteração pontual: adiciona POST para receber o payload com ícones (req.body.icons)
 if (typeof scaleController.exportScalesPDF === 'function') {
-  router.get('/export/pdf', isCoordinator, scaleController.exportScalesPDF);
+  router.post('/export/pdf', isCoordinator, scaleController.exportScalesPDF); // novo
+  router.get('/export/pdf',  isCoordinator, scaleController.exportScalesPDF); // legado
 }
 
 module.exports = router;
