@@ -28,7 +28,7 @@ exports.getScaleById = async (req, res) => {
     res.json(scale);
   } catch (err) {
     console.error('[getScaleById] Erro:', err.message);
-    res.status(500).json({ message: 'Erro ao buscar escala' });
+    res.status(500).json({ message: 'Erro ao buscar escala do evento' });
   }
 };
 
@@ -110,16 +110,16 @@ function fmtDate(d) {
   return d ? moment(d).format('DD/MM/YYYY') : '';
 }
 
-function resolveDateRange(query) {
-  if (query.start && query.end) {
-    const start = new Date(query.start);
-    const end = new Date(query.end);
+function resolveDateRange(queryLike) {
+  if (queryLike.start && queryLike.end) {
+    const start = new Date(queryLike.start);
+    const end = new Date(queryLike.end);
     end.setHours(23, 59, 59, 999);
     return { start, end, label: `${fmtDate(start)} - ${fmtDate(end)}` };
   }
 
-  const period = String(query.period || 'month').toLowerCase();
-  const ref = query.ref ? new Date(query.ref) : new Date();
+  const period = String(queryLike.period || 'month').toLowerCase();
+  const ref = queryLike.ref ? new Date(queryLike.ref) : new Date();
   const m = moment(ref);
 
   if (period === 'quarter' || period === 'trimestre') {
@@ -143,11 +143,9 @@ function resolveDateRange(query) {
 
 // ---------- ÍCONES (SVG inline) ----------
 const SVG_ICONS = {
-  // instrumentos / funções
   minister: `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zm-7 16a7 7 0 1114 0H5z"/></svg>`,
   voice:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a3 3 0 110 6 3 3 0 010-6zM6 14a6 6 0 1112 0v2H6v-2z"/></svg>`,
   guitar:   `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M21 3l-2 2-1-1 2-2 1 1zM17 5l2 2-7.5 7.5a3 3 0 11-4.24-4.24L17 5zM5 19l3-3"/></svg>`,
-  // baixo elétrico: solicitado para usar o mesmo ícone de guitarra (🎸)
   bass:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M21 3l-2 2-1-1 2-2 1 1zM17 5l2 2-7.5 7.5a3 3 0 11-4.24-4.24L17 5zM5 19l3-3"/></svg>`,
   piano:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM7 19v-6h2v6M11 19v-6h2v6M15 19v-6h2v6"/></svg>`,
   keys:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h18v14H3zM8 19v-6h1v6M11.5 19v-6h1v6M15 19v-6h1v6"/></svg>`,
@@ -159,9 +157,7 @@ const SVG_ICONS = {
   audio:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M5 10v4l4 3V7l-4 3zM15 9a3 3 0 010 6"/></svg>`,
   light:    `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 3a7 7 0 00-7 7c0 3.1 2 5.7 4.8 6.6L10 21h4l.2-4.4A7 7 0 0019 10a7 7 0 00-7-7z"/></svg>`,
   stream:   `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M4 7h16v10H4z"/><path d="M10 9l6 4-6 4z"/></svg>`,
-  // localização
   location: `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a7 7 0 00-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 00-7-7zm0 9.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z"/></svg>`,
-  // fallback genérico
   note:     `<svg viewBox="0 0 24 24" class="svg" xmlns="http://www.w3.org/2000/svg"><path d="M9 3v12a4 4 0 104 4V9h4V3H9z"/></svg>`
 };
 
@@ -190,14 +186,21 @@ const FIXED_FUNCTION_ORDER = [
   'Transmissão'
 ];
 
+// 🔧 NOVO: normalização igual ao frontend (NFD → sem acento → lower → trim)
+function normalizeKey(s = '') {
+  return String(s)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function functionIconSvg(name) {
   if (!name) return SVG_ICONS.note;
   const n = name.toLowerCase();
   if (n === 'ministro' || n === 'voz' || n === 'back vocal') return SVG_ICONS.minister;
   if (n === 'guitarra' || n === 'violão') return SVG_ICONS.guitar;
-  // Baixo elétrico deve usar o mesmo ícone de guitarra (🎸)
-  if (n === 'baixo') return SVG_ICONS.guitar;
-  // Garantir teclado como 🎹 (teclas/piano)
+  if (n === 'baixo') return SVG_ICONS.guitar; // mesmo ícone de guitarra
   if (n === 'teclado') return SVG_ICONS.piano;
   if (n === 'piano') return SVG_ICONS.piano;
   if (n === 'bateria') return SVG_ICONS.drums;
@@ -241,6 +244,7 @@ function style() {
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { font-family: Arial, Helvetica, sans-serif; color: ${preto}; }
     .svg { width: 14px; height: 14px; fill: currentColor; vertical-align: -2px; }
+    .role-icon { width: 14px; height: 14px; object-fit: contain; vertical-align: -2px; } /* 🔧 NOVO */
 
     .header {
       background: linear-gradient(90deg, ${roxo} 0%, ${preto} 100%);
@@ -284,7 +288,7 @@ function style() {
 }
 
 // ---------- HTML (sem semanas; lista linear por data) ----------
-function htmlTemplate({ events, label, coordinatorName }) {
+function htmlTemplate({ events, label, coordinatorName, icons = {} }) {
   const blocks = events.map((ev, idx) => {
     const alt = (idx % 2 === 1) ? ' alt' : '';
     const members = sortMembersFixed(ev.scale?.members || []);
@@ -292,12 +296,16 @@ function htmlTemplate({ events, label, coordinatorName }) {
     const membersHtml = members.length
       ? members.map(m => {
           const roleName = safe(m.function?.name);
-          const iconSvg = functionIconSvg(roleName);
+          const iconKey = normalizeKey(roleName);                       // 🔧 NOVO
+          const roleImg = icons[iconKey];                               // 🔧 NOVO (data URI do frontend)
+          const roleIconHtml = roleImg
+            ? `<img class="role-icon" src="${roleImg}" />`              // preferir ícone do app
+            : functionIconSvg(roleName);                                 // fallback: SVG inline
           const userName = safe(m.user?.name);
           const avatar = safe(m.user?.photoUrl);
           return `
             <div class="row">
-              <div class="role">${iconSvg}<span>${roleName}</span></div>
+              <div class="role">${roleIconHtml}<span>${roleName}</span></div>
               <div class="member">
                 ${avatar ? `<img class="avatar" src="${avatar}" />` : ''}
                 <span>${userName}</span>
@@ -327,7 +335,6 @@ function htmlTemplate({ events, label, coordinatorName }) {
     `;
   }).join('');
 
-  // 🔇 Removida a menção “Gerado em …” do topo
   return `
     <!DOCTYPE html>
     <html lang="pt-br">
@@ -356,7 +363,9 @@ function htmlTemplate({ events, label, coordinatorName }) {
 
 exports.exportScalesPDF = async (req, res) => {
   try {
-    const { start, end, label } = resolveDateRange(req.query);
+    // 🔧 NOVO: aceitar datas via body (POST) ou query (GET)
+    const source = (req.body && (req.body.start || req.body.period || req.body.ref)) ? req.body : req.query;
+    const { start, end, label } = resolveDateRange(source);
 
     // 1) Buscar eventos no período com escala e membros populados
     const events = await Event.find({
@@ -387,11 +396,15 @@ exports.exportScalesPDF = async (req, res) => {
       finalEvents.push({ ...ev, scale: scaleData || { members: [] } });
     }
 
-    // 3) Montar HTML premium (sem semanas)
+    // 🔧 NOVO: ícones vindos do frontend (data URI por chave normalizada)
+    const icons = (req.body && req.body.icons) ? req.body.icons : {};
+
+    // 3) Montar HTML premium (sem semanas) — agora passando icons
     const html = htmlTemplate({
       events: finalEvents,
       label,
-      coordinatorName: req.user?.name || ''
+      coordinatorName: req.user?.name || '',
+      icons
     });
 
     // 4) Gerar PDF via Puppeteer
@@ -409,10 +422,10 @@ exports.exportScalesPDF = async (req, res) => {
       });
 
       const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');        // sem charset
+      res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
       res.setHeader('Content-Length', pdfBuffer.length);
-      return res.end(pdfBuffer); // sem 'binary' para evitar charset injection
+      return res.end(pdfBuffer);
     } finally {
       await browser.close();
     }
