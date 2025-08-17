@@ -18,10 +18,8 @@ const firestoreDb = admin.firestore();
 function clean(obj) {
   if (!obj) return obj;
   if (typeof obj.toObject === 'function') obj = obj.toObject();
-  // Remove propriedades internas típicas do mongoose
   const keysToRemove = ['__parentArray', '__index', '$__parent', '$__', '_doc', '$isNew'];
   for (const key of keysToRemove) delete obj[key];
-  // Recursivamente limpa arrays e objetos aninhados
   for (const k in obj) {
     if (Array.isArray(obj[k])) obj[k] = obj[k].map(clean);
     else if (obj[k] && typeof obj[k] === 'object') obj[k] = clean(obj[k]);
@@ -44,10 +42,8 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.function')
           .lean();
 
-        // Limpa scale e membros
         let cleanedScale = scale ? clean(scale) : null;
 
-        // Enriquecimento dinâmico dos musicLinks com todos os campos do Song
         const enrichedMusicLinks = (event.musicLinks || []).map(m => {
           let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
           return {
@@ -62,12 +58,10 @@ const getEventsWithScales = async (req, res) => {
             spotifyUrl: song?.spotifyUrl || null,
             deezerUrl: song?.deezerUrl || null,
             youtubeUrl: song?.youtubeUrl || null,
-            // Acrescente outros campos do Song, se existirem
             ...((song) ? {} : m)
           };
         });
 
-        // Retorna objeto limpo
         return {
           ...clean(event),
           scale: cleanedScale,
@@ -101,7 +95,6 @@ const getEventById = async (req, res) => {
 
     let cleanedScale = scale ? clean(scale) : null;
 
-    // Enriquecimento dinâmico dos musicLinks com todos os campos do Song
     const enrichedMusicLinks = (event.musicLinks || []).map(m => {
       let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
       return {
@@ -116,7 +109,6 @@ const getEventById = async (req, res) => {
         spotifyUrl: song?.spotifyUrl || null,
         deezerUrl: song?.deezerUrl || null,
         youtubeUrl: song?.youtubeUrl || null,
-        // Acrescente outros campos do Song, se existirem
         ...((song) ? {} : m)
       };
     });
@@ -196,7 +188,6 @@ const createEvent = async (req, res) => {
 
     const savedEvent = await newEvent.save();
 
-    // 🔄 Sincronizar no Firestore
     try {
       await firestoreDb.collection('events').doc(savedEvent._id.toString()).set({
         title: savedEvent.title,
@@ -211,7 +202,6 @@ const createEvent = async (req, res) => {
       console.error('[Firestore] Erro ao sincronizar evento:', fireErr);
     }
 
-    // Sempre retorna o evento limpo
     res.status(201).json(clean(savedEvent));
   } catch (error) {
     console.error('Erro ao criar evento:', error);
@@ -219,10 +209,10 @@ const createEvent = async (req, res) => {
   }
 };
 
-// Atualizar evento com salvamento automático do Song
+// Atualizar evento com suporte à paleta de cores
 const updateEvent = async (req, res) => {
   try {
-    const { title, description, date, location, type, musicLinks } = req.body;
+    const { title, description, date, location, type, musicLinks, colorPalette } = req.body;
 
     const normalizedMusicLinks = [];
 
@@ -248,15 +238,9 @@ const updateEvent = async (req, res) => {
             artist: link.artist || 'Desconhecido',
             coverUrl: link.thumbnail || '',
           };
-          if (link.platform === 'YouTube') {
-            songData.youtubeUrl = normalizedUrl;
-          }
-          if (link.platform === 'Spotify') {
-            songData.spotifyUrl = normalizedUrl;
-          }
-          if (link.platform === 'Deezer') {
-            songData.deezerUrl = normalizedUrl;
-          }
+          if (link.platform === 'YouTube') songData.youtubeUrl = normalizedUrl;
+          if (link.platform === 'Spotify') songData.spotifyUrl = normalizedUrl;
+          if (link.platform === 'Deezer') songData.deezerUrl = normalizedUrl;
           const created = await Song.create(songData);
           songId = created._id;
         }
@@ -280,12 +264,12 @@ const updateEvent = async (req, res) => {
         date,
         location,
         type,
-        musicLinks: normalizedMusicLinks
+        musicLinks: normalizedMusicLinks,
+        colorPalette: Array.isArray(colorPalette) ? colorPalette : []
       },
       { new: true }
     );
 
-    // Sempre retorna o evento limpo
     res.json(clean(updatedEvent));
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);

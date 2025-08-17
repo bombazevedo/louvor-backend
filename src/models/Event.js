@@ -35,7 +35,11 @@ const eventSchema = new mongoose.Schema({
   attachments: [{
     name: String,
     url: String
-  }]
+  }],
+  colorPalette: {
+    type: [String],
+    default: []
+  }
 }, {
   timestamps: true,
 });
