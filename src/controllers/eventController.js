@@ -1,4 +1,4 @@
-const Event = require('../models/Event');
+//                const Event = require('../models/Event');
 const Scale = require('../models/Scale');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
@@ -127,7 +127,7 @@ const getEventById = async (req, res) => {
 // Criar evento com salvamento automático do Song + sincronização com Firestore
 const createEvent = async (req, res) => {
   try {
-    const { title, description, date, location, type, musicLinks } = req.body;
+    const { title, description, date, location, type, musicLinks, primaryColor, colorPalette } = req.body;
 
     const normalizedMusicLinks = [];
 
@@ -183,7 +183,9 @@ const createEvent = async (req, res) => {
       date,
       location,
       type,
-      musicLinks: normalizedMusicLinks
+      musicLinks: normalizedMusicLinks,
+      primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
+      colorPalette: Array.isArray(colorPalette) ? colorPalette : []
     });
 
     const savedEvent = await newEvent.save();
@@ -212,7 +214,7 @@ const createEvent = async (req, res) => {
 // Atualizar evento com suporte à paleta de cores
 const updateEvent = async (req, res) => {
   try {
-    const { title, description, date, location, type, musicLinks, colorPalette } = req.body;
+    const { title, description, date, location, type, musicLinks, colorPalette, primaryColor } = req.body;
 
     const normalizedMusicLinks = [];
 
@@ -256,17 +258,22 @@ const updateEvent = async (req, res) => {
       }
     }
 
+    const updateData = {
+      title,
+      description,
+      date,
+      location,
+      type,
+      musicLinks: normalizedMusicLinks,
+      colorPalette: Array.isArray(colorPalette) ? colorPalette : []
+    };
+    if (typeof primaryColor === 'string') {
+      updateData.primaryColor = primaryColor;
+    }
+
     const updatedEvent = await Event.findByIdAndUpdate(
       req.params.id,
-      {
-        title,
-        description,
-        date,
-        location,
-        type,
-        musicLinks: normalizedMusicLinks,
-        colorPalette: Array.isArray(colorPalette) ? colorPalette : []
-      },
+      updateData,
       { new: true }
     );
 

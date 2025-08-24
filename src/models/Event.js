@@ -36,6 +36,8 @@ const eventSchema = new mongoose.Schema({
     name: String,
     url: String
   }],
+  // ✅ correção item 1: adicionar a cor-base escolhida pelo coordenador
+  primaryColor: { type: String, default: null },
   colorPalette: {
     type: [String],
     default: []
