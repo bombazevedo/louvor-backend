@@ -1,4 +1,4 @@
-//                const Event = require('../models/Event');
+const Event = require('../models/Event'); // ✅ correção: linha descomentada
 const Scale = require('../models/Scale');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
