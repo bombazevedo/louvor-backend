@@ -5,35 +5,25 @@ const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 
 // --- Firebase Admin para Firestore ---
 const admin = require('firebase-admin');
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 
-if (!admin.apps.length) {
+if (!admin.apps.length && serviceAccount && Object.keys(serviceAccount).length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
   });
 }
-const firestoreDb = admin.firestore();
+const firestoreDb = admin.apps.length ? admin.firestore() : null;
 
-// --- Função utilitária para limpar objetos mongoose
-function clean(obj) {
-  if (!obj) return obj;
-  if (typeof obj.toObject === 'function') obj = obj.toObject();
-  const keysToRemove = ['__parentArray', '__index', '$__parent', '$__', '_doc', '$isNew'];
-  for (const key of keysToRemove) delete obj[key];
-  for (const k in obj) {
-    if (Array.isArray(obj[k])) obj[k] = obj[k].map(clean);
-    else if (obj[k] && typeof obj[k] === 'object') obj[k] = clean(obj[k]);
-  }
-  return obj;
-}
+// Utilitário simples para serializar documentos (remove metadados do Mongoose)
+const clean = (doc) => JSON.parse(JSON.stringify(doc || {}));
 
-// Buscar todos os eventos com escala e detalhes das músicas
-const getEventsWithScales = async (req, res) => {
+/**
+ * GET /events
+ * Retorna eventos com escala e musicLinks enriquecidos.
+ */
+const getEventsWithScales = async (_req, res) => {
   try {
-    const events = await Event.find()
-      .sort({ date: 1 })
-      .populate('musicLinks.song')
-      .lean();
+    const events = await Event.find().populate('musicLinks.song').lean();
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
@@ -42,10 +32,10 @@ const getEventsWithScales = async (req, res) => {
           .populate('members.function')
           .lean();
 
-        let cleanedScale = scale ? clean(scale) : null;
+        const cleanedScale = scale ? clean(scale) : null;
 
-        const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-          let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
+        const enrichedMusicLinks = (event.musicLinks || []).map((m) => {
+          const song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
           return {
             ...m,
             song: song ? song._id : m.song,
@@ -77,7 +67,10 @@ const getEventsWithScales = async (req, res) => {
   }
 };
 
-// Buscar evento por ID com escala e detalhes das músicas
+/**
+ * GET /events/:id
+ * Retorna um evento com escala e musicLinks enriquecidos.
+ */
 const getEventById = async (req, res) => {
   try {
     const event = await Event.findById(req.params.id)
@@ -93,10 +86,10 @@ const getEventById = async (req, res) => {
       .populate('members.function')
       .lean();
 
-    let cleanedScale = scale ? clean(scale) : null;
+    const cleanedScale = scale ? clean(scale) : null;
 
-    const enrichedMusicLinks = (event.musicLinks || []).map(m => {
-      let song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
+    const enrichedMusicLinks = (event.musicLinks || []).map((m) => {
+      const song = m.song && typeof m.song === 'object' ? clean(m.song) : null;
       return {
         ...m,
         song: song ? song._id : m.song,
@@ -124,97 +117,18 @@ const getEventById = async (req, res) => {
   }
 };
 
-// Criar evento com salvamento automático do Song + sincronização com Firestore
+/**
+ * POST /events
+ * Cria evento (normaliza musicLinks, salva paleta e sincroniza no Firestore).
+ */
 const createEvent = async (req, res) => {
   try {
-    const { title, description, date, location, type, musicLinks, primaryColor, colorPalette } = req.body;
-
-    const normalizedMusicLinks = [];
-
-    if (musicLinks && Array.isArray(musicLinks)) {
-      for (const link of musicLinks) {
-        const normalizedUrl = normalizeMusicUrl(link.url, link.platform);
-
-        const existing = await Song.findOne({
-          $or: [
-            { youtubeUrl: normalizedUrl },
-            { spotifyUrl: normalizedUrl },
-            { deezerUrl: normalizedUrl }
-          ]
-        });
-
-        let songId = null;
-
-        if (existing) {
-          songId = existing._id;
-        } else {
-          const songData = {
-            title: link.name || 'Sem título',
-            artist: link.artist || 'Desconhecido',
-            coverUrl: link.thumbnail || '',
-          };
-          if (link.platform === 'YouTube') {
-            songData.youtubeUrl = normalizedUrl;
-          }
-          if (link.platform === 'Spotify') {
-            songData.spotifyUrl = normalizedUrl;
-          }
-          if (link.platform === 'Deezer') {
-            songData.deezerUrl = normalizedUrl;
-          }
-          const created = await Song.create(songData);
-          songId = created._id;
-        }
-
-        normalizedMusicLinks.push({
-          name: link.name || (existing?.title || 'Sem título'),
-          artist: link.artist || (existing?.artist || 'Desconhecido'),
-          platform: link.platform,
-          url: normalizedUrl,
-          thumbnail: link.thumbnail || (existing?.coverUrl || ''),
-          song: songId
-        });
-      }
-    }
-
-    const newEvent = new Event({
-      title,
-      description,
-      date,
-      location,
-      type,
-      musicLinks: normalizedMusicLinks,
-      primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
-      colorPalette: Array.isArray(colorPalette) ? colorPalette : []
-    });
-
-    const savedEvent = await newEvent.save();
-
-    try {
-      await firestoreDb.collection('events').doc(savedEvent._id.toString()).set({
-        title: savedEvent.title,
-        description: savedEvent.description || '',
-        date: savedEvent.date || null,
-        location: savedEvent.location || '',
-        type: savedEvent.type || '',
-        createdAt: new Date()
-      });
-      console.log(`[Firestore] Evento ${savedEvent._id} sincronizado com sucesso`);
-    } catch (fireErr) {
-      console.error('[Firestore] Erro ao sincronizar evento:', fireErr);
-    }
-
-    res.status(201).json(clean(savedEvent));
-  } catch (error) {
-    console.error('Erro ao criar evento:', error);
-    res.status(500).json({ message: 'Erro ao criar evento' });
-  }
-};
-
-// Atualizar evento com suporte à paleta de cores
-const updateEvent = async (req, res) => {
-  try {
-    const { title, description, date, location, type, musicLinks, colorPalette, primaryColor } = req.body;
+    const {
+      title, description, date, location, type,
+      musicLinks,
+      primaryColor, colorPalette,
+      paletteMode, showFullPalette
+    } = req.body;
 
     const normalizedMusicLinks = [];
 
@@ -242,7 +156,109 @@ const updateEvent = async (req, res) => {
           };
           if (link.platform === 'YouTube') songData.youtubeUrl = normalizedUrl;
           if (link.platform === 'Spotify') songData.spotifyUrl = normalizedUrl;
-          if (link.platform === 'Deezer') songData.deezerUrl = normalizedUrl;
+          if (link.platform === 'Deezer')  songData.deezerUrl  = normalizedUrl;
+          const created = await Song.create(songData);
+          songId = created._id;
+        }
+
+        normalizedMusicLinks.push({
+          name: link.name || (existing?.title || 'Sem título'),
+          artist: link.artist || (existing?.artist || 'Desconhecido'),
+          platform: link.platform,
+          url: normalizedUrl,
+          thumbnail: link.thumbnail || (existing?.coverUrl || ''),
+          song: songId
+        });
+      }
+    }
+
+    // Consistência entre paletteMode e showFullPalette
+    const resolvedPaletteMode =
+      paletteMode === 'mono' || paletteMode === 'full'
+        ? paletteMode
+        : (typeof showFullPalette === 'boolean' ? (showFullPalette ? 'full' : 'mono') : 'full');
+    const resolvedShowFull = typeof showFullPalette === 'boolean'
+      ? showFullPalette
+      : (resolvedPaletteMode === 'full');
+
+    const newEvent = new Event({
+      title,
+      description,
+      date,
+      location,
+      type,
+      musicLinks: normalizedMusicLinks,
+      primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
+      colorPalette: Array.isArray(colorPalette) ? colorPalette : [],
+      paletteMode: resolvedPaletteMode,
+      showFullPalette: resolvedShowFull
+    });
+
+    const savedEvent = await newEvent.save();
+
+    try {
+      if (firestoreDb) {
+        await firestoreDb.collection('events').doc(savedEvent._id.toString()).set({
+          title: savedEvent.title,
+          description: savedEvent.description || '',
+          date: savedEvent.date || null,
+          location: savedEvent.location || '',
+          type: savedEvent.type || '',
+          createdAt: new Date()
+        });
+        console.log(`[Firestore] Evento ${savedEvent._id} sincronizado com sucesso`);
+      }
+    } catch (fireErr) {
+      console.error('[Firestore] Erro ao sincronizar evento:', fireErr);
+    }
+
+    res.status(201).json(clean(savedEvent));
+  } catch (error) {
+    console.error('Erro ao criar evento:', error);
+    res.status(500).json({ message: 'Erro ao criar evento' });
+  }
+};
+
+/**
+ * PUT /events/:id
+ * Atualiza evento (normaliza musicLinks e persiste paleta/mode).
+ */
+const updateEvent = async (req, res) => {
+  try {
+    const {
+      title, description, date, location, type,
+      musicLinks,
+      colorPalette, primaryColor,
+      paletteMode, showFullPalette
+    } = req.body;
+
+    const normalizedMusicLinks = [];
+
+    if (musicLinks && Array.isArray(musicLinks)) {
+      for (const link of musicLinks) {
+        const normalizedUrl = normalizeMusicUrl(link.url, link.platform);
+
+        const existing = await Song.findOne({
+          $or: [
+            { youtubeUrl: normalizedUrl },
+            { spotifyUrl: normalizedUrl },
+            { deezerUrl: normalizedUrl }
+          ]
+        });
+
+        let songId = null;
+
+        if (existing) {
+          songId = existing._id;
+        } else {
+          const songData = {
+            title: link.name || 'Sem título',
+            artist: link.artist || 'Desconhecido',
+            coverUrl: link.thumbnail || '',
+          };
+          if (link.platform === 'YouTube') songData.youtubeUrl = normalizedUrl;
+          if (link.platform === 'Spotify') songData.spotifyUrl = normalizedUrl;
+          if (link.platform === 'Deezer')  songData.deezerUrl  = normalizedUrl;
           const created = await Song.create(songData);
           songId = created._id;
         }
@@ -267,8 +283,19 @@ const updateEvent = async (req, res) => {
       musicLinks: normalizedMusicLinks,
       colorPalette: Array.isArray(colorPalette) ? colorPalette : []
     };
+
     if (typeof primaryColor === 'string') {
       updateData.primaryColor = primaryColor;
+    }
+
+    // 🔒 Persistência do modo (coordenador define e todos visualizam igual)
+    if (paletteMode === 'mono' || paletteMode === 'full') {
+      updateData.paletteMode = paletteMode;
+      updateData.showFullPalette = (paletteMode === 'full');
+    }
+    if (typeof showFullPalette === 'boolean') {
+      updateData.showFullPalette = showFullPalette;
+      updateData.paletteMode = showFullPalette ? 'full' : 'mono';
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(

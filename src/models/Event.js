@@ -41,6 +41,17 @@ const eventSchema = new mongoose.Schema({
   colorPalette: {
     type: [String],
     default: []
+  },
+  // ✅ persistência do modo de exibição da paleta (mono|full)
+  paletteMode: {
+    type: String,
+    enum: ['mono', 'full'],
+    default: 'full'
+  },
+  // ✅ compat: espelha paletteMode para clientes legados que leem showFullPalette
+  showFullPalette: {
+    type: Boolean,
+    default: true
   }
 }, {
   timestamps: true,
