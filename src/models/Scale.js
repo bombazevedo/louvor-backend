@@ -12,10 +12,7 @@ const memberSchema = new mongoose.Schema({
     ref: 'BandRole',
     required: true
   },
-  confirmed: {
-    type: Boolean,
-    default: false
-  }
+  confirmed: { type: Boolean }
 });
 
 const scaleSchema = new mongoose.Schema({
