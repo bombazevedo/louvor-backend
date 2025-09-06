@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -29,8 +30,8 @@ const musicRoutes = require('./routes/musicRoutes');
 const chordRoutes = require('./routes/chordRoutes');
 const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes'); // <-- 🔥 NOME EXATO DO ARQUIVO
 
-const notificationRoutes = require('./routes/notifications.routes');
-const deviceTokenRoutes = require('./routes/deviceTokenRoutes');
+// ✅ CORREÇÃO CIRÚRGICA: importar as rotas de notificações com nome consistente
+const notificationsRoutes = require('./routes/notifications.routes');
 
 // Usando as rotas
 app.use('/api/auth', authRoutes);
@@ -48,8 +49,8 @@ app.use('/api/music', musicRoutes);
 app.use('/api/chords', chordRoutes);
 app.use('/api/auth/spotify', spotifyAuthRoutes); // <-- 🔥 NOME EXATO DO ARQUIVO
 
-app.use('/api/notifications', notifications.routes);
-app.use('/api/device-tokens', deviceTokenRoutes);
+// ✅ CORREÇÃO CIRÚRGICA: montar as rotas de notificações usando a constante correta
+app.use('/api/notifications', notificationsRoutes);
 
 // Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
