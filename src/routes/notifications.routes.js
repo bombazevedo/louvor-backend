@@ -2,11 +2,12 @@
 const router = require('express').Router();
 const ctrl = require('../controllers/notification.controller');
 
-// ⚠️ Use o seu middleware de autenticação já existente
-// Ele precisa popular req.user.id (ou req.user._id) com o id do usuário do token
-const auth = require('../middleware/auth'); // ajuste o caminho se necessário
+// ⚠️ Middleware de autenticação
+// (seu arquivo está em src/middleware/auth, sem "s")
+const auth = require('../middleware/auth');
 
-router.use(auth);
+// Usa especificamente a função de autenticação
+router.use(auth.authenticate);
 
 router.get('/', ctrl.listMine);                  // GET    /api/notifications
 router.post('/', ctrl.create);                   // POST   /api/notifications
