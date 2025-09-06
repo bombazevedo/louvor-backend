@@ -5,7 +5,10 @@ const Notification = require('../models/Notification');
 exports.listMine = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const docs = await Notification.find({ userId }).sort({ createdAt: -1 }).lean();
+    const docs = await Notification
+      .find({ user: userId })
+      .sort({ createdAt: -1 })
+      .lean();
     return res.json(docs);
   } catch (err) { return next(err); }
 };
@@ -27,9 +30,9 @@ exports.create = async (req, res, next) => {
       return res.status(400).json({ message: 'userId e message são obrigatórios' });
     }
 
-    // Mapeia para os campos do schema (referenceModel/reference/data)
+    // Mapear para os campos do schema (user/referenceModel/reference/data)
     const doc = await Notification.create({
-      userId,
+      user: userId,
       title: title || 'Notificação',
       message,
       type,
@@ -52,7 +55,7 @@ exports.markOneRead = async (req, res, next) => {
     const { id } = req.params;
 
     const doc = await Notification.findOneAndUpdate(
-      { _id: id, userId },
+      { _id: id, user: userId },
       { $set: { read: true } },
       { new: true }
     ).lean();
@@ -67,7 +70,7 @@ exports.markAllRead = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
     const r = await Notification.updateMany(
-      { userId, read: false },
+      { user: userId, read: false },
       { $set: { read: true } }
     );
     return res.json({ matched: r.matchedCount ?? r.n, modified: r.modifiedCount ?? r.nModified });
@@ -80,7 +83,7 @@ exports.removeOne = async (req, res, next) => {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
-    const r = await Notification.deleteOne({ _id: id, userId });
+    const r = await Notification.deleteOne({ _id: id, user: userId });
     if ((r.deletedCount ?? r.n) === 0) {
       return res.status(404).json({ message: 'Notificação não encontrada' });
     }

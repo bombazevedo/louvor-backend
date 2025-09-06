@@ -1,12 +1,14 @@
+// routes/push.routes.js
 const router = require('express').Router();
 const pushController = require('../controllers/pushController');
-const auth = require('../middlewares/auth');         // já existe no seu projeto
-const allowRoles = require('../middlewares/roles');  // se tiver controle de papéis
+
+// ⚠️ Alinhar o caminho com o usado nas demais rotas
+const auth = require('../middleware/auth');
 
 // registrar token (app chama após obter FCM token)
-router.post('/register', auth, pushController.registerToken);
+router.post('/register', auth.authenticate, pushController.registerToken);
 
-// enviar teste (restringir a coordenadores/admins)
-router.post('/test', auth, allowRoles(['coordenador', 'admin']), pushController.sendTest);
+// enviar teste (restringir a coordenadores/DMs)
+router.post('/test', auth.authenticate, auth.isDMOrCoordinator, pushController.sendTest);
 
 module.exports = router;

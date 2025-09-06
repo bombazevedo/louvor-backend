@@ -25,13 +25,16 @@ const repertoireRoutes = require('./routes/repertoireRoutes');
 const historicoRoutes = require('./routes/historicoRoutes');
 const utilsRoutes = require('./routes/utilsRoutes');
 const teamRoutes = require('./routes/teamRoutes'); // <-- ADICIONADO
-const unavailabilityRoutes = require('./routes/unavailabilityRoutes'); // <-- 🔥 ADICIONADO
+const unavailabilityRoutes = require('./routes/unavailabilityRoutes'); // <-- ADICIONADO
 const musicRoutes = require('./routes/musicRoutes');
 const chordRoutes = require('./routes/chordRoutes');
-const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes'); // <-- 🔥 NOME EXATO DO ARQUIVO
+const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes');
 
-// ✅ CORREÇÃO CIRÚRGICA: importar as rotas de notificações com nome consistente
+// ✅ Notificações com nome novo (OK)
 const notificationsRoutes = require('./routes/notifications.routes');
+
+// ✅ PUSH: importar e montar as rotas de push
+const pushRoutes = require('./routes/push.routes');
 
 // Usando as rotas
 app.use('/api/auth', authRoutes);
@@ -43,14 +46,17 @@ app.use('/api/songs', songRoutes);
 app.use('/api/repertoires', repertoireRoutes);
 app.use('/api/historico', historicoRoutes);
 app.use('/api/utils', utilsRoutes);
-app.use('/api/teams', teamRoutes); // <-- ADICIONADO
-app.use('/api/unavailability', unavailabilityRoutes); // <-- 🔥 ADICIONADO
+app.use('/api/teams', teamRoutes);
+app.use('/api/unavailability', unavailabilityRoutes);
 app.use('/api/music', musicRoutes);
 app.use('/api/chords', chordRoutes);
-app.use('/api/auth/spotify', spotifyAuthRoutes); // <-- 🔥 NOME EXATO DO ARQUIVO
+app.use('/api/auth/spotify', spotifyAuthRoutes);
 
-// ✅ CORREÇÃO CIRÚRGICA: montar as rotas de notificações usando a constante correta
+// ✅ Rotas de Notificações
 app.use('/api/notifications', notificationsRoutes);
+
+// ✅ Rotas de PUSH (cadastro de token / teste)
+app.use('/api/push', pushRoutes);
 
 // Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
