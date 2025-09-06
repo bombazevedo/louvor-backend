@@ -29,7 +29,7 @@ const musicRoutes = require('./routes/musicRoutes');
 const chordRoutes = require('./routes/chordRoutes');
 const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes'); // <-- 🔥 NOME EXATO DO ARQUIVO
 
-const notificationRoutes = require('./routes/notification.Routes');
+const notificationRoutes = require('./routes/notification.routes');
 const deviceTokenRoutes = require('./routes/deviceTokenRoutes');
 
 // Usando as rotas
@@ -48,7 +48,7 @@ app.use('/api/music', musicRoutes);
 app.use('/api/chords', chordRoutes);
 app.use('/api/auth/spotify', spotifyAuthRoutes); // <-- 🔥 NOME EXATO DO ARQUIVO
 
-app.use('/api/notifications', notification.Routes);
+app.use('/api/notifications', notification.routes);
 app.use('/api/device-tokens', deviceTokenRoutes);
 
 // Conexão MongoDB
