@@ -4,6 +4,11 @@ const Event = require('../models/Event');
 const moment = require('moment');
 const puppeteer = require('puppeteer');
 
+// ⬇️⬇️⬇️ ALTERAÇÕES CIRÚRGICAS (imports de notificação/push) ⬇️⬇️⬇️
+const Notification = require('../models/Notification');
+const pushService = require('../services/pushService');
+// ⬆️⬆️⬆️ FIM DAS IMPORTAÇÕES NOVAS ⬆️⬆️⬆️
+
 moment.locale('pt-br');
 
 // ======================= CRUD Padrão =======================
@@ -52,6 +57,58 @@ exports.getScaleByEventId = async (req, res) => {
   }
 };
 
+// ⬇️⬇️⬇️ ALTERAÇÕES CIRÚRGICAS (helpers) ⬇️⬇️⬇️
+function pickUserIds(members = []) {
+  // members: [{ user: ObjectId|{_id}, function: ... }]
+  return [...new Set(
+    members
+      .map(m => (m?.user?._id || m?.user || '').toString())
+      .filter(Boolean)
+  )];
+}
+
+async function notifyUserOfScale(userId, eventDoc) {
+  try {
+    const title = 'Escala Confirmada';
+    const when = eventDoc?.date ? moment(eventDoc.date).format('DD/MM/YYYY') : '';
+    const body = eventDoc?.title
+      ? `Você foi escalado para "${eventDoc.title}" ${when ? `em ${when}` : ''}.`
+      : `Você foi escalado${when ? ` em ${when}` : ''}.`;
+
+    // 1) Persistência
+    await Notification.create({
+      user: userId,
+      title,
+      message: body,
+      type: 'scale',
+      referenceModel: 'Event',
+      reference: eventDoc?._id,
+      data: {
+        relatedModel: 'Event',
+        relatedId: eventDoc?._id?.toString?.()
+      },
+      sentAt: new Date()
+    });
+
+    // 2) Push (não bloquear a request)
+    pushService.sendToUser(userId, {
+      title,
+      body,
+      data: {
+        type: 'scale',
+        relatedModel: 'Event',
+        relatedId: eventDoc?._id?.toString?.()
+      }
+    }).catch(err => {
+      console.warn('[notifyUserOfScale] Falha no push (não bloqueante):', err?.message || err);
+    });
+
+  } catch (err) {
+    console.warn('[notifyUserOfScale] Falha ao persistir/enviar notificação:', err?.message || err);
+  }
+}
+// ⬆️⬆️⬆️ FIM DOS HELPERS ⬆️⬆️⬆️
+
 exports.createScale = async (req, res) => {
   try {
     const scale = new Scale({
@@ -65,6 +122,15 @@ exports.createScale = async (req, res) => {
       await Event.findByIdAndUpdate(req.body.eventId, { scale: newScale._id });
     }
 
+    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar membros iniciais ⬇️⬇️⬇️
+    if (req.body.eventId && Array.isArray(req.body.members) && req.body.members.length > 0) {
+      const eventDoc = await Event.findById(req.body.eventId).select('title date').lean();
+      const userIds = pickUserIds(req.body.members);
+      // dispara em paralelo, sem bloquear
+      Promise.all(userIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
+    }
+    // ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM createScale ⬆️⬆️⬆️
+
     res.status(201).json(newScale);
   } catch (err) {
     console.error('[createScale] Erro:', err.message);
@@ -77,11 +143,30 @@ exports.updateScale = async (req, res) => {
     const scale = await Scale.findById(req.params.id);
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
-    if (req.body.members) scale.members = req.body.members;
+    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: detectar novos membros ⬇️⬇️⬇️
+    const beforeUserIds = pickUserIds(scale.members);
+    let addedUserIds = [];
+
+    if (req.body.members) {
+      const afterUserIds = pickUserIds(req.body.members);
+      addedUserIds = afterUserIds.filter(id => !beforeUserIds.includes(id));
+      scale.members = req.body.members;
+    }
+    // ⬆️⬆️⬆️ FIM DA DETECÇÃO ⬆️⬆️⬆️
+
     if (typeof req.body.notes === 'string') scale.notes = req.body.notes;
     if (req.body.eventId) scale.eventId = req.body.eventId;
 
     const updated = await scale.save();
+
+    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar apenas os adicionados ⬇️⬇️⬇️
+    if (addedUserIds.length > 0) {
+      const eventId = updated.eventId || req.body.eventId;
+      const eventDoc = eventId ? await Event.findById(eventId).select('title date').lean() : null;
+      Promise.all(addedUserIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
+    }
+    // ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM updateScale ⬆️⬆️⬆️
+
     res.json(updated);
   } catch (err) {
     console.error('[updateScale] Erro:', err.message);
