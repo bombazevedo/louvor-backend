@@ -4,7 +4,7 @@ const ctrl = require('../controllers/notification.controller');
 
 // ⚠️ Use o seu middleware de autenticação já existente
 // Ele precisa popular req.user.id (ou req.user._id) com o id do usuário do token
-const auth = require('../middlewares/auth'); // ajuste o caminho se necessário
+const auth = require('../middleware/auth'); // ajuste o caminho se necessário
 
 router.use(auth);
 
