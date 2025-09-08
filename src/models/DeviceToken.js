@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+// src/models/DeviceToken.js
+const mongoose = require('mongoose'); 
 
 const deviceTokenSchema = new mongoose.Schema(
   {
@@ -11,6 +12,7 @@ const deviceTokenSchema = new mongoose.Schema(
 );
 
 // 1 usuário pode ter vários devices; garanta consulta rápida por user
-deviceTokenSchema.index({ user: 1, token: 1 }, { unique: true });
+// 🔧 AJUSTE CIRÚRGICO: índice composto sem 'unique' para não conflitar com 'token' único
+deviceTokenSchema.index({ user: 1, token: 1 });
 
 module.exports = mongoose.model('DeviceToken', deviceTokenSchema);
