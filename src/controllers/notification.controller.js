@@ -1,5 +1,7 @@
 // controllers/notification.controller.js
 const Notification = require('../models/Notification');
+// (NOVO) envio premium com prefs/quiet hours/badge
+const { sendUserPush } = require('../services/pushService');
 
 // Lista as notificações do usuário autenticado
 exports.listMine = async (req, res, next) => {
@@ -13,6 +15,15 @@ exports.listMine = async (req, res, next) => {
   } catch (err) { return next(err); }
 };
 
+// (NOVO) Contagem de não lidas — para badge no ícone
+exports.unreadCount = async (req, res, next) => {
+  try {
+    const userId = req.userId || req.user?.id || req.user?._id;
+    const count = await Notification.countDocuments({ user: userId, read: false });
+    return res.json({ unread: count });
+  } catch (err) { return next(err); }
+};
+
 // Cria e (opcionalmente) envia push. Útil quando seu backend quiser disparar e já persistir.
 exports.create = async (req, res, next) => {
   try {
@@ -23,7 +34,10 @@ exports.create = async (req, res, next) => {
       type,
       relatedModel, // vinda do front
       relatedId,    // vinda do front
-      metadata      // vinda do front
+      metadata,     // vinda do front
+      pushNow,      // (NOVO) bool opcional: dispara push junto
+      channel,      // (NOVO) ex.: 'scale' | 'eventReminder' | 'repertoire' | 'broadcast' | 'chat' | 'system'
+      urgent        // (NOVO) bool opcional: fura quiet hours
     } = req.body;
 
     if (!userId || !message) {
@@ -41,8 +55,20 @@ exports.create = async (req, res, next) => {
       data: metadata
     });
 
-    // Se quiser integrar com FCM no backend no futuro, chame um serviço aqui (firebase-admin)
-    // await pushService.sendToUser(userId, { title: title || 'Notificação', body: message, data: {...} });
+    // (NOVO) Disparo opcional de push junto com a persistência
+    if (pushNow === true) {
+      await sendUserPush(userId, {
+        title: title || 'Notificação',
+        body: message,
+        data: {
+          type: type || 'system',
+          relatedModel: relatedModel || '',
+          relatedId: relatedId || ''
+        },
+        channel: channel || 'system',
+        urgent: !!urgent
+      });
+    }
 
     return res.status(201).json(doc);
   } catch (err) { return next(err); }
