@@ -7,10 +7,18 @@ const { sendUserPush } = require('../services/pushService');
 exports.listMine = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-    const docs = await Notification
-      .find({ user: userId })
-      .sort({ createdAt: -1 })
-      .lean();
+
+    // (AJUSTE CIRÚRGICO) Suporte opcional a paginação (compatível com apiService: ?page&limit)
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 0, 0); // 0 = sem paginação
+    const query = { user: userId };
+
+    let q = Notification.find(query).sort({ createdAt: -1 }).lean();
+    if (limit > 0) {
+      q = q.skip((page - 1) * limit).limit(limit);
+    }
+
+    const docs = await q;
     return res.json(docs);
   } catch (err) { return next(err); }
 };
