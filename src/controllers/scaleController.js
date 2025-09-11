@@ -91,7 +91,7 @@ async function notifyUserOfScale(userId, eventDoc) {
     });
 
     // 2) Push (não bloquear a request)
-    pushService.sendToUser(userId, {
+    pushService.sendUserPush(userId, {
       title,
       body,
       data: {

@@ -10,6 +10,7 @@ const auth = require('../middleware/auth');
 router.use(auth.authenticate);
 
 router.get('/', ctrl.listMine);                  // GET    /api/notifications
+router.get('/unread-count', ctrl.unreadCount);   // GET    /api/notifications/unread-count  ← (NOVO)
 router.get('/unread-count', ctrl.unreadCount);   // GET    /api/notifications/unread-count  ← (ADICIONADO)
 router.post('/', ctrl.create);                   // POST   /api/notifications
 router.patch('/read-all', ctrl.markAllRead);     // PATCH  /api/notifications/read-all

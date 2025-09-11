@@ -43,7 +43,11 @@ async function sendToTokens(tokens, { title, body, data = {} }) {
 
   // 🧹 (NOVO) Limpa tokens inválidos/not-registered para manter a base saudável
   try {
-    const invalidCodes = new Set(['messaging/invalid-argument', 'messaging/registration-token-not-registered']);
+    const invalidCodes = new Set([
+      'messaging/invalid-argument',
+      'messaging/invalid-registration-token',
+      'messaging/registration-token-not-registered'
+    ]);
     await Promise.all(
       (res.responses || []).map(async (r, i) => {
         if (!r.success && r.error && invalidCodes.has(r.error.code)) {
@@ -121,7 +125,7 @@ async function sendUserPush(
   // badge iOS = total de não lidas
   try {
     ensureInit();
-    const unread = await Notification.countDocuments({ userId, read: false });
+    const unread = await Notification.countDocuments({ user: userId, read: false });
     await Promise.all(
       tokens.map(token =>
         admin
