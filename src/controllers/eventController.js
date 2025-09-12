@@ -127,7 +127,8 @@ const createEvent = async (req, res) => {
       title, description, date, location, type,
       musicLinks,
       primaryColor, colorPalette,
-      paletteMode, showFullPalette
+      paletteMode, showFullPalette,
+      attachments // ⬅️ ✅ (adição cirúrgica) incluir anexos vindos do front
     } = req.body;
 
     const normalizedMusicLinks = [];
@@ -172,6 +173,17 @@ const createEvent = async (req, res) => {
       }
     }
 
+    // ⬇️ ✅ (adição cirúrgica) normalização mínima de anexos
+    const normalizedAttachments = Array.isArray(attachments)
+      ? attachments
+          .filter(Boolean)
+          .map(a => ({
+            name: a?.name || 'Arquivo',
+            url: a?.url || a?.uri || '',
+            public_id: a?.public_id || undefined
+          }))
+      : [];
+
     // Consistência entre paletteMode e showFullPalette
     const resolvedPaletteMode =
       paletteMode === 'mono' || paletteMode === 'full'
@@ -191,7 +203,8 @@ const createEvent = async (req, res) => {
       primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
       colorPalette: Array.isArray(colorPalette) ? colorPalette : [],
       paletteMode: resolvedPaletteMode,
-      showFullPalette: resolvedShowFull
+      showFullPalette: resolvedShowFull,
+      attachments: normalizedAttachments // ⬅️ ✅ (adição cirúrgica) salva anexos no evento
     });
 
     const savedEvent = await newEvent.save();
@@ -229,7 +242,8 @@ const updateEvent = async (req, res) => {
       title, description, date, location, type,
       musicLinks,
       colorPalette, primaryColor,
-      paletteMode, showFullPalette
+      paletteMode, showFullPalette,
+      attachments // ⬅️ ✅ (adição cirúrgica) incluir anexos do front
     } = req.body;
 
     const normalizedMusicLinks = [];
@@ -296,6 +310,17 @@ const updateEvent = async (req, res) => {
     if (typeof showFullPalette === 'boolean') {
       updateData.showFullPalette = showFullPalette;
       updateData.paletteMode = showFullPalette ? 'full' : 'mono';
+    }
+
+    // ⬇️ ✅ (adição cirúrgica) normalização e persistência dos anexos
+    if (Array.isArray(attachments)) {
+      updateData.attachments = attachments
+        .filter(Boolean)
+        .map(a => ({
+          name: a?.name || 'Arquivo',
+          url: a?.url || a?.uri || '',
+          public_id: a?.public_id || undefined
+        }));
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(
