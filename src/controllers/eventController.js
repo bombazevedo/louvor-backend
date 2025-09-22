@@ -336,9 +336,72 @@ const updateEvent = async (req, res) => {
   }
 };
 
+/**
+ * PATCH /events/:eventId/songs/:songId/overrides
+ * Atualiza overrides (key, bpm, manualLink) da música no CONTEXTO do evento.
+ * Regras:
+ *  - Somente Coordenador/DM (ou DM escalado) podem editar.
+ *  - manualLink = null remove o link manual do evento.
+ */
+const updateEventSongOverrides = async (req, res) => {
+  try {
+    const user = req.user;
+    const allowed = ['coordinator', 'coordenador', 'dm', 'dm_escalado'];
+    if (!user || !allowed.includes(String(user.role || '').toLowerCase())) {
+      return res.status(403).json({ message: 'Apenas Coordenador/DM escalado podem editar overrides.' });
+    }
+
+    const { eventId, songId } = req.params;
+    const { key, bpm, manualLink } = req.body; // todos opcionais
+
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
+
+    // Garante array de overrides
+    event.songOverrides = Array.isArray(event.songOverrides) ? event.songOverrides : [];
+
+    // Procura item existente para a música
+    const idx = event.songOverrides.findIndex(i => String(i.song) === String(songId));
+    if (idx === -1) {
+      // cria novo item se necessário
+      event.songOverrides.push({ song: songId, overrides: {} });
+    }
+    const item = event.songOverrides.find(i => String(i.song) === String(songId));
+    item.overrides = item.overrides || {};
+
+    if (typeof key === 'string' && key.trim()) item.overrides.key = key.trim();
+    if (Number.isFinite(bpm)) item.overrides.bpm = bpm;
+
+    if (manualLink === null) {
+      // remoção explícita do link manual no contexto do evento
+      item.overrides.manualLink = undefined;
+    } else if (manualLink && typeof manualLink.url === 'string' && manualLink.url.trim()) {
+      item.overrides.manualLink = {
+        url: manualLink.url.trim(),
+        addedBy: user._id,
+        addedAt: new Date(),
+        note: manualLink.note && String(manualLink.note).trim()
+          ? String(manualLink.note).trim()
+          : 'Link manual (escopo do evento)'
+      };
+    }
+
+    await event.save();
+    return res.json({
+      eventId,
+      songId,
+      overrides: clean(item.overrides)
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar overrides do evento:', error);
+    res.status(500).json({ message: 'Erro ao atualizar overrides do evento' });
+  }
+};
+
 module.exports = {
   getEventsWithScales,
   getEventById,
   createEvent,
-  updateEvent
+  updateEvent,
+  updateEventSongOverrides // ⬅️ ✅ ADIÇÃO CIRÚRGICA: export da função PATCH
 };

@@ -5,7 +5,8 @@ const {
   getEventsWithScales,
   getEventById,
   createEvent,
-  updateEvent
+  updateEvent,
+  updateEventSongOverrides // ⬅️ ✅ ADIÇÃO CIRÚRGICA: importa o PATCH de overrides
 } = require('../controllers/eventController');
 
 // ✅ Adicione esta linha
@@ -22,6 +23,9 @@ router.get('/:id', authenticate, getEventById);
 
 // ✏️ Atualizar evento com lógica de Song
 router.patch('/:id', authenticate, updateEvent);
+
+// ⬇️⬇️⬇️ ✅ ADIÇÃO CIRÚRGICA: aplicar overrides (key/bpm/link) no CONTEXTO do evento
+router.patch('/:eventId/songs/:songId/overrides', authenticate, updateEventSongOverrides);
 
 // 🗑️ Deletar evento (apenas coordenador)
 router.delete('/:id', authenticate, isCoordinator, async (req, res) => {

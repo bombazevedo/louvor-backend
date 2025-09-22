@@ -52,7 +52,22 @@ const eventSchema = new mongoose.Schema({
   showFullPalette: {
     type: Boolean,
     default: true
-  }
+  },
+
+  // ⬇️⬇️⬇️ ADIÇÃO CIRÚRGICA: overrides por EVENTO (tonalidade, BPM e link manual)
+  songOverrides: [{
+    song: { type: mongoose.Schema.Types.ObjectId, ref: 'Song', required: true },
+    overrides: {
+      key: { type: String },        // tonalidade específica deste evento
+      bpm: { type: Number },        // BPM específico deste evento
+      manualLink: {
+        url: { type: String },
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        addedAt: { type: Date },
+        note: { type: String, default: 'Link manual (escopo do evento)' }
+      }
+    }
+  }]
 }, {
   timestamps: true,
 });
