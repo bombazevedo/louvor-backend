@@ -37,7 +37,7 @@ const TITLE_REMOVALS = [
 function normalizeSongTitle(title) {
   let t = title.toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
-    .replace(/\(.*?\)|\[.*?\]/g, "")                  // remove colchetes e parênteses
+    .replace(/\(.*?\)|\[.*?\]/g, "");                 // remove colchetes e parênteses
 
   TITLE_REMOVALS.forEach((expr) => {
     t = t.replace(new RegExp("\\b" + expr + "\\b", "gi"), "");
@@ -61,6 +61,13 @@ function normalizeArtistName(artist) {
 
   // Remove termos irrelevantes de gravadora, coletivos, etc.
   t = t.replace(/\b(mk music|sony music|som livre|vevo|records|and friends|e cia)\b/gi, "");
+
+  // Remove VEVO grudado no fim (ex: alinebarrosvevo)
+  t = t.replace(/vevo$/i, "");
+
+  // Remove sufixos comuns em artistas (ruídos de metadados)
+  t = t.replace(/\b(ao vivo|live|remix|remastered)\b/gi, "");
+
   t = t.replace(/\s+/g, " ").trim();
   return t;
 }

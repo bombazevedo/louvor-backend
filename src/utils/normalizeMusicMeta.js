@@ -22,10 +22,13 @@ function normalizeArtist(artist = '') {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/\(.*?\)/g, '')                         // Remove parênteses
     .replace(/ - T[oó]pico/gi, '')                   // Remove sufixo "- Tópico"
-    .replace(/VEVO/gi, '')                           // Remove sufixo VEVO
+    .replace(/vevo$/i, '')                           // Remove VEVO grudado no final
+    .replace(/\bvevo\b/gi, '')                       // Remove VEVO isolado
     .replace(/Oficial/gi, '')                        // Remove "Oficial"
     .replace(/Letra/gi, '')                          // Remove "Letra"
+    .replace(/\b(ao vivo|live|acústico|versão acústica|remix|remastered)\b/gi, '')
     .replace(/\[.*?\]/g, '')                         // Remove colchetes
+    .replace(/,\s*$/, '')                            // Remove vírgula no final
     .replace(/\s+/g, ' ')                            // Remove múltiplos espaços
     .trim();
 }

@@ -245,6 +245,16 @@ async function fetchFromYouTube(youtubeUrl) {
   }
 }
 
+// 🔒 Novo helper: comparação estrita de matches
+function isStrictMatch(base, candidate) {
+  if (!base?.title || !base?.artist || !candidate?.title || !candidate?.artist) return false;
+  const baseTitle = normalizeTitle(base.title);
+  const baseArtist = normalizeArtist(base.artist);
+  const candTitle = normalizeTitle(candidate.title);
+  const candArtist = normalizeArtist(candidate.artist);
+  return baseTitle === candTitle && baseArtist === candArtist;
+}
+
 async function enrichSong(song) {
   let {
     title,
@@ -302,6 +312,27 @@ async function enrichSong(song) {
 
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
+
+  // 🔒 Garantir que só retorne dados cruzados se houver match estrito
+  if (
+    (spotifyData?.title && spotifyData?.artist && !isStrictMatch(referenceData, spotifyData)) ||
+    (deezerData?.title && deezerData?.artist && !isStrictMatch(referenceData, deezerData))
+  ) {
+    console.log('[Enrichment] ⚠️ Nenhum match estrito encontrado. Não retornando dados cruzados.');
+    return {
+      title: referenceData.title,
+      artist: referenceData.artist,
+      bpm: null,
+      key: null,
+      duration: null,
+      album: null,
+      coverUrl: coverUrl || null,
+      spotifyUrl: null,
+      deezerUrl: null,
+      spotifyTrackId: null,
+      deezerTrackId: null
+    };
+  }
 
   return {
     bpm: deezerData.bpm || null,
