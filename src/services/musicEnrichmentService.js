@@ -245,6 +245,59 @@ async function fetchFromYouTube(youtubeUrl) {
   }
 }
 
+// Busca conservadora no YouTube por título + artista, validando duração quando disponível
+async function searchYouTubeByTitleArtistStrict(title, artist, referenceDurationSec = null) {
+  try {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey || !title || !artist) return null;
+
+    const q = encodeURIComponent(`${title} ${artist}`);
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${q}&key=${apiKey}`;
+    const res = await axios.get(searchUrl);
+    const items = Array.isArray(res.data?.items) ? res.data.items : [];
+
+    for (const it of items) {
+      const videoId = it?.id?.videoId;
+      const ytTitle = it?.snippet?.title || '';
+      const ytChannel = it?.snippet?.channelTitle || '';
+      if (!videoId) continue;
+
+      const nRefTitle = normalize(normalizeTitle(removePollution(title)));
+      const nRefArtist = normalize(normalizeArtist(removePollution(artist)));
+      const nYtTitle = normalize(removePollution(ytTitle));
+      const nYtChannel = normalize(removePollution(ytChannel));
+
+      const titleOk = nYtTitle.includes(nRefTitle);
+      const artistOk = nYtTitle.includes(nRefArtist) || nYtChannel.includes(nRefArtist);
+      if (!titleOk || !artistOk) continue;
+
+      if (referenceDurationSec && Number.isFinite(referenceDurationSec)) {
+        const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoId}&key=${apiKey}`;
+        const vres = await axios.get(videosUrl);
+        const vitem = Array.isArray(vres.data?.items) ? vres.data.items[0] : null;
+        const isoDur = vitem?.contentDetails?.duration || null;
+
+        const m = isoDur ? isoDur.match(/PT(?:(\d+)M)?(?:(\d+)S)?/i) : null;
+        const mins = m && m[1] ? parseInt(m[1], 10) : 0;
+        const secs = m && m[2] ? parseInt(m[2], 10) : 0;
+        const dur = mins * 60 + secs;
+
+        const delta = Math.abs(dur - referenceDurationSec);
+        const isLive = nYtTitle.includes('ao vivo') || nYtTitle.includes('live');
+        const limiar = isLive ? 6 : 3;
+        if (delta > limiar) continue;
+      }
+
+      return `https://www.youtube.com/watch?v=${videoId}`;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('[Enrichment][YouTube Search] Erro:', err?.response?.data || err.message);
+    return null;
+  }
+}
+
 // 🔒 Novo helper: comparação estrita de matches
 function isStrictMatch(base, candidate) {
   if (!base?.title || !base?.artist || !candidate?.title || !candidate?.artist) return false;
@@ -313,6 +366,16 @@ async function enrichSong(song) {
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
+  // Buscar YouTube quando ainda não houver youtubeUrl e houver referência
+  let finalYoutubeUrl = (typeof youtubeUrl === 'string' && youtubeUrl.trim()) ? youtubeUrl : null;
+  if (!finalYoutubeUrl && (title || artist)) {
+    const refDuration = spotifyData?.duration || deezerData?.duration || null;
+    const ytFound = await searchYouTubeByTitleArtistStrict(title || rawTitle, artist || rawArtist, refDuration);
+    if (ytFound) {
+      finalYoutubeUrl = ytFound;
+    }
+  }
+
   // 🔒 Garantir que só retorne dados cruzados se houver match estrito
   if (
     (spotifyData?.title && spotifyData?.artist && !isStrictMatch(referenceData, spotifyData)) ||
@@ -327,6 +390,7 @@ async function enrichSong(song) {
       duration: null,
       album: null,
       coverUrl: coverUrl || null,
+      youtubeUrl: finalYoutubeUrl || null,
       spotifyUrl: null,
       deezerUrl: null,
       spotifyTrackId: null,
@@ -340,6 +404,7 @@ async function enrichSong(song) {
     duration: spotifyData.duration || deezerData.duration || null,
     album: spotifyData.album || deezerData.album || null,
     coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
+    youtubeUrl: finalYoutubeUrl || null,
     spotifyUrl: finalSpotifyUrl,
     spotifyTrackId: spotifyData.spotifyTrackId || spotifyTrackId || null,
     deezerUrl: deezerData.deezerUrl || deezerUrl || null,
