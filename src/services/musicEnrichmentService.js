@@ -429,12 +429,12 @@ function isStrictMatch(base, candidate) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  const prep = (t) => normalizeTitle(stripPerf(reduceTitle(stripParens(t))));
+  const prep = (t) => normalize(normalizeTitle(stripPerf(reduceTitle(stripParens(t)))));
 
   const baseTitle = prep(rawBase);
   const candTitle = prep(rawCand);
-  const baseArtist = normalizeArtist(base.artist);
-  const candArtist = normalizeArtist(candidate.artist);
+  const baseArtist = normalize(normalizeArtist(base.artist));
+  const candArtist = normalize(normalizeArtist(candidate.artist));
 
   return baseTitle === candTitle && baseArtist === candArtist;
 }
