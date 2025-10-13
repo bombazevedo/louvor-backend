@@ -203,6 +203,21 @@ exports.createSong = async (req, res) => {
         enrichedFields.deezerTrackId = enriched.deezerTrackId;
       }
 
+      // ⬇️ AJUSTE CIRÚRGICO: propagar title/artist confiáveis do enrichment + normalizados
+      if (typeof enriched.title === 'string' && enriched.title.trim()) {
+        enrichedFields.title = enriched.title.trim();
+      }
+      if (typeof enriched.artist === 'string' && enriched.artist.trim()) {
+        enrichedFields.artist = enriched.artist.trim();
+      }
+      if (enrichedFields.title || enrichedFields.artist) {
+        const t = enrichedFields.title || savedSong.title || '';
+        const a = enrichedFields.artist || savedSong.artist || '';
+        enrichedFields.normalizedTitle = normalizeSongTitle(t);
+        enrichedFields.normalizedArtist = normalizeArtistName(a);
+      }
+      // ⬆️ FIM DO AJUSTE
+
       const enrichedResult = await Song.findByIdAndUpdate(
         savedSong._id,
         { $set: enrichedFields },
@@ -282,9 +297,24 @@ exports.updateSongEnrichment = async (req, res) => {
       enrichedFields.deezerTrackId = enriched.deezerTrackId;
     }
 
+    // ⬇️ AJUSTE CIRÚRGICO (mesmo do create): aplicar title/artist + normalizados se vierem do enrichment
+    if (typeof enriched.title === 'string' && enriched.title.trim()) {
+      enrichedFields.title = enriched.title.trim();
+    }
+    if (typeof enriched.artist === 'string' && enriched.artist.trim()) {
+      enrichedFields.artist = enriched.artist.trim();
+    }
+    if (enrichedFields.title || enrichedFields.artist) {
+      const t = enrichedFields.title || song.title || '';
+      const a = enrichedFields.artist || song.artist || '';
+      enrichedFields.normalizedTitle = normalizeSongTitle(t);
+      enrichedFields.normalizedArtist = normalizeArtistName(a);
+    }
+    // ⬆️ FIM DO AJUSTE
+
     if (!song.normalizedTitle || !song.normalizedArtist) {
-      enrichedFields.normalizedTitle = song.normalizedTitle || normalizeSongTitle(song.title || '');
-      enrichedFields.normalizedArtist = song.normalizedArtist || normalizeArtistName(song.artist || '');
+      enrichedFields.normalizedTitle = enrichedFields.normalizedTitle || song.normalizedTitle || normalizeSongTitle(song.title || '');
+      enrichedFields.normalizedArtist = enrichedFields.normalizedArtist || song.normalizedArtist || normalizeArtistName(song.artist || '');
     }
 
     const enrichedResult = await Song.findByIdAndUpdate(song._id, { $set: enrichedFields }, { new: true });
