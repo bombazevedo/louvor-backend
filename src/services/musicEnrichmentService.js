@@ -234,9 +234,31 @@ async function fetchFromYouTube(youtubeUrl) {
     const ytRes = await axios.get(`https://www.googleapis.com/youtube/v3/videos?id=${videoId}&part=snippet&key=${apiKey}`);
     const item = ytRes.data.items?.[0];
     if (!item) return {};
+
+    const rawTitle = item.snippet?.title || '';
+    const rawChannel = item.snippet?.channelTitle || '';
+
+    // Default: mantém canal como artista (será substituído se conseguirmos extrair do título)
+    let artist = removePollution(rawChannel);
+    let title  = removePollution(rawTitle);
+
+    // Padrão comum: "Artista - Música (...)" → tenta extrair artista do lado esquerdo do hífen
+    const parts = rawTitle.split(/\s[-–—]\s/);
+    if (parts.length >= 2) {
+      const lhs = removePollution(parts[0]); // provável artista
+      const rhs = removePollution(parts.slice(1).join(' - ')); // provável título
+      const lbl = normalize(lhs);
+      const isLabel = /\b(records?|music|canal|topic|vevo)\b/.test(lbl);
+      if (!isLabel && lhs.length >= 2 && rhs.length >= 2) {
+        artist = lhs;
+        title = rhs;
+      }
+    }
+
+    // Canonicaliza: cover e retorna apenas dados necessários
     return {
-      title: removePollution(item.snippet?.title || ''),
-      artist: removePollution(item.snippet?.channelTitle || ''),
+      title,
+      artist,
       coverUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
     };
   } catch (err) {
@@ -244,6 +266,7 @@ async function fetchFromYouTube(youtubeUrl) {
     return {};
   }
 }
+
 
 // Busca conservadora no YouTube por título + artista, validando duração quando disponível
 async function searchYouTubeByTitleArtistStrict(title, artist, referenceDurationSec = null) {
@@ -301,12 +324,18 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
 // 🔒 Novo helper: comparação estrita de matches
 function isStrictMatch(base, candidate) {
   if (!base?.title || !base?.artist || !candidate?.title || !candidate?.artist) return false;
-  const baseTitle = normalizeTitle(base.title);
+
+  // Remove conteúdos entre parênteses/colchetes/chaves para casar versões equivalentes
+  const stripParens = (t) => (t || '').replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
+
+  const baseTitle = normalizeTitle(stripParens(base.title));
   const baseArtist = normalizeArtist(base.artist);
-  const candTitle = normalizeTitle(candidate.title);
+  const candTitle = normalizeTitle(stripParens(candidate.title));
   const candArtist = normalizeArtist(candidate.artist);
+
   return baseTitle === candTitle && baseArtist === candArtist;
 }
+
 
 async function enrichSong(song) {
   let {
