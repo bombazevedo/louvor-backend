@@ -316,9 +316,15 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
     if (!apiKey || !title || !artist) return null;
 
     const q = encodeURIComponent(`${title} ${artist}`);
-    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${q}&key=${apiKey}`;
+    const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=8&q=${q}&key=${apiKey}`;
     const res = await axios.get(searchUrl);
     const items = Array.isArray(res.data?.items) ? res.data.items : [];
+
+    const nRefArtist = normalize(normalizeArtist(removePollution(artist)));
+    const refTitleClean = reduceTitle(removePollution(title));
+    const nRefTitle = normalize(normalizeTitle(refTitleClean));
+
+    const candidates = [];
 
     for (const it of items) {
       const videoId = it?.id?.videoId;
@@ -326,48 +332,70 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
       const ytChannel = it?.snippet?.channelTitle || '';
       if (!videoId) continue;
 
-      const nRefTitle = normalize(normalizeTitle(removePollution(title)));
-      const nRefArtist = normalize(normalizeArtist(removePollution(artist)));
       const nYtTitle = normalize(removePollution(ytTitle));
       const nYtChannel = normalize(removePollution(ytChannel));
 
-      const titleOk = nYtTitle.includes(nRefTitle);
+      // filtro básico por título+artista (tolerante a caixa/acentos/pontuação)
+      const titleOk  = nYtTitle.includes(nRefTitle);
       const artistOk = nYtTitle.includes(nRefArtist) || nYtChannel.includes(nRefArtist);
       if (!titleOk || !artistOk) continue;
 
+      // duração (com tolerância dinâmica)
+      let withinTolerance = true;
       if (referenceDurationSec && Number.isFinite(referenceDurationSec)) {
+        let dur = null;
         const videosUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${videoId}&key=${apiKey}`;
         const vres = await axios.get(videosUrl);
         const vitem = Array.isArray(vres.data?.items) ? vres.data.items[0] : null;
         const isoDur = vitem?.contentDetails?.duration || null;
+        if (isoDur) {
+          const m = isoDur.match(/PT(?:(\d+)M)?(?:(\d+)S)?/i);
+          const mins = m && m[1] ? parseInt(m[1], 10) : 0;
+          const secs = m && m[2] ? parseInt(m[2], 10) : 0;
+          dur = mins * 60 + secs;
+        }
 
-        const m = isoDur ? isoDur.match(/PT(?:(\d+)M)?(?:(\d+)S)?/i) : null;
-        const mins = m && m[1] ? parseInt(m[1], 10) : 0;
-        const secs = m && m[2] ? parseInt(m[2], 10) : 0;
-        const dur = mins * 60 + secs;
+        if (dur !== null) {
+          const rawLower = (ytTitle || '').toLowerCase();
+          const refLower = (title || '').toLowerCase();
+          const isLiveRef = refLower.includes('ao vivo') || refLower.includes('live');
+          const isLiveYT  = rawLower.includes('ao vivo') || rawLower.includes('live');
+          const isLive    = isLiveRef || isLiveYT;
 
-        const delta = Math.abs(dur - referenceDurationSec);
+          const baseTolerance = isLive ? 6 : 3;       // segundos
+          const pctTolerance  = isLive ? 0.08 : 0.05; // 8% ao vivo, 5% estúdio
+          const secTolerance  = Math.max(baseTolerance, Math.round(referenceDurationSec * pctTolerance));
+          const delta = Math.abs(dur - referenceDurationSec);
 
-        // considerar “ao vivo/live” tanto no título de referência (Spotify/Deezer)
-        // quanto no título bruto do YouTube
-        const rawLower = (ytTitle || '').toLowerCase();
-        const refLower = (title || '').toLowerCase();
-        const isLiveRef = refLower.includes('ao vivo') || refLower.includes('live');
-        const isLiveYT  = rawLower.includes('ao vivo') || rawLower.includes('live');
-        const isLive    = isLiveRef || isLiveYT;
-
-        // tolerância híbrida: base + percentual para absorver intros/outros
-        const baseTolerance = isLive ? 6 : 3;       // segundos
-        const pctTolerance  = isLive ? 0.08 : 0.05; // 8% ao vivo, 5% estúdio
-        const secTolerance  = Math.max(baseTolerance, Math.round(referenceDurationSec * pctTolerance));
-
-        if (delta > secTolerance) continue;
+          withinTolerance = delta <= secTolerance;
+        }
       }
+      if (!withinTolerance) continue;
 
-      return `https://www.youtube.com/watch?v=${videoId}`;
+      // RANKING: prioriza canal do artista / Topic e maior similaridade de título;
+      // penaliza cover/karaoke/lyrics/tutorial/etc.
+      const titleScore = tokenOverlapRatio(ytTitle, refTitleClean);
+      const channelExact    = normalize(ytChannel) === nRefArtist ? 1 : 0;
+      const channelContains = normalize(ytChannel).includes(nRefArtist) ? 1 : 0;
+      const topicBoost      = /\b- topic\b/i.test(ytChannel) ? 1 : 0;
+
+      const penaltyTitle  = /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio|instrumental|remix)\b/i.test(ytTitle) ? 0.25 : 0;
+      const penaltyChannel= /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio)\b/i.test(ytChannel) ? 0.15 : 0;
+
+      const score =
+        (titleScore * 0.75) +
+        (channelExact * 0.20) +
+        (channelContains * 0.10) +
+        (topicBoost * 0.05) -
+        (penaltyTitle + penaltyChannel);
+
+      candidates.push({ videoId, score });
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => b.score - a.score);
+    return `https://www.youtube.com/watch?v=${candidates[0].videoId}`;
   } catch (err) {
     console.error('[Enrichment][YouTube Search] Erro:', err?.response?.data || err.message);
     return null;
@@ -389,21 +417,23 @@ function isStrictMatch(base, candidate) {
   const baseAcoust = hasAcoust(rawBase);
   const candAcoust = hasAcoust(rawCand);
 
-  // HARD somente quando AMBOS explicitam e são conflitantes (ex.: "live" vs "acoustic" ou um tem e o outro tem outro marcador)
+  // HARD apenas quando AMBOS explicitam e divergem
   if ((baseLive || baseAcoust) && (candLive || candAcoust)) {
     if (baseLive !== candLive || baseAcoust !== candAcoust) return false;
   }
 
-  // Comparação tolerante (ignora pontuação, parênteses/colchetes, caixa, acentos e marcadores de performance)
+  // tolerante a pontuação/parênteses/colchetes/caixa/acentos; também remove sufixos do tipo " - ..."
   const stripParens = (t) => (t || '').replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
   const stripPerf = (t) => (t || '')
     .replace(/\b(ao vivo|live|ac[uú]stic[ao]|acoustic)\b/ig, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const baseTitle = normalizeTitle(stripPerf(stripParens(rawBase)));
+  const prep = (t) => normalizeTitle(stripPerf(reduceTitle(stripParens(t))));
+
+  const baseTitle = prep(rawBase);
+  const candTitle = prep(rawCand);
   const baseArtist = normalizeArtist(base.artist);
-  const candTitle = normalizeTitle(stripPerf(stripParens(rawCand)));
   const candArtist = normalizeArtist(candidate.artist);
 
   return baseTitle === candTitle && baseArtist === candArtist;
