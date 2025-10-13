@@ -387,16 +387,23 @@ async function enrichSong(song) {
       title = deezerData.title;
       artist = deezerData.artist;
     }
-  } else if (platform === 'youtube' && youtubeUrl) {
-    const ytData = await fetchFromYouTube(youtubeUrl);
-    if (ytData.title && ytData.artist) {
-      referenceData = { title: ytData.title, artist: ytData.artist };
-      title = ytData.title;
-      artist = ytData.artist;
-      if (!coverUrl) coverUrl = ytData.coverUrl;
-      ytAlbum = ytData.album || null; // ← guarda álbum do YouTube (se houver)
-    }
+  } else if (platform && platform.toLowerCase() === 'youtube' && youtubeUrl) {
+  // Canonizar youtubeUrl (remover parâmetros extras e manter somente watch?v=ID)
+  const idMatch = youtubeUrl.match(/v=([a-zA-Z0-9_\-]+)/);
+  if (idMatch) {
+    youtubeUrl = `https://www.youtube.com/watch?v=${idMatch[1]}`;
   }
+
+  const ytData = await fetchFromYouTube(youtubeUrl);
+  if (ytData.title && ytData.artist) {
+    referenceData = { title: ytData.title, artist: ytData.artist };
+    title = ytData.title;
+    artist = ytData.artist;
+    if (!coverUrl) coverUrl = ytData.coverUrl;
+    ytAlbum = ytData.album || null; // ← guarda álbum do YouTube (se houver)
+  }
+}
+
 
   spotifyData = await fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId) || spotifyData;
   deezerData = await fetchFromDeezer(title, artist, deezerUrl, deezerTrackId) || deezerData;
