@@ -269,6 +269,9 @@ async function fetchFromYouTube(youtubeUrl) {
       if (base && base.length >= 2) album = base;
     }
 
+    // 🔧 Remover parênteses vazios e espaços duplicados do título após limpeza
+    title = (title || '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
+
     return {
       title,
       artist,
@@ -320,7 +323,9 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
         const dur = mins * 60 + secs;
 
         const delta = Math.abs(dur - referenceDurationSec);
-        const isLive = nYtTitle.includes('ao vivo') || nYtTitle.includes('live');
+        // 🔧 detectar “ao vivo” no título bruto (sem normalizar) para aplicar limiar correto
+        const rawLower = (ytTitle || '').toLowerCase();
+        const isLive = rawLower.includes('ao vivo') || rawLower.includes('live');
         const limiar = isLive ? 6 : 3;
         if (delta > limiar) continue;
       }
@@ -341,10 +346,15 @@ function isStrictMatch(base, candidate) {
 
   // Remove conteúdos entre parênteses/colchetes/chaves para casar versões equivalentes
   const stripParens = (t) => (t || '').replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
+  // 🔧 Ignorar marcadores de performance (ao vivo / live / acústico) para o match
+  const stripPerf = (t) => (t || '')
+    .replace(/\b(ao vivo|live|ac[uú]stico|acoustic)\b/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-  const baseTitle = normalizeTitle(stripParens(base.title));
+  const baseTitle = normalizeTitle(stripPerf(stripParens(base.title)));
   const baseArtist = normalizeArtist(base.artist);
-  const candTitle = normalizeTitle(stripParens(candidate.title));
+  const candTitle = normalizeTitle(stripPerf(stripParens(candidate.title)));
   const candArtist = normalizeArtist(candidate.artist);
 
   return baseTitle === candTitle && baseArtist === candArtist;
@@ -419,7 +429,11 @@ async function enrichSong(song) {
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
   // Buscar YouTube quando ainda não houver youtubeUrl e houver referência
-  let finalYoutubeUrl = (typeof youtubeUrl === 'string' && youtubeUrl.trim()) ? youtubeUrl : null;
+  // 🔧 Só confiar em youtubeUrl informado quando a plataforma for YouTube
+  let finalYoutubeUrl = null;
+  if (platform && platform.toLowerCase() === 'youtube' && typeof youtubeUrl === 'string' && youtubeUrl.trim()) {
+    finalYoutubeUrl = youtubeUrl.trim();
+  }
   if (!finalYoutubeUrl && (title || artist)) {
     const refDuration = spotifyData?.duration || deezerData?.duration || null;
     const ytFound = await searchYouTubeByTitleArtistStrict(title || rawTitle, artist || rawArtist, refDuration);
