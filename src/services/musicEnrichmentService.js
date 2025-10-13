@@ -114,13 +114,37 @@ async function fetchFromSpotify(title, artist, spotifyUrl = null, platformId = n
     }
 
     if (!track && title && artist) {
-      const query = encodeURIComponent(`${normalizeTitle(title)} ${normalizeArtist(artist)}`);
+      const baseTitle = title || '';
+      const baseArtist = artist || '';
+      const query = encodeURIComponent(`${normalizeTitle(baseTitle)} ${normalizeArtist(baseArtist)}`.trim());
       console.log(`[Spotify] Buscando por nome: ${query}`);
-      const searchUrl = `https://api.spotify.com/v1/search?q=${query}&type=track&limit=1`;
+      const searchUrl = `https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`;
       const searchRes = await axios.get(searchUrl, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      track = searchRes.data.tracks?.items?.[0];
+
+      const items = Array.isArray(searchRes.data?.tracks?.items) ? searchRes.data.tracks.items : [];
+      const targetTitle = reduceTitle(removePollution(baseTitle));
+      const targetArtist = removePollution(baseArtist);
+
+      let best = null;
+      let bestScore = 0;
+      for (const it of items) {
+        const ct = it?.name || '';
+        const ca = it?.artists?.[0]?.name || '';
+        const titleRatio = tokenOverlapRatio(ct, targetTitle);
+        const artistRatio = tokenOverlapRatio(ca, targetArtist);
+        const score = titleRatio * 0.85 + artistRatio * 0.15;
+        const exactArtist = normalize(ca) === normalize(targetArtist);
+        const finalScore = exactArtist ? score + 0.05 : score;
+        if (finalScore > bestScore) {
+          bestScore = finalScore;
+          best = it;
+        }
+      }
+      if (best && bestScore >= 0.6) {
+        track = best;
+      }
     }
 
     return {
