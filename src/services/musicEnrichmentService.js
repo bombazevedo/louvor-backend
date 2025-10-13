@@ -347,11 +347,21 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
         const dur = mins * 60 + secs;
 
         const delta = Math.abs(dur - referenceDurationSec);
-        // 🔧 detectar “ao vivo” no título bruto (sem normalizar) para aplicar limiar correto
+
+        // considerar “ao vivo/live” tanto no título de referência (Spotify/Deezer)
+        // quanto no título bruto do YouTube
         const rawLower = (ytTitle || '').toLowerCase();
-        const isLive = rawLower.includes('ao vivo') || rawLower.includes('live');
-        const limiar = isLive ? 6 : 3;
-        if (delta > limiar) continue;
+        const refLower = (title || '').toLowerCase();
+        const isLiveRef = refLower.includes('ao vivo') || refLower.includes('live');
+        const isLiveYT  = rawLower.includes('ao vivo') || rawLower.includes('live');
+        const isLive    = isLiveRef || isLiveYT;
+
+        // tolerância híbrida: base + percentual para absorver intros/outros
+        const baseTolerance = isLive ? 6 : 3;       // segundos
+        const pctTolerance  = isLive ? 0.08 : 0.05; // 8% ao vivo, 5% estúdio
+        const secTolerance  = Math.max(baseTolerance, Math.round(referenceDurationSec * pctTolerance));
+
+        if (delta > secTolerance) continue;
       }
 
       return `https://www.youtube.com/watch?v=${videoId}`;
@@ -368,17 +378,32 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
 function isStrictMatch(base, candidate) {
   if (!base?.title || !base?.artist || !candidate?.title || !candidate?.artist) return false;
 
-  // Remove conteúdos entre parênteses/colchetes/chaves para casar versões equivalentes
+  const rawBase = String(base.title || '');
+  const rawCand = String(candidate.title || '');
+
+  const hasLive   = (s) => /\b(ao vivo|live)\b/i.test(s);
+  const hasAcoust = (s) => /\b(ac[uú]stic[ao]|acoustic)\b/i.test(s);
+
+  const baseLive   = hasLive(rawBase);
+  const candLive   = hasLive(rawCand);
+  const baseAcoust = hasAcoust(rawBase);
+  const candAcoust = hasAcoust(rawCand);
+
+  // HARD somente quando AMBOS explicitam e são conflitantes (ex.: "live" vs "acoustic" ou um tem e o outro tem outro marcador)
+  if ((baseLive || baseAcoust) && (candLive || candAcoust)) {
+    if (baseLive !== candLive || baseAcoust !== candAcoust) return false;
+  }
+
+  // Comparação tolerante (ignora pontuação, parênteses/colchetes, caixa, acentos e marcadores de performance)
   const stripParens = (t) => (t || '').replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
-  // 🔧 Ignorar marcadores de performance (ao vivo / live / acústico) para o match
   const stripPerf = (t) => (t || '')
-    .replace(/\b(ao vivo|live|ac[uú]stico|acoustic)\b/ig, ' ')
+    .replace(/\b(ao vivo|live|ac[uú]stic[ao]|acoustic)\b/ig, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const baseTitle = normalizeTitle(stripPerf(stripParens(base.title)));
+  const baseTitle = normalizeTitle(stripPerf(stripParens(rawBase)));
   const baseArtist = normalizeArtist(base.artist);
-  const candTitle = normalizeTitle(stripPerf(stripParens(candidate.title)));
+  const candTitle = normalizeTitle(stripPerf(stripParens(rawCand)));
   const candArtist = normalizeArtist(candidate.artist);
 
   return baseTitle === candTitle && baseArtist === candArtist;
