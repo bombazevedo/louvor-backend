@@ -238,27 +238,41 @@ async function fetchFromYouTube(youtubeUrl) {
     const rawTitle = item.snippet?.title || '';
     const rawChannel = item.snippet?.channelTitle || '';
 
-    // Default: mantém canal como artista (será substituído se conseguirmos extrair do título)
+    // Defaults (serão substituídos se extrairmos do título)
     let artist = removePollution(rawChannel);
     let title  = removePollution(rawTitle);
+    let album  = null; // ← heurística de álbum baseada no título bruto
 
-    // Padrão comum: "Artista - Música (...)" → tenta extrair artista do lado esquerdo do hífen
+    // Padrão comum: "Artista - Música (...)" → extrai artista do lado esquerdo do hífen
     const parts = rawTitle.split(/\s[-–—]\s/);
     if (parts.length >= 2) {
-      const lhs = removePollution(parts[0]); // provável artista
+      const lhs = removePollution(parts[0]);                   // provável artista
       const rhs = removePollution(parts.slice(1).join(' - ')); // provável título
       const lbl = normalize(lhs);
       const isLabel = /\b(records?|music|canal|topic|vevo)\b/.test(lbl);
       if (!isLabel && lhs.length >= 2 && rhs.length >= 2) {
         artist = lhs;
-        title = rhs;
+        title  = rhs;
       }
+
+      // Heurística de álbum: parte direita do título bruto,
+      // convertendo " - Ao Vivo" / " - Live" em sufixo "[Ao Vivo]"
+      let albumRaw = parts.slice(1).join(' - ');
+      albumRaw = albumRaw.replace(/\s[-–—]\s(ao vivo|live)\b/i, ' [Ao Vivo]');
+      // Remover termos explícitos de "vídeo oficial" para não poluir
+      albumRaw = albumRaw.replace(/\b(v[ií]deo oficial|official video)\b/ig, '').trim();
+      if (albumRaw && albumRaw.length >= 2) album = albumRaw;
+    } else {
+      // Sem padrão com hífen; ainda assim tente marcar "[Ao Vivo]" se presente
+      let base = rawTitle.replace(/\b(v[ií]deo oficial|official video)\b/ig, '').trim();
+      base = base.replace(/\s[-–—]\s(ao vivo|live)\b/i, ' [Ao Vivo]');
+      if (base && base.length >= 2) album = base;
     }
 
-    // Canonicaliza: cover e retorna apenas dados necessários
     return {
       title,
       artist,
+      album: album || null,
       coverUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
     };
   } catch (err) {
@@ -357,6 +371,7 @@ async function enrichSong(song) {
   let spotifyData = {};
   let deezerData = {};
   let referenceData = { title, artist };
+  let ytAlbum = null; // ← album inferido do YouTube (usado como fallback)
 
   if (platform === 'spotify' && id) {
     spotifyData = await fetchFromSpotify(null, null, null, id);
@@ -379,6 +394,7 @@ async function enrichSong(song) {
       title = ytData.title;
       artist = ytData.artist;
       if (!coverUrl) coverUrl = ytData.coverUrl;
+      ytAlbum = ytData.album || null; // ← guarda álbum do YouTube (se houver)
     }
   }
 
@@ -417,7 +433,7 @@ async function enrichSong(song) {
       bpm: null,
       key: null,
       duration: null,
-      album: null,
+      album: ytAlbum || null, // ← ainda devolve o álbum inferido do YouTube, se existir
       coverUrl: coverUrl || null,
       youtubeUrl: finalYoutubeUrl || null,
       spotifyUrl: null,
@@ -431,7 +447,7 @@ async function enrichSong(song) {
     bpm: deezerData.bpm || null,
     key: key || null,
     duration: spotifyData.duration || deezerData.duration || null,
-    album: spotifyData.album || deezerData.album || null,
+    album: spotifyData.album || deezerData.album || ytAlbum || null, // ← usa álbum do YouTube como fallback
     coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
     youtubeUrl: finalYoutubeUrl || null,
     spotifyUrl: finalSpotifyUrl,
