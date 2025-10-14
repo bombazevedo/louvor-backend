@@ -249,6 +249,31 @@ async function fetchFromDeezer(title, artist, deezerUrl = null, platformId = nul
   }
 }
 
+/** 🔎 helpers específicos para YouTube */
+const FEAT_JOINERS_RE = /\b(feat\.?|ft\.?|featuring|participa(?:ç(?:[aã]o)?)?|part\.?|c\/|com|with|convida|duet|dueto|vs\.?|x|×|&)\b/ig;
+const LABEL_WORDS_RE  = /\b(records?|music|canal|vevo|topic)\b/ig;
+
+function stripLabelLike(s='') {
+  return (s || '').replace(/\s*-\s*topic\b/i, '').replace(LABEL_WORDS_RE, '').replace(/\s{2,}/g,' ').trim();
+}
+function extractMainArtist(s='') {
+  // pega tudo à esquerda do primeiro marcador de colaboração
+  const idx = s.search(FEAT_JOINERS_RE);
+  const left = idx >= 0 ? s.slice(0, idx) : s;
+  // também quebra em separadores comuns de lista
+  const first = left.split(/[,&/]| e | x | × /i)[0];
+  return first.trim();
+}
+function hasFeatOrJoiners(s='') {
+  return FEAT_JOINERS_RE.test(s);
+}
+function channelArtistLike(channel='', artist='') {
+  const nC = normalize(stripLabelLike(channel));
+  const nA = normalize(artist);
+  const overlap = tokenOverlapRatio(nC, nA);
+  return overlap; // 0..1
+}
+
 async function fetchFromYouTube(youtubeUrl) {
   try {
     const match = youtubeUrl?.match(/v=([a-zA-Z0-9_\-]+)/);
@@ -262,38 +287,50 @@ async function fetchFromYouTube(youtubeUrl) {
     const rawTitle = item.snippet?.title || '';
     const rawChannel = item.snippet?.channelTitle || '';
 
-    // Defaults (serão substituídos se extrairmos do título)
-    let artist = removePollution(rawChannel);
-    let title  = removePollution(rawTitle);
-    let album  = null; // ← heurística de álbum baseada no título bruto
+    const channelClean = stripLabelLike(rawChannel);
 
-    // Padrão comum: "Artista - Música (...)" → extrai artista do lado esquerdo do hífen
+    // Defaults
+    let artist = removePollution(channelClean);
+    let title  = removePollution(rawTitle);
+    let album  = null;
+
+    // split em hífen
     const parts = rawTitle.split(/\s[-–—]\s/);
     if (parts.length >= 2) {
-      const lhs = removePollution(parts[0]);                   // provável artista
-      const rhs = removePollution(parts.slice(1).join(' - ')); // provável título
-      const lbl = normalize(lhs);
-      const isLabel = /\b(records?|music|canal|topic|vevo)\b/.test(lbl);
-      if (!isLabel && lhs.length >= 2 && rhs.length >= 2) {
-        artist = lhs;
+      const lhsRaw = parts[0];
+      const rhsRaw = parts.slice(1).join(' - ');
+      const lhs = removePollution(lhsRaw);
+      const rhs = removePollution(rhsRaw);
+
+      // decide orientação usando: similaridade com canal + presença de marcadores de artista
+      const lhsLike = channelArtistLike(channelClean, lhs);
+      const rhsLike = channelArtistLike(channelClean, rhs);
+      const rhsLooksArtist = hasFeatOrJoiners(rhsRaw);
+      const lhsLooksArtist = hasFeatOrJoiners(lhsRaw);
+
+      // Regra: se RHS parece lista de artistas OU é mais parecido com o canal, título=lhs e artista=rhs
+      // senão, artista=lhs e título=rhs (padrão “Artista – Música”)
+      if ((rhsLooksArtist && !lhsLooksArtist) || (rhsLike > lhsLike + 0.05)) {
+        artist = extractMainArtist(rhs);
+        title  = lhs;
+      } else {
+        artist = extractMainArtist(lhs);
         title  = rhs;
       }
 
-      // Heurística de álbum: parte direita do título bruto,
-      // convertendo " - Ao Vivo" / " - Live" em sufixo "[Ao Vivo]"
-      let albumRaw = parts.slice(1).join(' - ');
+      // Heurística simples de “álbum” textual
+      let albumRaw = rhsRaw;
       albumRaw = albumRaw.replace(/\s[-–—]\s(ao vivo|live)\b/i, ' [Ao Vivo]');
-      // Remover termos explícitos de "vídeo oficial" para não poluir
       albumRaw = albumRaw.replace(/\b(v[ií]deo oficial|official video)\b/ig, '').trim();
       if (albumRaw && albumRaw.length >= 2) album = albumRaw;
     } else {
-      // Sem padrão com hífen; ainda assim tente marcar "[Ao Vivo]" se presente
+      // título não tem hífen; tenta “[Ao Vivo]”
       let base = rawTitle.replace(/\b(v[ií]deo oficial|official video)\b/ig, '').trim();
       base = base.replace(/\s[-–—]\s(ao vivo|live)\b/i, ' [Ao Vivo]');
       if (base && base.length >= 2) album = base;
     }
 
-    // 🔧 Remover parênteses vazios e espaços duplicados do título após limpeza
+    // limpeza final de título
     title = (title || '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
 
     return {
@@ -333,9 +370,9 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
       if (!videoId) continue;
 
       const nYtTitle = normalize(removePollution(ytTitle));
-      const nYtChannel = normalize(removePollution(ytChannel));
+      const nYtChannel = normalize(removePollution(stripLabelLike(ytChannel)));
 
-      // filtro básico por título+artista (tolerante a caixa/acentos/pontuação)
+      // filtro básico por título+artista (case-insensitive, sem acentos)
       const titleOk  = nYtTitle.includes(nRefTitle);
       const artistOk = nYtTitle.includes(nRefArtist) || nYtChannel.includes(nRefArtist);
       if (!titleOk || !artistOk) continue;
@@ -362,8 +399,8 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
           const isLiveYT  = rawLower.includes('ao vivo') || rawLower.includes('live');
           const isLive    = isLiveRef || isLiveYT;
 
-          const baseTolerance = isLive ? 6 : 3;       // segundos
-          const pctTolerance  = isLive ? 0.08 : 0.05; // 8% ao vivo, 5% estúdio
+          const baseTolerance = isLive ? 6 : 3;
+          const pctTolerance  = isLive ? 0.08 : 0.05;
           const secTolerance  = Math.max(baseTolerance, Math.round(referenceDurationSec * pctTolerance));
           const delta = Math.abs(dur - referenceDurationSec);
 
@@ -372,22 +409,25 @@ async function searchYouTubeByTitleArtistStrict(title, artist, referenceDuration
       }
       if (!withinTolerance) continue;
 
-      // RANKING: prioriza canal do artista / Topic e maior similaridade de título;
-      // penaliza cover/karaoke/lyrics/tutorial/etc.
+      // RANKING: prioriza MUITO o canal do artista; penaliza labels/Topic se houver alternativa
       const titleScore = tokenOverlapRatio(ytTitle, refTitleClean);
-      const channelExact    = normalize(ytChannel) === nRefArtist ? 1 : 0;
-      const channelContains = normalize(ytChannel).includes(nRefArtist) ? 1 : 0;
-      const topicBoost      = /\b- topic\b/i.test(ytChannel) ? 1 : 0;
 
-      const penaltyTitle  = /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio|instrumental|remix)\b/i.test(ytTitle) ? 0.25 : 0;
-      const penaltyChannel= /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio)\b/i.test(ytChannel) ? 0.15 : 0;
+      const channelNorm = normalize(stripLabelLike(ytChannel));
+      const channelExact    = channelNorm === nRefArtist ? 1 : 0;
+      const channelContains = channelNorm.includes(nRefArtist) ? 1 : 0;
+
+      const isLabelLike = LABEL_WORDS_RE.test(ytChannel);
+      LABEL_WORDS_RE.lastIndex = 0; // reset regex state
+
+      const penaltyTitle  = /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio|instrumental|remix)\b/i.test(ytTitle) ? 0.35 : 0;
+      const penaltyChannel= /\b(cover|karaok[eê]|lyrics|letra|tutorial|playback|ensaio)\b/i.test(ytChannel) ? 0.20 : 0;
+      const labelPenalty  = isLabelLike ? 0.10 : 0; // leve (mantém opção “Topic” quando necessário)
 
       const score =
-        (titleScore * 0.75) +
-        (channelExact * 0.20) +
-        (channelContains * 0.10) +
-        (topicBoost * 0.05) -
-        (penaltyTitle + penaltyChannel);
+        (titleScore * 0.55) +
+        (channelExact * 0.35) +
+        (channelContains * 0.20) -
+        (penaltyTitle + penaltyChannel + labelPenalty);
 
       candidates.push({ videoId, score });
     }
@@ -422,19 +462,18 @@ function isStrictMatch(base, candidate) {
     if (baseLive !== candLive || baseAcoust !== candAcoust) return false;
   }
 
-  // tolerante a pontuação/parênteses/colchetes/caixa/acentos; também remove sufixos do tipo " - ..."
   const stripParens = (t) => (t || '').replace(/\(.*?\)|\[.*?]|{.*?}/g, '').trim();
   const stripPerf = (t) => (t || '')
     .replace(/\b(ao vivo|live|ac[uú]stic[ao]|acoustic)\b/ig, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  const prep = (t) => normalize(normalizeTitle(stripPerf(reduceTitle(stripParens(t)))));
+  const prep = (t) => normalizeTitle(stripPerf(reduceTitle(stripParens(t))));
 
   const baseTitle = prep(rawBase);
   const candTitle = prep(rawCand);
-  const baseArtist = normalize(normalizeArtist(base.artist));
-  const candArtist = normalize(normalizeArtist(candidate.artist));
+  const baseArtist = normalizeArtist(base.artist);
+  const candArtist = normalizeArtist(candidate.artist);
 
   return baseTitle === candTitle && baseArtist === candArtist;
 }
@@ -477,22 +516,21 @@ async function enrichSong(song) {
       artist = deezerData.artist;
     }
   } else if (platform && platform.toLowerCase() === 'youtube' && youtubeUrl) {
-  // Canonizar youtubeUrl (remover parâmetros extras e manter somente watch?v=ID)
-  const idMatch = youtubeUrl.match(/v=([a-zA-Z0-9_\-]+)/);
-  if (idMatch) {
-    youtubeUrl = `https://www.youtube.com/watch?v=${idMatch[1]}`;
-  }
+    // Canonizar youtubeUrl (remover parâmetros extras e manter somente watch?v=ID)
+    const idMatch = youtubeUrl.match(/v=([a-zA-Z0-9_\-]+)/);
+    if (idMatch) {
+      youtubeUrl = `https://www.youtube.com/watch?v=${idMatch[1]}`;
+    }
 
-  const ytData = await fetchFromYouTube(youtubeUrl);
-  if (ytData.title && ytData.artist) {
-    referenceData = { title: ytData.title, artist: ytData.artist };
-    title = ytData.title;
-    artist = ytData.artist;
-    if (!coverUrl) coverUrl = ytData.coverUrl;
-    ytAlbum = ytData.album || null; // ← guarda álbum do YouTube (se houver)
+    const ytData = await fetchFromYouTube(youtubeUrl);
+    if (ytData.title && ytData.artist) {
+      referenceData = { title: ytData.title, artist: ytData.artist };
+      title = ytData.title;
+      artist = ytData.artist;
+      if (!coverUrl) coverUrl = ytData.coverUrl;
+      ytAlbum = ytData.album || null; // ← guarda álbum do YouTube (se houver)
+    }
   }
-}
-
 
   spotifyData = await fetchFromSpotify(title, artist, spotifyUrl, spotifyTrackId) || spotifyData;
   deezerData = await fetchFromDeezer(title, artist, deezerUrl, deezerTrackId) || deezerData;
@@ -533,7 +571,7 @@ async function enrichSong(song) {
       bpm: null,
       key: null,
       duration: null,
-      album: ytAlbum || null, // ← ainda devolve o álbum inferido do YouTube, se existir
+      album: ytAlbum || null,
       coverUrl: coverUrl || null,
       youtubeUrl: finalYoutubeUrl || null,
       spotifyUrl: null,
@@ -547,7 +585,7 @@ async function enrichSong(song) {
     bpm: deezerData.bpm || null,
     key: key || null,
     duration: spotifyData.duration || deezerData.duration || null,
-    album: spotifyData.album || deezerData.album || ytAlbum || null, // ← usa álbum do YouTube como fallback
+    album: spotifyData.album || deezerData.album || ytAlbum || null,
     coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
     youtubeUrl: finalYoutubeUrl || null,
     spotifyUrl: finalSpotifyUrl,
