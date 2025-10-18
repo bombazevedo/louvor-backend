@@ -88,6 +88,26 @@ router.delete("/:id", authenticate, async (req, res) => {
       return res.status(404).json({ message: "Usuário não encontrado" });
     }
 
+// 🔒 Proteção: NÃO permitir excluir o fundador da organização (ou fundador global como fallback)
+try {
+  // Detecta dinamicamente uma chave de organização já existente no seu modelo (hoje ou no futuro)
+  const orgKey = ['organizationId', 'organization', 'orgId', 'groupId', 'communityId', 'teamId']
+    .find(k => user?.[k] !== undefined && user?.[k] !== null);
+
+  // Se houver orgKey, busca o fundador da MESMA organização; senão, busca o fundador global
+  const founderQuery = orgKey ? { [orgKey]: user[orgKey] } : {};
+  const founder = await User.findOne(founderQuery)
+    .sort({ createdAt: 1, _id: 1 }) // createdAt prioritário; _id como fallback determinístico
+    .select('_id createdAt');
+
+  if (founder && String(founder._id) === String(user._id)) {
+    return res.status(403).json({ message: 'Não é possível excluir o coordenador fundador desta organização.' });
+  }
+} catch (e) {
+  // Se algo der errado na checagem do fundador, não bloqueia outras exclusões por acidente.
+  console.warn('[users:delete] Falha ao checar fundador:', e?.message);
+}
+
     await User.findByIdAndRemove(req.params.id);
     res.json({ message: "Usuário removido" });
   } catch (err) {
