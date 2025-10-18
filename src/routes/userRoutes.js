@@ -33,7 +33,7 @@ router.get("/", authenticate, async (req, res) => {
   try {
     const users = req.user.role === 'coordenador'
       ? await User.find().select('-password')
-      : await User.find().select('name _id');
+      : await User.find().select('name _id photoUrl cloudinaryPublicId');
 
     res.status(200).json(users);
   } catch (error) {
