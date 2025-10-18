@@ -51,7 +51,7 @@ router.patch("/:id", authenticate, updateUserRole);
 // ✅ Atualização completa de perfil por ID (restrita a admin ou dono)
 router.put("/:id", authenticate, async (req, res) => {
   try {
-    if (req.user.id !== req.params.id && req.user.role !== "admin") {
+    if (req.user.id !== req.params.id && req.user.role !== "coordenador") {
       return res.status(403).json({ message: "Acesso negado" });
     }
 
