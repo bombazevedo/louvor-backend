@@ -2,7 +2,7 @@ const { v2: cloudinary } = require("cloudinary");
 const fs = require('fs');
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  cloud_name: 'dy3xtqqkk', // ← força o mesmo cloud visto nas URLs/logs
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
