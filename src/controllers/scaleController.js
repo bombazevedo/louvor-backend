@@ -494,26 +494,67 @@ exports.exportScalesPDF = async (req, res) => {
 
     // 4) Gerar PDF via Puppeteer
     const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-first-run',
+    '--no-zygote',
+    '--single-process'
+  ],
+  headless: 'new'
+});
     try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+  const page = await browser.newPage();
 
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: { top: '18mm', right: '12mm', bottom: '18mm', left: '12mm' }
-      });
+  // endurece timeouts e evita travas por recursos externos
+  await page.setBypassCSP(true);
+  await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  page.setDefaultNavigationTimeout(120000);
+  page.setDefaultTimeout(120000);
 
-      const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
-      res.setHeader('Content-Length', pdfBuffer.length);
-      return res.end(pdfBuffer);
-    } finally {
-      await browser.close();
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const url = req.url();
+    if (
+      url.includes('fonts.googleapis.com') ||
+      url.includes('fonts.gstatic.com') ||
+      url.includes('googletagmanager') ||
+      url.includes('google-analytics') ||
+      url.startsWith('chrome-extension://')
+    ) {
+      return req.abort();
     }
+    if ((req.resourceType() === 'image') && !url.startsWith('data:')) {
+      return req.abort();
+    }
+    req.continue();
+  });
+
+  await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 120000 });
+  if (page.waitForNetworkIdle) {
+    await page.waitForNetworkIdle({ timeout: 8000 });
+  } else {
+    await page.waitForTimeout(1000);
+  }
+  await page.emulateMediaType('screen');
+
+  const pdfBuffer = await page.pdf({
+    format: 'A4',
+    printBackground: true,
+    margin: { top: '18mm', right: '12mm', bottom: '18mm', left: '12mm' }
+  });
+
+  const fn = `escala_${moment(start).format('YYYY-MM-DD')}_${moment(end).format('YYYY-MM-DD')}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${fn}"`);
+  res.setHeader('Content-Length', pdfBuffer.length);
+  return res.end(pdfBuffer);
+} finally {
+  await browser.close();
+}
+
   } catch (err) {
     console.error('[exportScalesPDF] Erro:', err?.stack || err?.message || err);
     return res.status(500).json({ message: 'Não foi possível gerar o PDF de escalas.' });
