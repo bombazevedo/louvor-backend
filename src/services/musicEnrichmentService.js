@@ -542,6 +542,19 @@ async function enrichSong(song) {
     deezerData = await fetchFromDeezer(removePollution(rawTitle), removePollution(rawArtist));
   }
 
+  // 🔧 Reinsere busca cruzada para YouTube
+if (platform !== 'youtube' && (!youtubeUrl || youtubeUrl === '')) {
+  try {
+    const ytCandidate = await fetchFromYouTubeBySearch(title, artist);
+    if (ytCandidate?.youtubeUrl) {
+      youtubeUrl = ytCandidate.youtubeUrl;
+      console.log('[Enrichment] ✅ YouTube link complementar encontrado:', youtubeUrl);
+    }
+  } catch (err) {
+    console.warn('[Enrichment] ⚠️ Falha ao buscar YouTube complementar:', err?.message);
+  }
+}
+
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
