@@ -11,9 +11,11 @@ function normalizeTitle(title = '') {
     .replace(/[-–_|•~•♪♫]+/g, ' ')                   // Remove pontuações repetitivas
     .replace(/#[\w-]+/g, '')                         // Remove hashtags
     .replace(/[0-9]{4,}/g, '')                       // Remove anos e códigos longos (ex: 2023)
-    .replace(/[^a-zA-Z0-9À-ÿ\s]/g, '')               // Remove caracteres especiais restantes
-    .replace(/\s+/g, ' ')                            // Remove espaços extras
-    .trim();
+    .replace(/[?!.,:;]+/g, '')                       // Remove pontuação residual (? ! . , :)
+.replace(/[^a-zA-Z0-9À-ÿ\s]/g, '')               // Remove caracteres especiais restantes
+.replace(/\s+/g, ' ')                            // Remove espaços extras
+.trim()
+.toLowerCase();                                  // Normaliza capitalização
 }
 
 function normalizeArtist(artist = '') {
