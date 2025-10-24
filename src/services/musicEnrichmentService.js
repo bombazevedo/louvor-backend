@@ -559,18 +559,34 @@ if (platform !== 'youtube' && (!youtubeUrl || youtubeUrl === '')) {
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
   // Buscar YouTube quando ainda não houver youtubeUrl e houver referência
-  // 🔧 Só confiar em youtubeUrl informado quando a plataforma for YouTube
-  let finalYoutubeUrl = null;
-  if (platform && platform.toLowerCase() === 'youtube' && typeof youtubeUrl === 'string' && youtubeUrl.trim()) {
-    finalYoutubeUrl = youtubeUrl.trim();
-  }
-  if (!finalYoutubeUrl && (title || artist)) {
-    const refDuration = spotifyData?.duration || deezerData?.duration || null;
+// 🔧 Só confiar em youtubeUrl informado quando a plataforma for YouTube
+let finalYoutubeUrl = null;
+
+// Se a plataforma for YouTube, usa o link informado
+if (platform && platform.toLowerCase() === 'youtube' && typeof youtubeUrl === 'string' && youtubeUrl.trim()) {
+  finalYoutubeUrl = youtubeUrl.trim();
+}
+
+// Caso contrário, tenta complementar o YouTube real
+if (!finalYoutubeUrl && platform !== 'youtube' && (title || artist)) {
+  const refDuration = spotifyData?.duration || deezerData?.duration || null;
+
+  // 1️⃣ Tenta primeiro o YouTube direto por busca (garante link de vídeo real)
+  const ytCandidate = await fetchFromYouTubeBySearch(title || rawTitle, artist || rawArtist);
+  if (ytCandidate?.youtubeUrl) {
+    finalYoutubeUrl = ytCandidate.youtubeUrl;
+  } else {
+    // 2️⃣ Se não encontrar, faz fallback para busca restrita com validação de duração
     const ytFound = await searchYouTubeByTitleArtistStrict(title || rawTitle, artist || rawArtist, refDuration);
-    if (ytFound) {
-      finalYoutubeUrl = ytFound;
-    }
+    if (ytFound) finalYoutubeUrl = ytFound;
   }
+}
+
+// Garante que o Spotify NUNCA substitua o campo youtubeUrl
+if (finalYoutubeUrl && finalYoutubeUrl.includes('open.spotify.com')) {
+  finalYoutubeUrl = null;
+}
+
 
   // 🔒 Garantir que só retorne dados cruzados se houver match estrito
   if (
