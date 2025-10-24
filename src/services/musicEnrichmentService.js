@@ -479,6 +479,23 @@ function isStrictMatch(base, candidate) {
 }
 
 
+/** 🔎 busca complementar YouTube simples (rápida) */
+async function fetchFromYouTubeBySearch(title, artist) {
+  try {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey || !title || !artist) return {};
+    const q = encodeURIComponent(`${title} ${artist}`);
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=${q}&key=${apiKey}`;
+    const res = await axios.get(url);
+    const item = res.data.items?.[0];
+    if (!item) return {};
+    return { youtubeUrl: `https://www.youtube.com/watch?v=${item.id.videoId}` };
+  } catch (err) {
+    console.error('[Enrichment] ❌ fetchFromYouTubeBySearch erro:', err?.response?.data || err.message);
+    return {};
+  }
+}
+
 async function enrichSong(song) {
   let {
     title,
@@ -542,72 +559,61 @@ async function enrichSong(song) {
     deezerData = await fetchFromDeezer(removePollution(rawTitle), removePollution(rawArtist));
   }
 
-  // 🔧 Reinsere busca cruzada para YouTube
-if (platform !== 'youtube' && (!youtubeUrl || youtubeUrl === '')) {
-  try {
-    const ytCandidate = await fetchFromYouTubeBySearch(title, artist);
-    if (ytCandidate?.youtubeUrl) {
-      youtubeUrl = ytCandidate.youtubeUrl;
-      console.log('[Enrichment] ✅ YouTube link complementar encontrado:', youtubeUrl);
+  // [PATCH A] Busca YouTube complementar (evita herdar Spotify em youtubeUrl)
+  if (platform !== 'youtube' && (!youtubeUrl || youtubeUrl === '')) {
+    try {
+      const ytCandidate = await fetchFromYouTubeBySearch(title, artist);
+      if (ytCandidate?.youtubeUrl) {
+        youtubeUrl = ytCandidate.youtubeUrl;
+        console.log('[Enrichment] ✅ YouTube link complementar encontrado:', youtubeUrl);
+      }
+    } catch (err) {
+      console.warn('[Enrichment] ⚠️ Falha ao buscar YouTube complementar:', err?.message);
     }
-  } catch (err) {
-    console.warn('[Enrichment] ⚠️ Falha ao buscar YouTube complementar:', err?.message);
   }
-}
 
   const finalSpotifyUrl = spotifyData.spotifyUrl || spotifyUrl || null;
   const key = finalSpotifyUrl ? await fetchKeyFromSpotify(finalSpotifyUrl) : null;
 
   // Buscar YouTube quando ainda não houver youtubeUrl e houver referência
-// 🔧 Só confiar em youtubeUrl informado quando a plataforma for YouTube
-let finalYoutubeUrl = null;
+  // 🔧 Só confiar em youtubeUrl informado quando for realmente YouTube OU já encontrado na busca
+  let finalYoutubeUrl = null;
 
-// Se a plataforma for YouTube, usa o link informado
-if (platform && platform.toLowerCase() === 'youtube' && typeof youtubeUrl === 'string' && youtubeUrl.trim()) {
-  finalYoutubeUrl = youtubeUrl.trim();
-}
-
-// Caso contrário, tenta complementar o YouTube real
-if (!finalYoutubeUrl && platform !== 'youtube' && (title || artist)) {
-  const refDuration = spotifyData?.duration || deezerData?.duration || null;
-
-  // 1️⃣ Tenta primeiro o YouTube direto por busca (garante link de vídeo real)
-  const ytCandidate = await fetchFromYouTubeBySearch(title || rawTitle, artist || rawArtist);
-  if (ytCandidate?.youtubeUrl) {
-    finalYoutubeUrl = ytCandidate.youtubeUrl;
-  } else {
-    // 2️⃣ Se não encontrar, faz fallback para busca restrita com validação de duração
-    const ytFound = await searchYouTubeByTitleArtistStrict(title || rawTitle, artist || rawArtist, refDuration);
-    if (ytFound) finalYoutubeUrl = ytFound;
+  // usa o youtubeUrl já definido se ele já for um link válido de YouTube (independente da plataforma de origem)
+  if (typeof youtubeUrl === 'string' && youtubeUrl.trim() && /(youtube\.com\/watch\?v=|youtu\.be\/)/i.test(youtubeUrl)) {
+    finalYoutubeUrl = youtubeUrl.trim();
   }
-}
 
-// Garante que o Spotify NUNCA substitua o campo youtubeUrl
-if (finalYoutubeUrl && finalYoutubeUrl.includes('open.spotify.com')) {
-  finalYoutubeUrl = null;
-}
+  // Se a plataforma for YouTube, usa o link informado (sanitizado acima)
+  if (!finalYoutubeUrl && platform && platform.toLowerCase() === 'youtube' && typeof youtubeUrl === 'string' && youtubeUrl.trim()) {
+    finalYoutubeUrl = youtubeUrl.trim();
+  }
 
+  // Caso ainda não tenha, tenta a busca restrita com validação de duração
+  if (!finalYoutubeUrl && (title || artist)) {
+    const refDuration = spotifyData?.duration || deezerData?.duration || null;
+    const ytFound = await searchYouTubeByTitleArtistStrict(title || rawTitle, artist || rawArtist, refDuration);
+    if (ytFound) {
+      finalYoutubeUrl = ytFound;
+    }
+  }
 
-  // 🔒 Garantir que só retorne dados cruzados se houver match estrito
-  if (
-    (spotifyData?.title && spotifyData?.artist && !isStrictMatch(referenceData, spotifyData)) ||
-    (deezerData?.title && deezerData?.artist && !isStrictMatch(referenceData, deezerData))
-  ) {
-    console.log('[Enrichment] ⚠️ Nenhum match estrito encontrado. Não retornando dados cruzados.');
-    return {
-      title: referenceData.title,
-      artist: referenceData.artist,
-      bpm: null,
-      key: null,
-      duration: null,
-      album: ytAlbum || null,
-      coverUrl: coverUrl || null,
-      youtubeUrl: finalYoutubeUrl || null,
-      spotifyUrl: null,
-      deezerUrl: null,
-      spotifyTrackId: null,
-      deezerTrackId: null
-    };
+  // Nunca permitir que o campo de YouTube herde um link de Spotify
+  if (finalYoutubeUrl && finalYoutubeUrl.includes('open.spotify.com')) {
+    finalYoutubeUrl = null;
+  }
+
+  // 🔒 Validação estrita por plataforma (sem early return global)
+  const spotifyStrictOk = !(spotifyData?.title && spotifyData?.artist) || isStrictMatch(referenceData, spotifyData);
+  const deezerStrictOk  = !(deezerData?.title && deezerData?.artist) || isStrictMatch(referenceData, deezerData);
+
+  if (!spotifyStrictOk) {
+    console.log('[Enrichment] ⚠️ Spotify divergente — descartando somente Spotify.');
+    spotifyData = {};
+  }
+  if (!deezerStrictOk) {
+    console.log('[Enrichment] ⚠️ Deezer divergente — descartando somente Deezer.');
+    deezerData = {};
   }
 
   return {
@@ -616,7 +622,7 @@ if (finalYoutubeUrl && finalYoutubeUrl.includes('open.spotify.com')) {
     duration: spotifyData.duration || deezerData.duration || null,
     album: spotifyData.album || deezerData.album || ytAlbum || null,
     coverUrl: coverUrl || spotifyData.coverUrl || deezerData.coverUrl || null,
-    youtubeUrl: finalYoutubeUrl || null,
+    youtubeUrl: finalYoutubeUrl || null,                    // ← YouTube só quando real
     spotifyUrl: finalSpotifyUrl,
     spotifyTrackId: spotifyData.spotifyTrackId || spotifyTrackId || null,
     deezerUrl: deezerData.deezerUrl || deezerUrl || null,
