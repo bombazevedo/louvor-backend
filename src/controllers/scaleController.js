@@ -457,34 +457,55 @@ exports.exportScalesPDF = async (req, res) => {
     const source = (req.body && (req.body.start || req.body.period || req.body.ref)) ? req.body : req.query;
     const { start, end, label } = resolveDateRange(source);
 
-    // 1) Buscar eventos no período com escala e membros populados
-    const events = await Event.find({
-      date: { $gte: start, $lte: end }
-    })
-      .sort({ date: 1 })
-      .select('title date location scale')
-      .populate({
-        path: 'scale',
-        populate: [
-          { path: 'members.user', select: 'name email photoUrl' },
-          { path: 'members.function', select: 'name' }
-        ]
-      })
-      .lean();
+    // 1) Buscar eventos do período (projeção mínima; sem populate pesado aqui)
+const events = await Event.find(
+  { date: { $gte: start, $lte: end } },
+  { title: 1, date: 1, location: 1, scale: 1 } // projeção mínima
+)
+  .sort({ date: 1 })
+  .lean();
 
-    // 2) Reforço: se populate não trouxe a escala, tentar pela Scale (legado)
-    const finalEvents = [];
-    for (const ev of events) {
-      let scaleData = ev.scale;
-      if (!scaleData || !Array.isArray(scaleData.members)) {
-        const foundScale = await Scale.findOne({ eventId: ev._id })
-          .populate('members.user', 'name email photoUrl')
-          .populate('members.function', 'name')
-          .lean();
-        if (foundScale) scaleData = foundScale;
-      }
-      finalEvents.push({ ...ev, scale: scaleData || { members: [] } });
-    }
+// Mapear ids de eventos e ids de escalas já referenciadas
+const eventIds = events.map(e => String(e._id));
+const scaleIds = events
+  .map(e => e.scale)
+  .filter(Boolean)
+  .map(s => String(s));
+
+// 2) Buscar TODAS as escalas relevantes em uma passada
+//    - por referência direta (campo eventId)
+//    - e por _id, caso o Event já aponte para Scale
+const scales = await Scale.find(
+  {
+    $or: [
+      { eventId: { $in: eventIds } },
+      { _id: { $in: scaleIds } }
+    ]
+  },
+  { eventId: 1, members: 1 } // projeção mínima
+)
+  .populate('members.user', 'name email photoUrl')
+  .populate('members.function', 'name')
+  .lean();
+
+// 3) Indexar escalas por eventId e por _id (cobre os dois modelos usados no app)
+const scaleByEventId = new Map();
+const scaleById      = new Map();
+for (const s of scales) {
+  if (s?.eventId) scaleByEventId.set(String(s.eventId), s);
+  scaleById.set(String(s._id), s);
+}
+
+// 4) Montar lista final de eventos com suas escalas, sem N+1
+const finalEvents = events.map(ev => {
+  // prioridade: se Event.scale aponta direto para uma Scale
+  const byRef = ev.scale ? scaleById.get(String(ev.scale)) : null;
+  // fallback: procurar pela chave eventId (modelo legado)
+  const byEvent = scaleByEventId.get(String(ev._id));
+  const scaleData = byRef || byEvent || { members: [] };
+  return { ...ev, scale: scaleData };
+});
+
 
     // 🔧 NOVO: ícones vindos do frontend (data URI por chave normalizada)
     const icons = (req.body && req.body.icons) ? req.body.icons : {};
