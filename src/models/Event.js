@@ -33,10 +33,10 @@ const eventSchema = new mongoose.Schema({
     thumbnail: String
   }],
   attachments: [{
-    name: String,
-    url: String
-  }],
-
+  name: String,
+  url: String,
+  public_id: String   // ⬅️ ✅ persiste o id do Cloudinary
+}],
   // 📝 Anotações do Diretor Musical (DM)
   dnNotes: { type: String, default: '' },
 
