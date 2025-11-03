@@ -124,12 +124,13 @@ const getEventById = async (req, res) => {
 const createEvent = async (req, res) => {
   try {
     const {
-      title, description, date, location, type,
-      musicLinks,
-      primaryColor, colorPalette,
-      paletteMode, showFullPalette,
-      attachments // ⬅️ ✅ (adição cirúrgica) incluir anexos vindos do front
-    } = req.body;
+  title, description, date, location, type,
+  musicLinks,
+  colorPalette, primaryColor,
+  paletteMode, showFullPalette,
+  attachments, // ⬅️ ✅ (adição cirúrgica) incluir anexos do front
+  dnNotes      // ⬅️ 📝 novo: Anotações do DM
+} = req.body;
 
     const normalizedMusicLinks = [];
 
@@ -199,6 +200,7 @@ const createEvent = async (req, res) => {
       date,
       location,
       type,
+  dnNotes: (typeof dnNotes === 'string') ? dnNotes : '',
       musicLinks: normalizedMusicLinks,
       primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
       colorPalette: Array.isArray(colorPalette) ? colorPalette : [],
@@ -239,12 +241,14 @@ const createEvent = async (req, res) => {
 const updateEvent = async (req, res) => {
   try {
     const {
-      title, description, date, location, type,
-      musicLinks,
-      colorPalette, primaryColor,
-      paletteMode, showFullPalette,
-      attachments // ⬅️ ✅ (adição cirúrgica) incluir anexos do front
-    } = req.body;
+  title, description, date, location, type,
+  musicLinks,
+  colorPalette, primaryColor,
+  paletteMode, showFullPalette,
+  attachments, // ⬅️ ✅ (adição cirúrgica) incluir anexos do front
+  dnNotes      // ⬅️ 📝 novo: Anotações do DM
+} = req.body;
+
 
     const normalizedMusicLinks = [];
 
@@ -297,6 +301,8 @@ const updateEvent = async (req, res) => {
       musicLinks: normalizedMusicLinks,
       colorPalette: Array.isArray(colorPalette) ? colorPalette : []
     };
+
+if (typeof dnNotes === 'string') updateData.dnNotes = dnNotes;
 
     if (typeof primaryColor === 'string') {
       updateData.primaryColor = primaryColor;
