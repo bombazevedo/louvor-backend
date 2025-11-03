@@ -36,6 +36,10 @@ const eventSchema = new mongoose.Schema({
     name: String,
     url: String
   }],
+
+  // 📝 Anotações do Diretor Musical (DM)
+  dnNotes: { type: String, default: '' },
+
   // ✅ correção item 1: adicionar a cor-base escolhida pelo coordenador
   primaryColor: { type: String, default: null },
   colorPalette: {
@@ -53,6 +57,8 @@ const eventSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+// 📝 Anotações do Diretor Musical
+dnNotes: { type: String, default: '' },
 
   // ⬇️⬇️⬇️ ADIÇÃO CIRÚRGICA: overrides por EVENTO (tonalidade, BPM e link manual)
   songOverrides: [{
