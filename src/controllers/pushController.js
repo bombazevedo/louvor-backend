@@ -1,5 +1,9 @@
-const DeviceToken = require('../models/DeviceToken');
+//                                    const DeviceToken = require('../models/DeviceToken'); 
 const { sendToTokens } = require('../services/pushService');
+const pushService = require('../services/pushService'); // (exemplo já existente)
+
+// ⬅️ ADIÇÃO CIRÚRGICA: import efetivo do model usado no envio/remoção
+const DeviceToken = require('../models/DeviceToken');
 
 // POST /api/push/register  { token, platform }
 exports.registerToken = async (req, res, next) => {
@@ -34,6 +38,22 @@ exports.registerToken = async (req, res, next) => {
     if (err?.code === 11000) {
       return res.json({ ok: true, duplicated: true });
     }
+    next(err);
+  }
+};
+
+// ⬅️ ADIÇÃO CIRÚRGICA: POST /api/push/unregister  { token }
+exports.unregisterToken = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?._id || req.body.userId;
+    const { token } = req.body;
+
+    if (!userId) return res.status(400).json({ message: 'userId ausente' });
+    if (!token)   return res.status(400).json({ message: 'token ausente' });
+
+    const result = await DeviceToken.deleteOne({ user: userId, token });
+    return res.json({ removed: result?.deletedCount || 0 });
+  } catch (err) {
     next(err);
   }
 };
