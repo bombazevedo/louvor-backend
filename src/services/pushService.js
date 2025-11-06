@@ -1,7 +1,8 @@
-//                              const admin = require('firebase-admin');
+const admin = require('firebase-admin');
 let initialized = false;
 
 // 🔗 (NOVO) Models usados para gating e badge
+const https = require('https'); // 🔹 adição mínima para enviar via Expo (sem instalar libs)
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const DeviceToken = require('../models/DeviceToken');
@@ -23,44 +24,126 @@ function ensureInit() {
 }
 
 async function sendToTokens(tokens, { title, body, data = {} }) {
-  if (!tokens || tokens.length === 0) return { successCount: 0, failureCount: 0 };
-  ensureInit();
+  if (!tokens || tokens.length === 0) return { successCount: 0, failureCount: 0, responses: [] };
 
-  // message “multicast”
-  const message = {
-    tokens,
-    notification: { title, body },
-    data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])), // data precisa ser string
-    android: {
-      notification: { channelId: 'default', priority: 'high', sound: 'default' },
-    },
-    apns: {
-      payload: { aps: { sound: 'default' } },
-    },
-  };
+  // 🔎 separa tokens Expo vs FCM pelo padrão do Expo
+  const expoRe = /^ExponentPushToken\[[A-Za-z0-9_-]+\]$/;
+  const expoTokens = tokens.filter(t => expoRe.test(String(t || '')));
+  const fcmTokens  = tokens.filter(t => !expoRe.test(String(t || '')));
 
-  const res = await admin.messaging().sendEachForMulticast(message);
+  let totalSuccess = 0;
+  let totalFail    = 0;
+  const allResponses = [];
 
-  // 🧹 (NOVO) Limpa tokens inválidos/not-registered para manter a base saudável
-  try {
-    const invalidCodes = new Set([
-      'messaging/invalid-argument',
-      'messaging/invalid-registration-token',
-      'messaging/registration-token-not-registered'
-    ]);
-    await Promise.all(
-      (res.responses || []).map(async (r, i) => {
-        if (!r.success && r.error && invalidCodes.has(r.error.code)) {
-          const bad = tokens[i];
-          if (bad) {
-            await DeviceToken.deleteOne({ token: bad }).catch(() => {});
+  // ========== A) Envio via FCM (Firebase Admin) para fcmTokens ==========
+  if (fcmTokens.length) {
+    ensureInit();
+    const message = {
+      tokens: fcmTokens,
+      notification: { title, body },
+      data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])), // data precisa ser string
+      android: { notification: { channelId: 'default', priority: 'high', sound: 'default' } },
+      apns: { payload: { aps: { sound: 'default' } } },
+    };
+
+    const res = await admin.messaging().sendEachForMulticast(message);
+
+    // contabilidade
+    totalSuccess += res.successCount || 0;
+    totalFail    += res.failureCount || 0;
+    if (Array.isArray(res.responses)) allResponses.push(...res.responses);
+
+    // 🧹 limpa FCM tokens inválidos
+    try {
+      const invalidCodes = new Set([
+        'messaging/invalid-argument',
+        'messaging/invalid-registration-token',
+        'messaging/registration-token-not-registered'
+      ]);
+      await Promise.all(
+        (res.responses || []).map(async (r, i) => {
+          if (!r.success && r.error && invalidCodes.has(r.error.code)) {
+            const bad = fcmTokens[i];
+            if (bad) {
+              await DeviceToken.deleteOne({ token: bad }).catch(() => {});
+            }
           }
-        }
-      })
-    );
-  } catch (_) {}
+        })
+      );
+    } catch (_) {}
+  }
 
-  return res;
+  // ========== B) Envio via Expo para expoTokens ==========
+  if (expoTokens.length) {
+    const expoPayload = expoTokens.map((to) => ({
+      to,
+      title,
+      body,
+      sound: 'default',
+      data,
+    }));
+
+    const postExpo = () =>
+      new Promise((resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: 'exp.host',
+            path: '/--/api/v2/push/send',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+          },
+          (res) => {
+            let raw = '';
+            res.on('data', (c) => (raw += c));
+            res.on('end', () => {
+              try {
+                const json = JSON.parse(raw || '{}');
+                resolve(json);
+              } catch (e) {
+                resolve({ data: [] });
+              }
+            });
+          }
+        );
+        req.on('error', reject);
+        req.write(JSON.stringify(expoPayload));
+        req.end();
+      });
+
+    try {
+      const expoRes = await postExpo();
+      const items = Array.isArray(expoRes?.data) ? expoRes.data : [];
+
+      items.forEach((it, idx) => {
+        const ok = it?.status === 'ok';
+        totalSuccess += ok ? 1 : 0;
+        totalFail    += ok ? 0 : 1;
+        allResponses.push({
+          success: ok,
+          messageId: it?.id,
+          error: ok ? null : { code: it?.details?.error || it?.message || 'expo_error' },
+        });
+      });
+
+      // 🧹 limpa tokens "DeviceNotRegistered"
+      await Promise.all(
+        items.map(async (it, idx) => {
+          const err = it?.details?.error || it?.message;
+          if (it?.status === 'error' && String(err).toLowerCase().includes('devicenotregistered')) {
+            const bad = expoTokens[idx];
+            if (bad) await DeviceToken.deleteOne({ token: bad }).catch(() => {});
+          }
+        })
+      );
+    } catch (_) {
+      // falha geral na chamada — não limpa tokens neste caso
+    }
+  }
+
+  return { successCount: totalSuccess, failureCount: totalFail, responses: allResponses };
 }
 
 // ======================= (NOVO) Premium helpers =======================
