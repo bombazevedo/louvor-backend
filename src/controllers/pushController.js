@@ -5,6 +5,8 @@ const pushService = require('../services/pushService'); // (exemplo já existent
 // ⬅️ ADIÇÃO CIRÚRGICA: import efetivo do model usado no envio/remoção
 const DeviceToken = require('../models/DeviceToken');
 
+const Event = require('../models/Event');
+
 // POST /api/push/register  { token, platform }
 exports.registerToken = async (req, res, next) => {
   try {
@@ -53,6 +55,55 @@ exports.unregisterToken = async (req, res, next) => {
 
     const result = await DeviceToken.deleteOne({ user: userId, token });
     return res.json({ removed: result?.deletedCount || 0 });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/push/chat  { eventId, senderId, senderName, snippet, tz? }
+exports.enqueueChatMessage = async (req, res, next) => {
+  try {
+    const { eventId, senderId, senderName = 'Alguém', snippet = '', tz } = req.body || {};
+    if (!eventId)  return res.status(400).json({ message: 'eventId ausente' });
+    if (!senderId) return res.status(400).json({ message: 'senderId ausente' });
+
+    // TZ preferencial: header > body > padrão
+    const headerTz = req.get('X-TZ') || req.get('x-tz');
+    const timeZone = (headerTz || tz || process.env.DEFAULT_TZ || 'America/Sao_Paulo');
+
+    // Descobre destinatários a partir do evento (membros escalados)
+    const event = await Event.findById(eventId)
+      .populate({ path: 'scale', select: 'members', populate: { path: 'members.user', select: '_id' } })
+      .lean();
+
+    if (!event) return res.status(404).json({ message: 'Evento não encontrado' });
+
+    // Extrai users da escala (modelo padronizado do seu backend)
+    const scaleMembers = Array.isArray(event?.scale?.members) ? event.scale.members : [];
+    const userIds = scaleMembers
+      .map(m => (m?.user?._id || m?.user || null))
+      .filter(Boolean)
+      .filter(uid => String(uid) !== String(senderId));
+
+    // Fallback leve (caso algum evento legado tenha outra estrutura)
+    const altUsers = Array.isArray(event?.members) ? event.members.map(m => m?.user || m).filter(Boolean) : [];
+    const recipients = userIds.length ? userIds : altUsers.filter(uid => String(uid) !== String(senderId));
+
+    if (!recipients.length) {
+      return res.json({ queued: false, recipients: 0 });
+    }
+
+    // Enfileira no serviço (agregação por janela + 1º push imediato)
+    await pushService.queueChat({
+      event,
+      recipients,
+      senderName,
+      snippet,
+      timeZone, // TZ do usuário/região
+      senderId
+    });
+
+    return res.json({ queued: true, recipients: recipients.length });
   } catch (err) {
     next(err);
   }

@@ -1,4 +1,4 @@
-const admin = require('firebase-admin');
+//                              const admin = require('firebase-admin');
 let initialized = false;
 
 // 🔗 (NOVO) Models usados para gating e badge
@@ -143,4 +143,122 @@ async function sendUserPush(
   return res;
 }
 
-module.exports = { sendToTokens, sendUserPush };
+// =============== ADIÇÃO: Agregação leve de chat (WhatsApp-light) ===============
+// (duplicado no topo) const DeviceToken = require('../models/DeviceToken');
+
+const DEFAULT_TZ = process.env.DEFAULT_TZ || 'America/Sao_Paulo';
+const CHAT_WINDOW_MS_DEFAULT = 5 * 60 * 1000;   // 5 min
+const CHAT_WINDOW_MS_EVENT_DAY = 2 * 60 * 1000; // 2 min (dia do evento)
+const CONTENT_WINDOW_MS = 15 * 60 * 1000;       // 15 min (para futuras agregações de conteúdo)
+
+const chatState = new Map(); // eventId -> { lastSentAt, timer, pendingCount, lastSnippet, lastSender }
+
+/**
+ * Retorna "YYYY-MM-DD" local no TZ informado (sem depender de libs externas).
+ */
+function ymdInTz(d, timeZone = DEFAULT_TZ) {
+  if (!d) return null;
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date(d));
+}
+
+/**
+ * Decide janela de chat: se for "dia do evento" no TZ do usuário, usa 2min, senão 5min.
+ * Considera dia do evento como [T-24h .. T+3h] para ser mais responsivo próximo ao evento.
+ */
+function getChatWindowMs(event, timeZone = DEFAULT_TZ) {
+  const now = new Date();
+  const start =
+    event?.startAt || event?.start || event?.date || event?.datetime || event?.scheduledAt || null;
+
+  if (!start) return CHAT_WINDOW_MS_DEFAULT;
+
+  const ymdNow = ymdInTz(now, timeZone);
+  const ymdEvent = ymdInTz(start, timeZone);
+
+  if (!ymdNow || !ymdEvent) return CHAT_WINDOW_MS_DEFAULT;
+
+  if (ymdNow === ymdEvent) {
+    return CHAT_WINDOW_MS_EVENT_DAY; // mesmo dia local → 2 min
+  }
+  return CHAT_WINDOW_MS_DEFAULT;
+}
+
+/**
+ * Envia push (já agregado) para recipients: 1º push imediato; subsequentes agregados até a janela expirar.
+ */
+async function queueChat({ event, recipients, senderName = 'Alguém', snippet = '', timeZone = DEFAULT_TZ }) {
+  const eventId = String(event?._id || event?.id || '');
+  if (!eventId || !Array.isArray(recipients) || recipients.length === 0) return;
+
+  const state = chatState.get(eventId) || { lastSentAt: 0, timer: null, pendingCount: 0, lastSnippet: '', lastSender: '' };
+  const now = Date.now();
+  const windowMs = getChatWindowMs(event, timeZone);
+
+  const title = `Chat — ${event?.title || event?.name || 'Evento'}`;
+
+  // Função auxiliar para disparo
+  const sendPush = async ({ body }) => {
+    const tokens = (await DeviceToken.find({ user: { $in: recipients } }).select('token -_id')).map(t => t.token);
+    if (!tokens.length) return;
+
+    const data = {
+      relatedModel: 'Event',
+      relatedId: eventId,
+      type: 'chat',
+      threadId: `event:${eventId}:chat`, // iOS agrupa por threadId
+      collapseKey: `event:${eventId}:chat`, // Android agrupa por collapseKey
+    };
+
+    await sendToTokens(tokens, { title, body, data });
+  };
+
+  // 1) Se nunca enviou (ou última janela já expirou) → envia IMEDIATO com preview
+  if (!state.lastSentAt || now - state.lastSentAt > windowMs) {
+    await sendPush({ body: `${senderName}: ${snippet}` });
+
+    state.lastSentAt = now;
+    state.pendingCount = 0;
+    state.lastSnippet = '';
+    state.lastSender = '';
+    clearTimeout(state.timer);
+    state.timer = null;
+    chatState.set(eventId, state);
+    return;
+  }
+
+  // 2) Dentro da janela: agrega
+  state.pendingCount = (state.pendingCount || 0) + 1;
+  state.lastSnippet = snippet || state.lastSnippet;
+  state.lastSender = senderName || state.lastSender;
+
+  // Agenda flush no restante da janela, se ainda não houver timer
+  if (!state.timer) {
+    const delay = Math.max(0, state.lastSentAt + windowMs - now);
+    state.timer = setTimeout(async () => {
+      try {
+        const count = state.pendingCount || 0;
+        if (count > 0) {
+          const body = `+${count} novas mensagens • Última: ${state.lastSender}${state.lastSnippet ? ` — “${state.lastSnippet}”` : ''}`;
+          await sendPush({ body });
+        }
+      } finally {
+        state.lastSentAt = Date.now();
+        state.pendingCount = 0;
+        state.lastSnippet = '';
+        state.lastSender = '';
+        clearTimeout(state.timer);
+        state.timer = null;
+        chatState.set(eventId, state);
+      }
+    }, delay);
+  }
+
+  chatState.set(eventId, state);
+}
+
+module.exports.queueChat = queueChat;
+// ===============================================================================
+
+
+module.exports = { sendToTokens, sendUserPush, queueChat };
