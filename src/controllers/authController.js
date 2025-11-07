@@ -12,13 +12,21 @@ cloudinary.config({
 
 // 🔐 Login
 exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   try {
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Campos obrigatórios ausentes' });
+    }
+
     const user = await User.findOne({ email: email.toLowerCase().trim() });
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Senha incorreta' });
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ message: 'JWT_SECRET não configurado' });
+    }
 
     const token = jwt.sign(
       {
@@ -46,8 +54,12 @@ exports.loginUser = async (req, res) => {
 
 // 📋 Registro
 exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password, role } = req.body || {};
   try {
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Campos obrigatórios ausentes' });
+    }
+
     let user = await User.findOne({ email: email.toLowerCase().trim() });
     if (user) return res.status(400).json({ message: 'Email já cadastrado' });
 
@@ -64,6 +76,9 @@ exports.registerUser = async (req, res) => {
     res.status(201).json({ message: 'Usuário registrado com sucesso' });
   } catch (err) {
     console.error('[registerUser] Erro interno:', err.message);
+    if (err.code === 11000 && err.keyPattern?.email) {
+      return res.status(409).json({ message: 'Email já cadastrado' });
+    }
     res.status(500).json({ message: 'Erro interno ao registrar usuário' });
   }
 };
