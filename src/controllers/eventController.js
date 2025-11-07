@@ -3,8 +3,12 @@ const Scale = require('../models/Scale');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
 
+// ⬇️ [INSERÇÃO] Push agregado (chat/evento)
+const pushService = require('../services/pushService');
+
 // --- Firebase Admin para Firestore ---
 const admin = require('firebase-admin');
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 
 if (!admin.apps.length && serviceAccount && Object.keys(serviceAccount).length) {
@@ -16,6 +20,12 @@ const firestoreDb = admin.apps.length ? admin.firestore() : null;
 
 // Utilitário simples para serializar documentos (remove metadados do Mongoose)
 const clean = (doc) => JSON.parse(JSON.stringify(doc || {}));
+
+// ⬇️ [INSERÇÃO] helper local para IDs de usuários da escala
+const pickMemberUserIds = (scaleDoc) => {
+  const arr = Array.isArray(scaleDoc?.members) ? scaleDoc.members : [];
+  return [...new Set(arr.map(m => String(m?.user?._id || m?.user || '')).filter(Boolean))];
+};
 
 /**
  * GET /events
@@ -330,12 +340,30 @@ if (typeof dnNotes === 'string') updateData.dnNotes = dnNotes;
     }
 
     const updatedEvent = await Event.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
+  req.params.id,
+  updateData,
+  { new: true }
+);
 
-    res.json(clean(updatedEvent));
+// ⬇️ [INSERÇÃO] Disparo agregado de "evento atualizado"
+try {
+  const headerTz = req.get('X-TZ') || req.get('x-tz');
+  const timeZone = headerTz || process.env.DEFAULT_TZ || 'America/Sao_Paulo';
+
+  const scale = await Scale.findOne({ eventId: updatedEvent._id })
+    .select('members.user')
+    .populate('members.user', '_id')
+    .lean();
+
+  const recipients = pickMemberUserIds(scale);
+  if (recipients.length) {
+    // não bloqueante
+    pushService.queueEventChange({ event: updatedEvent, recipients, timeZone }).catch(() => {});
+  }
+} catch (_) {}
+
+res.json(clean(updatedEvent));
+
   } catch (error) {
     console.error('Erro ao atualizar evento:', error);
     res.status(500).json({ message: 'Erro ao atualizar evento' });
@@ -393,11 +421,29 @@ const updateEventSongOverrides = async (req, res) => {
     }
 
     await event.save();
-    return res.json({
-      eventId,
-      songId,
-      overrides: clean(item.overrides)
-    });
+
+// ⬇️ [INSERÇÃO] "evento atualizado" (overrides contam como alteração)
+try {
+  const headerTz = req.get('X-TZ') || req.get('x-tz');
+  const timeZone = headerTz || process.env.DEFAULT_TZ || 'America/Sao_Paulo';
+
+  const scale = await Scale.findOne({ eventId: event._id })
+    .select('members.user')
+    .populate('members.user', '_id')
+    .lean();
+
+  const recipients = pickMemberUserIds(scale);
+  if (recipients.length) {
+    pushService.queueEventChange({ event, recipients, timeZone }).catch(() => {});
+  }
+} catch (_) {}
+
+return res.json({
+  eventId,
+  songId,
+  overrides: clean(item.overrides)
+});
+
   } catch (error) {
     console.error('Erro ao atualizar overrides do evento:', error);
     res.status(500).json({ message: 'Erro ao atualizar overrides do evento' });

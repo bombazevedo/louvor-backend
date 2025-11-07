@@ -91,23 +91,64 @@ async function notifyUserOfScale(userId, eventDoc) {
     });
 
     // 2) Push (não bloquear a request)
-    pushService.sendUserPush(userId, {
-      title,
-      body,
-      data: {
-        type: 'scale',
-        relatedModel: 'Event',
-        relatedId: eventDoc?._id?.toString?.()
-      }
-    }).catch(err => {
-      console.warn('[notifyUserOfScale] Falha no push (não bloqueante):', err?.message || err);
-    });
+    pushService
+      .sendUserPush(userId, {
+        title,
+        body,
+        data: {
+          type: 'scale',
+          relatedModel: 'Event',
+          relatedId: eventDoc?._id?.toString?.()
+        }
+      })
+      .catch(err => {
+        console.warn('[notifyUserOfScale] Falha no push (não bloqueante):', err?.message || err);
+      });
 
   } catch (err) {
     console.warn('[notifyUserOfScale] Falha ao persistir/enviar notificação:', err?.message || err);
   }
 }
-// ⬆️⬆️⬆️ FIM DOS HELPERS ⬆️⬆️⬆️
+
+// ⬇️ NOVO: notificação de REMOÇÃO de escala (top-level, fora da função acima)
+async function notifyUserRemovedFromScale(userId, eventDoc) {
+  try {
+    const title = 'Atualização de Escala';
+    const when = eventDoc?.date ? moment(eventDoc.date).format('DD/MM/YYYY') : '';
+    const body = eventDoc?.title
+      ? `Você foi removido de "${eventDoc.title}" ${when ? `(${when})` : ''}.`
+      : `Você foi removido da escala${when ? ` (${when})` : ''}.`;
+
+    await Notification.create({
+      user: userId,
+      title,
+      message: body,
+      type: 'scale',
+      referenceModel: 'Event',
+      reference: eventDoc?._id,
+      data: {
+        relatedModel: 'Event',
+        relatedId: eventDoc?._id?.toString?.(),
+        action: 'removed'
+      },
+      sentAt: new Date()
+    });
+
+    pushService
+      .sendUserPush(userId, {
+        title,
+        body,
+        data: {
+          type: 'scale',
+          action: 'removed',
+          relatedModel: 'Event',
+          relatedId: eventDoc?._id?.toString?.()
+        }
+      })
+      .catch(() => {});
+  } catch (_) {}
+}
+// ⬆️ FIM DOS HELPERS
 
 exports.createScale = async (req, res) => {
   try {
@@ -143,29 +184,36 @@ exports.updateScale = async (req, res) => {
     const scale = await Scale.findById(req.params.id);
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
-    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: detectar novos membros ⬇️⬇️⬇️
-    const beforeUserIds = pickUserIds(scale.members);
-    let addedUserIds = [];
+    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: detectar novos **e removidos** membros ⬇️⬇️⬇️
+const beforeUserIds = pickUserIds(scale.members);
+let addedUserIds = [];
+let removedUserIds = [];
 
-    if (req.body.members) {
-      const afterUserIds = pickUserIds(req.body.members);
-      addedUserIds = afterUserIds.filter(id => !beforeUserIds.includes(id));
-      scale.members = req.body.members;
-    }
-    // ⬆️⬆️⬆️ FIM DA DETECÇÃO ⬆️⬆️⬆️
+if (req.body.members) {
+  const afterUserIds = pickUserIds(req.body.members);
+  addedUserIds   = afterUserIds.filter(id => !beforeUserIds.includes(id));
+  removedUserIds = beforeUserIds.filter(id => !afterUserIds.includes(id));
+  scale.members = req.body.members;
+}
+// ⬆️⬆️⬆️ FIM DA DETECÇÃO ⬆️⬆️⬆️
+
 
     if (typeof req.body.notes === 'string') scale.notes = req.body.notes;
     if (req.body.eventId) scale.eventId = req.body.eventId;
 
     const updated = await scale.save();
 
-    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar apenas os adicionados ⬇️⬇️⬇️
-    if (addedUserIds.length > 0) {
-      const eventId = updated.eventId || req.body.eventId;
-      const eventDoc = eventId ? await Event.findById(eventId).select('title date').lean() : null;
-      Promise.all(addedUserIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
-    }
-    // ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM updateScale ⬆️⬆️⬆️
+    // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar adicionados **e** removidos ⬇️⬇️⬇️
+const eventId = updated.eventId || req.body.eventId;
+const eventDoc = eventId ? await Event.findById(eventId).select('title date').lean() : null;
+
+if (addedUserIds.length > 0) {
+  Promise.all(addedUserIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
+}
+if (removedUserIds.length > 0) {
+  Promise.all(removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc))).catch(() => {});
+}
+// ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM updateScale ⬆️⬆️⬆️
 
     res.json(updated);
   } catch (err) {
@@ -179,8 +227,28 @@ exports.deleteScale = async (req, res) => {
     const scale = await Scale.findById(req.params.id);
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
+    // captura usuários antes de deletar
+    const removedUserIds = pickUserIds(scale.members);
+
+    // tenta resolver o evento para mensagem (via eventId da escala ou referência do Event.scale)
+    let eventDoc = null;
+    if (scale.eventId) {
+      eventDoc = await Event.findById(scale.eventId).select('title date').lean();
+    } else {
+      const ev = await Event.findOne({ scale: scale._id }).select('title date').lean();
+      eventDoc = ev || null;
+    }
+
+    // desfaz ponte no(s) evento(s) e remove a escala
     await Event.updateMany({ scale: scale._id }, { $unset: { scale: '' } });
     await scale.deleteOne();
+
+    // avisa todos que foram removidos
+    if (removedUserIds.length && eventDoc) {
+      Promise.all(
+        removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc))
+      ).catch(() => {});
+    }
 
     res.json({ message: 'Escala removida com sucesso' });
   } catch (err) {
@@ -188,6 +256,7 @@ exports.deleteScale = async (req, res) => {
     res.status(500).json({ message: 'Erro ao remover escala' });
   }
 };
+
 
 // ======================= Exportar PDF (Premium) =======================
 

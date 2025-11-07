@@ -205,23 +205,42 @@ async function sendUserPush(
     data: { ...data, channel }
   });
 
-  // badge iOS = total de não lidas
-  try {
-    ensureInit();
-    const unread = await Notification.countDocuments({ user: userId, read: false });
+    // badge iOS = total de não lidas (apenas iOS FCM; EXPO já tratado no primeiro envio)
+try {
+  ensureInit();
+  const unread = await Notification.countDocuments({ user: userId, read: false });
+
+  // Busca apenas tokens iOS salvos (sem Expo) para evitar duplicidade e som
+  const iosFcmTokens = (await DeviceToken.find({ user: userId, platform: 'ios' })
+    .select('token -_id'))
+    .map(t => t.token)
+    .filter(t => !/^ExponentPushToken\[[A-Za-z0-9_-]+\]$/.test(String(t || '')));
+
+  if (iosFcmTokens.length) {
     await Promise.all(
-      tokens.map(token =>
-        admin
-          .messaging()
-          .send({
-            token,
-            apns: { payload: { aps: { badge: unread, sound: 'default' } } },
-            data: { __badgeOnly: '1' }
-          })
-          .catch(() => null)
+      iosFcmTokens.map(token =>
+        admin.messaging().send({
+          token,
+          // Push silencioso em background para atualizar badge
+          apns: {
+            headers: {
+              'apns-push-type': 'background',
+              'apns-priority': '5'
+            },
+            payload: {
+              aps: {
+                'content-available': 1,
+                badge: unread
+              }
+            }
+          },
+          data: { __badgeOnly: '1' }
+        }).catch(() => null)
       )
     );
-  } catch (_) {}
+  }
+} catch (_) {}
+
 
   return res;
 }
@@ -298,7 +317,8 @@ async function queueChat({ event, recipients, senderName = 'Alguém', snippet = 
 
   // 1) Se nunca enviou (ou última janela já expirou) → envia IMEDIATO com preview
   if (!state.lastSentAt || now - state.lastSentAt > windowMs) {
-    await sendPush({ body: `${senderName}: ${snippet}` });
+        await sendPush({ body: 'Novas mensagens no chat.' });
+
 
     state.lastSentAt = now;
     state.pendingCount = 0;
@@ -322,8 +342,9 @@ async function queueChat({ event, recipients, senderName = 'Alguém', snippet = 
       try {
         const count = state.pendingCount || 0;
         if (count > 0) {
-          const body = `+${count} novas mensagens • Última: ${state.lastSender}${state.lastSnippet ? ` — “${state.lastSnippet}”` : ''}`;
+                    const body = `Novas mensagens no chat (+${count}).`;
           await sendPush({ body });
+
         }
       } finally {
         state.lastSentAt = Date.now();
@@ -337,11 +358,85 @@ async function queueChat({ event, recipients, senderName = 'Alguém', snippet = 
     }, delay);
   }
 
-  chatState.set(eventId, state);
+chatState.set(eventId, state);
 }
 
 module.exports.queueChat = queueChat;
 // ===============================================================================
 
+// =============== ADIÇÃO: Agregação de alterações de evento (debounce) ===============
+const eventChangeState = new Map(); // eventId -> { timer, lastAt, pendingCount }
 
-module.exports = { sendToTokens, sendUserPush, queueChat };
+function getEventWindowMs(event, timeZone = DEFAULT_TZ) {
+  return getChatWindowMs(event, timeZone); // 2 min no dia do evento; 5 min demais dias
+}
+
+/**
+ * Enfileira notificação de alteração de evento para recipients.
+ * 1ª alteração dentro da janela => PUSH imediato.
+ * Alterações subsequentes até estourar a janela => 1 PUSH agregado.
+ */
+async function queueEventChange({ event, recipients, timeZone = DEFAULT_TZ }) {
+  const eventId = String(event?._id || event?.id || '');
+  if (!eventId || !Array.isArray(recipients) || recipients.length === 0) return;
+
+  const state = eventChangeState.get(eventId) || { lastAt: 0, timer: null, pendingCount: 0 };
+  const now = Date.now();
+  const windowMs = getEventWindowMs(event, timeZone);
+
+  const title = event?.title ? `Evento atualizado — ${event.title}` : 'Evento atualizado';
+
+  const sendPush = async (body) => {
+    const tokens = (await DeviceToken.find({ user: { $in: recipients } }).select('token -_id')).map(t => t.token);
+    if (!tokens.length) return;
+    const data = {
+      relatedModel: 'Event',
+      relatedId: eventId,
+      type: 'event_update',
+      threadId: `event:${eventId}:updates`,
+      collapseKey: `event:${eventId}:updates`,
+    };
+    await sendToTokens(tokens, { title, body, data });
+  };
+
+  if (!state.lastAt || now - state.lastAt > windowMs) {
+    await sendPush('Este evento recebeu alterações.');
+    state.lastAt = now;
+    state.pendingCount = 0;
+    clearTimeout(state.timer);
+    state.timer = null;
+    eventChangeState.set(eventId, state);
+    return;
+  }
+
+  state.pendingCount = (state.pendingCount || 0) + 1;
+
+  if (!state.timer) {
+    const delay = Math.max(0, state.lastAt + windowMs - now);
+    state.timer = setTimeout(async () => {
+      try {
+        const count = state.pendingCount || 0;
+        if (count > 0) {
+          await sendPush(`Novas alterações realizadas neste evento (+${count}).`);
+        }
+      } finally {
+        state.lastAt = Date.now();
+        state.pendingCount = 0;
+        clearTimeout(state.timer);
+        state.timer = null;
+        eventChangeState.set(eventId, state);
+      }
+    }, delay);
+  }
+
+  eventChangeState.set(eventId, state);
+}
+
+module.exports = {
+  sendToTokens,
+  sendUserPush,
+  queueChat,
+  queueEventChange,
+  // Alias p/ compatibilidade com eventController antigos:
+  queueEventUpdate: queueEventChange
+};
