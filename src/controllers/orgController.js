@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+const crypto = require('crypto'); 
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
 
@@ -14,15 +14,19 @@ exports.createOrg = async (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'NAME_REQUIRED' });
 
+    // ✅ pega o ID do usuário autenticado em formatos comuns (id, _id, req.userId)
+    const ownerId = (req.user && (req.user.id || req.user._id)) || req.userId || (req.auth && req.auth.id);
+    if (!ownerId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
     const slug = slugify(name);
     const exists = await Organization.findOne({ slug });
     if (exists) return res.status(409).json({ error: 'ORG_SLUG_TAKEN' });
 
     const org = await Organization.create({
-      name, slug, owner: req.user._id
+      name, slug, owner: ownerId
     });
 
-    await OrgMember.create({ org: org._id, user: req.user._id, role: 'coordenador' });
+    await OrgMember.create({ org: org._id, user: ownerId, role: 'coordenador' });
 
     res.status(201).json({ org });
   } catch (err) {
