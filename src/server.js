@@ -16,6 +16,7 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Rotas
 const authRoutes = require('./routes/authRoutes');
+const orgRoutes = require('./routes/orgRoutes');
 const userRoutes = require('./routes/userRoutes');
 const bandRolesRoutes = require('./routes/bandRolesRoutes');
 const eventRoutes = require('./routes/eventRoutes');
@@ -38,6 +39,7 @@ const pushRoutes = require('./routes/push.routes');
 
 // Usando as rotas
 app.use('/api/auth', authRoutes);
+app.use('/api/orgs', orgRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/band-roles', bandRolesRoutes);
 app.use('/api/events', eventRoutes);
@@ -73,6 +75,22 @@ app.get('/', (req, res) => {
 
 // Porta
 const PORT = process.env.PORT || 5000;
+
+// 🔎 Prova de vida
+app.get('/api/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// 🛡️ Handler global (evita 502 e mostra o erro real)
+app.use((err, req, res, next) => {
+  console.error('[GLOBAL ERROR]', err);
+  if (res.headersSent) return next(err);
+  const status = err.status || 500;
+  res.status(status).json({
+    error: status === 500 ? 'INTERNAL_SERVER_ERROR' : 'ERROR',
+    message: err.message || 'Unexpected error'
+  });
+});
+
+
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
