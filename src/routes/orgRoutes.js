@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const orgCtl = require('../controllers/orgController');
-const auth = require('../middleware/auth'); // o mesmo auth que você já usa
+
+// 🔧 Torna a importação do auth compatível com default ou named export
+const authModule = require('../middleware/auth');
+const auth = typeof authModule === 'function' ? authModule : authModule.auth;
+
+// (opcional, ajuda no diagnóstico)
+router.get('/_ping', (_req, res) => res.json({ pong: true }));
 
 // Usuário precisa estar logado
 router.post('/', auth, orgCtl.createOrg);
