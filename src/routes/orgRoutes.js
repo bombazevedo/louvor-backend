@@ -1,24 +1,37 @@
+// src/routes/orgRoutes.js
 const express = require('express');
 const router = express.Router();
 const orgCtl = require('../controllers/orgController');
 
-// 🔧 Resolver o export do auth (default ou named) e evitar crash se vier indefinido
-let auth;
-try {
-  const mod = require('../middleware/auth'); // ATENÇÃO: path e caixa (auth.js) devem casar com o arquivo real
-  if (typeof mod === 'function') {
-    auth = mod;
-  } else if (mod && typeof mod.auth === 'function') {
-    auth = mod.auth;
-  } else if (mod && mod.default && typeof mod.default === 'function') {
-    auth = mod.default;
+// 🔧 Resolver caminho/forma de export do middleware de auth (default ou named; vários nomes comuns)
+function resolveAuth() {
+  const candidates = [
+    '../middleware/auth',
+    '../middleware/authMiddleware',
+    '../middleware/Auth',
+  ];
+
+  for (const p of candidates) {
+    try {
+      const mod = require(p);
+      // Possíveis formas de export
+      if (typeof mod === 'function') return mod;
+      if (mod && typeof mod.default === 'function') return mod.default;
+      if (mod && typeof mod.auth === 'function') return mod.auth;
+      if (mod && typeof mod.authenticate === 'function') return mod.authenticate;
+      if (mod && typeof mod.protect === 'function') return mod.protect;
+    } catch (_e) {
+      // tenta o próximo candidato
+    }
   }
-} catch (e) {
-  console.error('[orgRoutes] Falha ao carregar middleware auth:', e.message);
+  return null;
 }
-// Fallback de segurança para não derrubar o servidor (STAGING): passa reto
+
+let auth = resolveAuth();
+
+// Fallback de segurança para não derrubar o servidor em STAGING
 if (!auth) {
-  console.warn('[orgRoutes] WARNING: auth indefinido — usando no-op middleware (staging). Verifique o export de ../middleware/auth');
+  console.warn('[orgRoutes] WARNING: auth indefinido — usando no-op middleware (staging). Verifique o export/caminho do middleware de autenticação.');
   auth = (_req, _res, next) => next();
 }
 
