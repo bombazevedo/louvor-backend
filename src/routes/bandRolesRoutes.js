@@ -1,11 +1,52 @@
+// src/routes/bandRolesRoutes.js
 const express = require('express');
 const router = express.Router();
 const BandRole = require('../models/BandRole');
 const { authenticate, isCoordinator } = require('../middleware/auth');
 
+// Seed padrão de funções de banda (idempotente, aplicado no primeiro GET quando vazio)
+const DEFAULT_BAND_ROLES = [
+  'Ministro',
+  'Backing Vocal',
+  'Guitarra',
+  'Violão',
+  'Baixo',
+  'Bateria',
+  'Teclado',
+  'Piano',
+  'Violino',
+  'Saxofone',
+  'Trompete',
+  'Trombone',
+  'Pandeiro',
+  'Chocalho',
+  'Percussão',
+  'Cavaco',
+  'Acordeão',
+  'Mesa de Som',
+  'Iluminação',
+  'Projeção',
+  'Streaming',
+  'Fotografia',
+];
+
 // GET: Todas as funções
 router.get('/', authenticate, async (req, res) => {
   try {
+    // Inserção cirúrgica: seed automático caso a coleção esteja vazia
+    const count = await BandRole.estimatedDocumentCount();
+    if (count === 0) {
+      await BandRole.bulkWrite(
+        DEFAULT_BAND_ROLES.map((name) => ({
+          updateOne: {
+            filter: { name },
+            update: { $setOnInsert: { name } },
+            upsert: true,
+          },
+        }))
+      );
+    }
+
     const roles = await BandRole.find();
     res.json(roles);
   } catch (error) {
