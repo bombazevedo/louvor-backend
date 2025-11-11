@@ -74,8 +74,11 @@ exports.joinByCode = async (req, res) => {
     const org = await Organization.findOne({ 'invites.code': code.toUpperCase() }).lean();
     if (!org) return res.status(404).json({ error: 'INVITE_NOT_FOUND' });
 
+    // 🔧 normaliza o ID do usuário autenticado (correção pontual)
+    const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
+
     await OrgMember.updateOne(
-      { org: org._id, user: req.user._id },
+      { org: org._id, user: userId },
       { $setOnInsert: { role: 'usuario', joinedAt: new Date() } },
       { upsert: true }
     );
