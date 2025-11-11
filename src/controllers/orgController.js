@@ -40,12 +40,15 @@ exports.generateInvite = async (req, res) => {
   try {
     const { id } = req.params; // orgId
 
+    // 🔧 normaliza o ID do usuário autenticado
+    const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
+
     // 🔒 owner também pode convidar (mesmo sem membership explícito)
     const org = await Organization.findById(id).lean();
     if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
-    const isOwner = String(org.owner) === String(req.user._id);
+    const isOwner = String(org.owner) === String(userId);
 
-    const membership = await OrgMember.findOne({ org: id, user: req.user._id }).lean();
+    const membership = await OrgMember.findOne({ org: id, user: userId }).lean();
     if (!isOwner && (!membership || !['coordenador','dm'].includes(membership.role))) {
       return res.status(403).json({ error: 'INVITE_FORBIDDEN' });
     }
@@ -53,7 +56,7 @@ exports.generateInvite = async (req, res) => {
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
     const updated = await Organization.findByIdAndUpdate(
       id,
-      { $push: { invites: { code, createdBy: req.user._id } } },
+      { $push: { invites: { code, createdBy: userId } } },
       { new: true }
     ).lean();
     res.json({ code, org: updated._id });
@@ -86,7 +89,6 @@ exports.joinByCode = async (req, res) => {
 
 exports.myOrgs = async (req, res) => {
   try {
-    // 🔧 correção cirúrgica: normaliza o ID do usuário autenticado
     const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
 
     const memberships = await OrgMember.find({ user: userId })
