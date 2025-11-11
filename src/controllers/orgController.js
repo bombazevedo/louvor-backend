@@ -86,14 +86,17 @@ exports.joinByCode = async (req, res) => {
 
 exports.myOrgs = async (req, res) => {
   try {
-    const memberships = await OrgMember.find({ user: req.user._id })
+    // 🔧 correção cirúrgica: normaliza o ID do usuário autenticado
+    const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
+
+    const memberships = await OrgMember.find({ user: userId })
       .populate('org', 'name slug license')
       .lean();
 
     // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
     const memberOrgIds = memberships.map(m => String(m.org?._id || m.org));
     const ownedButNotMember = await Organization.find({
-      owner: req.user._id,
+      owner: userId,
       _id: { $nin: memberOrgIds }
     }).lean();
 
