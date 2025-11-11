@@ -1,11 +1,13 @@
 // src/routes/scaleRoutes.js
 const express = require('express');
 const router = express.Router();
+const orgContext = require('../middleware/orgContext');
+const licenseGuard = require('../middleware/licenseGuard');
 const { authenticate, isCoordinator } = require('../middleware/auth');
 const scaleController = require('../controllers/scaleController');
 
 // Todas as rotas exigem autenticação
-router.use(authenticate);
+router.use(authenticate, orgContext);
 
 // CRUD
 if (typeof scaleController.getAllScales === 'function') {
@@ -17,15 +19,9 @@ if (typeof scaleController.getScaleByEventId === 'function') {
 if (typeof scaleController.getScaleById === 'function') {
   router.get('/:id', scaleController.getScaleById);
 }
-if (typeof scaleController.createScale === 'function') {
-  router.post('/', scaleController.createScale);
-}
-if (typeof scaleController.updateScale === 'function') {
-  router.patch('/:id', scaleController.updateScale);
-}
-if (typeof scaleController.deleteScale === 'function') {
-  router.delete('/:id', scaleController.deleteScale);
-}
+if (typeof scaleController.createScale === 'function') router.post('/', licenseGuard, scaleController.createScale);
+if (typeof scaleController.updateScale === 'function') router.patch('/:id', licenseGuard, scaleController.updateScale);
+if (typeof scaleController.deleteScale === 'function') router.delete('/:id', licenseGuard, scaleController.deleteScale);
 
 // Exportar escalas em PDF (somente coordenador)
 // ✅ alteração pontual: adiciona POST para receber o payload com ícones (req.body.icons)

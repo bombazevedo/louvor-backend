@@ -31,9 +31,9 @@ const pickMemberUserIds = (scaleDoc) => {
  * GET /events
  * Retorna eventos com escala e musicLinks enriquecidos.
  */
-const getEventsWithScales = async (_req, res) => {
+const getEventsWithScales = async (req, res) => {
   try {
-    const events = await Event.find().populate('musicLinks.song').lean();
+    const events = await Event.find({ org: req.orgId }).populate('musicLinks.song').lean();
 
     const eventsWithScales = await Promise.all(
       events.map(async (event) => {
@@ -83,7 +83,7 @@ const getEventsWithScales = async (_req, res) => {
  */
 const getEventById = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.id)
+    const event = await Event.findOne({ _id: req.params.id, org: req.orgId })
       .populate('musicLinks.song')
       .lean();
 
@@ -205,6 +205,7 @@ const createEvent = async (req, res) => {
       : (resolvedPaletteMode === 'full');
 
     const newEvent = new Event({
+    org: req.orgId,
       title,
       description,
       date,
@@ -339,8 +340,8 @@ if (typeof dnNotes === 'string') updateData.dnNotes = dnNotes;
         }));
     }
 
-    const updatedEvent = await Event.findByIdAndUpdate(
-  req.params.id,
+    const updatedEvent = await Event.findOneAndUpdate(
+  { _id: req.params.id, org: req.orgId },
   updateData,
   { new: true }
 );
@@ -388,7 +389,7 @@ const updateEventSongOverrides = async (req, res) => {
     const { eventId, songId } = req.params;
     const { key, bpm, manualLink } = req.body; // todos opcionais
 
-    const event = await Event.findById(eventId);
+    const event = await Event.findOne({ _id: eventId, org: req.orgId });
     if (!event) return res.status(404).json({ message: 'Evento não encontrado.' });
 
     // Garante array de overrides

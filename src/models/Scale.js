@@ -16,6 +16,7 @@ const memberSchema = new mongoose.Schema({
 });
 
 const scaleSchema = new mongoose.Schema({
+org: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', index: true, required: true },
   eventId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Event',

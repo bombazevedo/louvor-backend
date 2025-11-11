@@ -14,7 +14,7 @@ moment.locale('pt-br');
 // ======================= CRUD Padrão =======================
 exports.getAllScales = async (req, res) => {
   try {
-    const scales = await Scale.find()
+    const scales = await Scale.find({ org: req.orgId })
       .populate('members.user', 'name email photoUrl')
       .populate('members.function', 'name');
     res.json(scales);
@@ -26,7 +26,7 @@ exports.getAllScales = async (req, res) => {
 
 exports.getScaleById = async (req, res) => {
   try {
-    const scale = await Scale.findById(req.params.id)
+    const scale = await Scale.findOne({ _id: req.params.id, org: req.orgId })
       .populate('members.user', 'name email photoUrl')
       .populate('members.function', 'name');
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
@@ -39,7 +39,7 @@ exports.getScaleById = async (req, res) => {
 
 exports.getScaleByEventId = async (req, res) => {
   try {
-    const event = await Event.findById(req.params.eventId)
+    const event = await Event.findOne({ _id: req.params.eventId, org: req.orgId })
       .populate({
         path: 'scale',
         populate: [
@@ -153,6 +153,7 @@ async function notifyUserRemovedFromScale(userId, eventDoc) {
 exports.createScale = async (req, res) => {
   try {
     const scale = new Scale({
+    org: req.orgId,
       eventId: req.body.eventId,
       members: req.body.members || [],
       notes: req.body.notes || ''
@@ -160,7 +161,10 @@ exports.createScale = async (req, res) => {
     const newScale = await scale.save();
 
     if (req.body.eventId) {
-      await Event.findByIdAndUpdate(req.body.eventId, { scale: newScale._id });
+      await Event.findOneAndUpdate(
+{ _id: req.body.eventId, org: req.orgId },
+{ scale: newScale._id }
+);
     }
 
     // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar membros iniciais ⬇️⬇️⬇️
@@ -181,7 +185,7 @@ exports.createScale = async (req, res) => {
 
 exports.updateScale = async (req, res) => {
   try {
-    const scale = await Scale.findById(req.params.id);
+    const scale = await Scale.findOne({ _id: req.params.id, org: req.orgId });
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
     // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: detectar novos **e removidos** membros ⬇️⬇️⬇️

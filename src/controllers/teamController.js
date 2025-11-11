@@ -1,4 +1,4 @@
-//                              javascript
+//                                    javascript 
 const Team = require('../models/Team');
 
 const createTeam = async (req, res) => {
@@ -33,6 +33,7 @@ const createTeam = async (req, res) => {
     );
 
     const team = new Team({
+    org: req.orgId,
       name,
       members: uniqueMembers,
       createdBy, // ✅ inclui createdBy no documento
@@ -49,7 +50,7 @@ const createTeam = async (req, res) => {
 const updateTeam = async (req, res) => {
   try {
     const { name, members } = req.body;
-    const team = await Team.findById(req.params.id);
+    const team = await Team.findOne({ _id: req.params.id, org: req.orgId });
 
     if (!team) {
       return res.status(404).json({ message: 'Time não encontrado' });
@@ -81,7 +82,7 @@ const updateTeam = async (req, res) => {
 
 const deleteTeam = async (req, res) => {
   try {
-    const team = await Team.findByIdAndDelete(req.params.id);
+    const team = await Team.findOneAndDelete({ _id: req.params.id, org: req.orgId });
 
     if (!team) {
       return res.status(404).json({ message: 'Time não encontrado' });
@@ -96,7 +97,7 @@ const deleteTeam = async (req, res) => {
 
 const getTeams = async (req, res) => {
   try {
-    const teams = await Team.find().populate('members.user').populate('members.bandRole');
+    const teams = await Team.find({ org: req.orgId }).populate('members.user').populate('members.bandRole');
     res.json(teams);
   } catch (error) {
     console.error('Erro ao buscar times:', error);
@@ -106,7 +107,7 @@ const getTeams = async (req, res) => {
 
 const getTeamById = async (req, res) => {
   try {
-    const team = await Team.findById(req.params.id).populate('members.user').populate('members.bandRole');
+    const team = await Team.findOne({ _id: req.params.id, org: req.orgId }).populate('members.user').populate('members.bandRole');
 
     if (!team) {
       return res.status(404).json({ message: 'Time não encontrado' });

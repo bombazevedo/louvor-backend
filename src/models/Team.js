@@ -15,6 +15,7 @@ const TeamMemberSchema = new Schema({
 }, { _id: false });
 
 const TeamSchema = new Schema({
+org: { type: Schema.Types.ObjectId, ref: 'Organization', index: true, required: true },
   name: {
     type: String,
     required: true,
