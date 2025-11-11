@@ -1,4 +1,4 @@
-const crypto = require('crypto'); 
+//                               const crypto = require('crypto'); 
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
 
@@ -38,8 +38,14 @@ exports.createOrg = async (req, res) => {
 exports.generateInvite = async (req, res) => {
   try {
     const { id } = req.params; // orgId
++   // 🔒 correção pontual: owner também pode convidar (mesmo sem membership explícito)
++   const org = await Organization.findById(id).lean();
++   if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
++   const isOwner = String(org.owner) === String(req.user._id);
+
     const membership = await OrgMember.findOne({ org: id, user: req.user._id }).lean();
-    if (!membership || !['coordenador','dm'].includes(membership.role)) {
+-   if (!membership || !['coordenador','dm'].includes(membership.role)) {
++   if (!isOwner && (!membership || !['coordenador','dm'].includes(membership.role))) {
       return res.status(403).json({ error: 'INVITE_FORBIDDEN' });
     }
     const code = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -81,7 +87,21 @@ exports.myOrgs = async (req, res) => {
     const memberships = await OrgMember.find({ user: req.user._id })
       .populate('org', 'name slug license')
       .lean();
-    res.json({ orgs: memberships.map(m => ({ org: m.org, role: m.role })) });
+-   res.json({ orgs: memberships.map(m => ({ org: m.org, role: m.role })) });
++   // 🔎 correção pontual: incluir também orgs onde o usuário é owner (fallback caso membership ainda não exista)
++   const memberOrgIds = memberships.map(m => String(m.org?._id || m.org));
++   const ownedButNotMember = await Organization.find({
++     owner: req.user._id,
++     _id: { $nin: memberOrgIds }
++   }).lean();
++   const response = [
++     ...memberships.map(m => ({ org: m.org, role: m.role })),
++     ...ownedButNotMember.map(o => ({
++       org: { _id: o._id, name: o.name, slug: o.slug, license: o.license },
++       role: 'coordenador'
++     }))
++   ];
++   res.json({ orgs: response });
   } catch (err) {
     console.error('[myOrgs] err', err);
     res.status(500).json({ error: 'MY_ORGS_ERROR' });
