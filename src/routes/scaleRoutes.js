@@ -19,9 +19,9 @@ if (typeof scaleController.getScaleByEventId === 'function') {
 if (typeof scaleController.getScaleById === 'function') {
   router.get('/:id', scaleController.getScaleById);
 }
-if (typeof scaleController.createScale === 'function') router.post('/', licenseGuard, scaleController.createScale);
-if (typeof scaleController.updateScale === 'function') router.patch('/:id', licenseGuard, scaleController.updateScale);
-if (typeof scaleController.deleteScale === 'function') router.delete('/:id', licenseGuard, scaleController.deleteScale);
+if (typeof scaleController.createScale === 'function') router.post('/', licenseGuard('write'), scaleController.createScale);
+if (typeof scaleController.updateScale === 'function') router.patch('/:id', licenseGuard('write'), scaleController.updateScale);
+if (typeof scaleController.deleteScale === 'function') router.delete('/:id', licenseGuard('write'), scaleController.deleteScale);
 
 // Exportar escalas em PDF (somente coordenador)
 // ✅ alteração pontual: adiciona POST para receber o payload com ícones (req.body.icons)

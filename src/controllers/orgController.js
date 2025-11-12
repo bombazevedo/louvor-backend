@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
+const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ adição pontual
 
 const slugify = (s) => s.normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -117,5 +118,26 @@ exports.myOrgs = async (req, res) => {
   } catch (err) {
     console.error('[myOrgs] err', err);
     res.status(500).json({ error: 'MY_ORGS_ERROR' });
+  }
+};
+
+// ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
+exports.getLicense = async (req, res) => {
+  try {
+    // orgContext injeta req._org e req.orgId; usamos req._org como verdade
+    const org = req._org || await Organization.findById(req.params.id).lean();
+    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
+
+    const ent = getEntitlementsFor(org);
+
+    return res.json({
+      plan: ent.plan,           // FREE | PRO | PLUS (rótulo base)
+      inTrial: ent.inTrial,     // true/false
+      trialEndsAt: ent.trialEndsAt || null,
+      entitlements: ent         // write/features/limits completos para o app
+    });
+  } catch (err) {
+    console.error('[getLicense] err', err);
+    return res.status(500).json({ error: 'GET_LICENSE_ERROR' });
   }
 };
