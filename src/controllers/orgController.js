@@ -49,7 +49,7 @@ exports.generateInvite = async (req, res) => {
     const isOwner = String(org.owner) === String(userId);
 
     const membership = await OrgMember.findOne({ org: id, user: userId }).lean();
-    if (!isOwner && (!membership || !['coordenador','dm'].includes(membership.role))) {
+    if (!isOwner && (!membership || membership.role !== 'coordenador')) {
       return res.status(403).json({ error: 'INVITE_FORBIDDEN' });
     }
 
