@@ -9,6 +9,8 @@ const {
   getBirthdays
 } = require("../controllers/authController"); // 🔥 Mantido como está, seguindo sua organização atual
 const User = require("../models/User");
+const orgContext = require("../middleware/orgContext"); // ⬅️ novo
+const OrgMember = require("../models/OrgMember");       // ⬅️ novo
 
 // ✅ Retorna dados do usuário autenticado
 router.get("/me", authenticate, async (req, res) => {
@@ -28,16 +30,25 @@ router.patch("/me", authenticate, updateMe);
 // ✅ Listar aniversariantes do mês
 router.get("/birthdays", authenticate, getBirthdays);
 
-// ✅ Listar todos os usuários
-router.get("/", authenticate, async (req, res) => {
+// ✅ Listar usuários da organização ativa (multi-igrejas)
+router.get("/", authenticate, orgContext, async (req, res) => {
   try {
-    const users = req.user.role === 'coordenador'
-      ? await User.find().select('-password')
-      : await User.find().select('name _id photoUrl cloudinaryPublicId');
+    // busca os vínculos de membros na org ativa
+    const memberships = await OrgMember.find({ org: req.orgId }).select('user').lean();
+    const userIds = memberships.map(m => m.user).filter(Boolean);
 
+    // nenhum membro? retorna lista vazia
+    if (!userIds.length) return res.status(200).json([]);
+
+    // coordenador pode ver campos completos (exceto senha); demais veem um subset seguro
+    const projection = req.orgRole === 'coordenador'
+      ? '-password'
+      : 'name _id photoUrl cloudinaryPublicId';
+
+    const users = await User.find({ _id: { $in: userIds } }).select(projection);
     res.status(200).json(users);
   } catch (error) {
-    console.error('Erro ao buscar usuários:', error.message);
+    console.error('[GET /users] erro (filtrado por org):', error?.message);
     res.status(500).json({ message: 'Erro ao buscar usuários.' });
   }
 });
