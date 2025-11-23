@@ -24,8 +24,16 @@ exports.createOrg = async (req, res) => {
     const exists = await Organization.findOne({ slug });
     if (exists) return res.status(409).json({ error: 'ORG_SLUG_TAKEN' });
 
-    const org = await Organization.create({
-      name, slug, owner: ownerId
+        const org = await Organization.create({
+      name,
+      slug,
+      owner: ownerId,
+      license: {
+        status: 'trial',
+        // plano base FREE: durante o trial, o entitlements eleva temporariamente
+        // para o plano mais alto (5) conforme src/utils/entitlements.js
+        plan: 'FREE',
+      },
     });
 
     await OrgMember.create({ org: org._id, user: ownerId, role: 'coordenador' });
@@ -182,7 +190,7 @@ exports.getLicense = async (req, res) => {
     const ent = getEntitlementsFor(org);
 
     return res.json({
-      plan: ent.plan,           // FREE | PRO | PLUS (rótulo base)
+            plan: ent.plan,           // FREE | '1' | '2' | '3' | '4' | '5' (rótulo base)
       inTrial: ent.inTrial,     // true/false
       trialEndsAt: ent.trialEndsAt || null,
       entitlements: ent         // write/features/limits completos para o app
