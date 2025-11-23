@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 const LicenseSchema = new Schema({
   status: { type: String, enum: ['trial', 'active', 'expired'], default: 'trial' },
   trialStart: { type: Date, default: Date.now },
-  trialEnd:   { type: Date, default: () => new Date(Date.now() + 21*24*60*60*1000) }
+  trialEnd:   { type: Date, default: () => new Date(Date.now() + 14*24*60*60*1000) }
 }, { _id: false });
 
 const InviteSchema = new Schema({
