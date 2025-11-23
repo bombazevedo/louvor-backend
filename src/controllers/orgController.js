@@ -95,9 +95,10 @@ exports.myOrgs = async (req, res) => {
   try {
     const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
 
-    const memberships = await OrgMember.find({ user: userId })
-      .populate('org', 'name slug license')
+        const memberships = await OrgMember.find({ user: userId })
+      .populate('org', 'name slug license logoUrl cloudinaryPublicId')
       .lean();
+
 
     // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
     const memberOrgIds = memberships.map(m => String(m.org?._id || m.org));
@@ -108,10 +109,18 @@ exports.myOrgs = async (req, res) => {
 
     const response = [
       ...memberships.map(m => ({ org: m.org, role: m.role })),
-      ...ownedButNotMember.map(o => ({
-        org: { _id: o._id, name: o.name, slug: o.slug, license: o.license },
+            ...ownedButNotMember.map(o => ({
+        org: {
+          _id: o._id,
+          name: o.name,
+          slug: o.slug,
+          license: o.license,
+          logoUrl: o.logoUrl,
+          cloudinaryPublicId: o.cloudinaryPublicId,
+        },
         role: 'coordenador'
       }))
+
     ];
 
     res.json({ orgs: response });
@@ -120,6 +129,48 @@ exports.myOrgs = async (req, res) => {
     res.status(500).json({ error: 'MY_ORGS_ERROR' });
   }
 };
+
+// 👇 NOVO: atualizar logo da organização
+exports.updateLogo = async (req, res) => {
+  try {
+    const { id } = req.params; // orgId
+    const { logoUrl, cloudinaryPublicId } = req.body;
+
+    if (!logoUrl || !cloudinaryPublicId) {
+      return res.status(400).json({ error: 'LOGO_DATA_REQUIRED' });
+    }
+
+    // mesmo critério de permissão do generateInvite: owner ou coordenador
+    const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
+
+    const org = await Organization.findById(id).lean();
+    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
+
+    const isOwner = String(org.owner) === String(userId);
+    const membership = await OrgMember.findOne({ org: id, user: userId }).lean();
+
+    if (!isOwner && (!membership || membership.role !== 'coordenador')) {
+      return res.status(403).json({ error: 'UPDATE_LOGO_FORBIDDEN' });
+    }
+
+    const updated = await Organization.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          logoUrl,
+          cloudinaryPublicId,
+        },
+      },
+      { new: true }
+    ).lean();
+
+    return res.json({ org: updated });
+  } catch (err) {
+    console.error('[updateLogo] err', err);
+    return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
+  }
+};
+
 
 // ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
 exports.getLicense = async (req, res) => {

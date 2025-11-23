@@ -42,6 +42,7 @@ router.get('/_ping', (_req, res) => res.json({ pong: true }));
 router.post('/', auth, orgCtl.createOrg);
 router.post('/:id/invite', auth, orgCtl.generateInvite);
 router.post('/join', auth, orgCtl.joinByCode);
+router.put('/:id/logo', auth, orgCtl.updateLogo);
 router.get('/mine', auth, orgCtl.myOrgs);
 
 module.exports = router;

@@ -17,8 +17,11 @@ const OrganizationSchema = new Schema({
   name:  { type: String, required: true, trim: true },
   slug:  { type: String, required: true, unique: true, lowercase: true, trim: true },
   owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  logoUrl: { type: String, default: null },
+  cloudinaryPublicId: { type: String, default: null },
   license: { type: LicenseSchema, default: () => ({}) },
   invites: { type: [InviteSchema], default: [] }
 }, { timestamps: true });
+
 
 module.exports = mongoose.model('Organization', OrganizationSchema);
