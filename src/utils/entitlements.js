@@ -16,7 +16,7 @@
  *   Ex.: { limits: { songsPerEvent: 6 }, features: { duplicateEvent: true } }
  */
 
-const TRIAL_DAYS_DEFAULT = 21;
+const TRIAL_DAYS_DEFAULT = 14;
 
 // ---------- Planos base ----------
 const PLAN_MATRIX = {
