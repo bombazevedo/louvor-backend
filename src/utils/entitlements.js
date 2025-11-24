@@ -1,3 +1,4 @@
+ /**
  * src/utils/entitlements.js
  *
  * Matriz de planos + cálculo de trial e entitlements por organização.
