@@ -43,6 +43,7 @@ router.post('/', auth, orgCtl.createOrg);
 router.post('/:id/invite', auth, orgCtl.generateInvite);
 router.post('/join', auth, orgCtl.joinByCode);
 router.put('/:id/logo', auth, orgCtl.updateLogo);
+router.get('/:id/license', auth, orgCtl.getLicense);
 router.get('/mine', auth, orgCtl.myOrgs);
 
 module.exports = router;

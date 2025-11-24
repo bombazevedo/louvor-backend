@@ -9,6 +9,9 @@ const Notification = require('../models/Notification');
 const pushService = require('../services/pushService');
 // ⬆️⬆️⬆️ FIM DAS IMPORTAÇÕES NOVAS ⬆️⬆️⬆️
 
+// 🔑 NOVO: entitlements (planos / trial)
+const { getEntitlementsFor } = require('../utils/entitlements');
+
 moment.locale('pt-br');
 
 // ======================= CRUD Padrão =======================
@@ -445,34 +448,61 @@ function style() {
   `;
 }
 
+function resolveExportMode(ent) {
+  const plan = String(ent?.plan || 'FREE').toUpperCase();
+  const inTrial = !!ent?.inTrial;
+
+  // Trial sempre vê o produto completo
+  if (inTrial) return 'full';
+
+  // FREE e Plano 1 → escala simples (nome + função, sem avatar)
+  if (plan === 'FREE' || plan === '1') {
+    return 'simple';
+  }
+
+  // Demais planos (2,3,4,5) → escala completa
+  return 'full';
+}
+
 // ---------- HTML (sem semanas; lista linear por data) ----------
-function htmlTemplate({ events, label, coordinatorName, icons = {} }) {
+function htmlTemplate({ events, label, coordinatorName, icons = {}, mode = 'full' }) {
+
   const blocks = events.map((ev, idx) => {
     const alt = (idx % 2 === 1) ? ' alt' : '';
     const members = sortMembersFixed(ev.scale?.members || []);
 
-    const membersHtml = members.length
+        const membersHtml = members.length
       ? members.map(m => {
           const roleName = safe(m.function?.name);
-          const iconKey = normalizeKey(roleName);                       // 🔧 NOVO
-          const roleImg = icons[iconKey];                               // 🔧 NOVO (data URI do frontend)
+          const iconKey = normalizeKey(roleName);
+          const roleImg = icons[iconKey];
           const roleIconHtml = roleImg
-            ? `<img class="role-icon" src="${roleImg}" />`              // preferir ícone do app
-            : functionIconSvg(roleName);                                 // fallback: SVG inline
+            ? `<img class="role-icon" src="${roleImg}" />`
+            : functionIconSvg(roleName);
           const userName = safe(m.user?.name);
           const avatar = safe(
             m.user?.photoUrl ||
             m.user?.avatarUrl ||
             m.user?.avatar ||
             (m.user?.image && m.user?.image.url)
-          ); // 🔧 pequeno fallback p/ garantir avatar
-          return `
-            <div class="row">
-              <div class="role">${roleIconHtml}<span>${roleName}</span></div>
-              <div class="member">
+          ); // pequeno fallback p/ garantir avatar
+
+          // 🔀 Modo simples: só nome + função (sem ícone, sem avatar)
+          const roleCell = mode === 'simple'
+            ? `<div class="role"><span>${roleName}</span></div>`
+            : `<div class="role">${roleIconHtml}<span>${roleName}</span></div>`;
+
+          const memberCell = mode === 'simple'
+            ? `<div class="member"><span>${userName}</span></div>`
+            : `<div class="member">
                 ${avatar ? `<img class="avatar" src="${avatar}" />` : ''}
                 <span>${userName}</span>
-              </div>
+              </div>`;
+
+          return `
+            <div class="row">
+              ${roleCell}
+              ${memberCell}
             </div>
           `;
         }).join('')
@@ -526,7 +556,13 @@ function htmlTemplate({ events, label, coordinatorName, icons = {} }) {
 
 exports.exportScalesPDF = async (req, res) => {
   try {
-    // 🔧 NOVO: aceitar datas via body (POST) ou query (GET)
+    // 🔑 entitlements da organização atual (planos / trial)
+    const org = req._org || {};
+    const ent = req.entitlements || getEntitlementsFor(org);
+    req.entitlements = ent; // mantém disponível adiante
+    const exportMode = resolveExportMode(ent);
+
+    // 🔧 aceitar datas via body (POST) ou query (GET)
     const source = (req.body && (req.body.start || req.body.period || req.body.ref)) ? req.body : req.query;
     const { start, end, label } = resolveDateRange(source);
 
@@ -583,12 +619,13 @@ const finalEvents = events.map(ev => {
     // 🔧 NOVO: ícones vindos do frontend (data URI por chave normalizada)
     const icons = (req.body && req.body.icons) ? req.body.icons : {};
 
-    // 3) Montar HTML premium (sem semanas) — agora passando icons
+        // 3) Montar HTML (simples ou completo, conforme plano) — passando icons e mode
     const html = htmlTemplate({
       events: finalEvents,
       label,
       coordinatorName: req.user?.name || '',
-      icons
+      icons,
+      mode: exportMode
     });
 
     // 4) Gerar PDF via Puppeteer (ajustes p/ evitar timeout e manter avatares)

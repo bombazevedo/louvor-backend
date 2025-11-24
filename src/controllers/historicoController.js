@@ -1,4 +1,5 @@
 const Event = require('../models/Event');
+const { getEntitlementsFor } = require('../utils/entitlements');
 
 function normalizarTexto(texto) {
   return texto
@@ -17,20 +18,84 @@ function formatarNome(texto) {
     .trim();
 }
 
+// 🔑 Dias de histórico por plano (tabela da planilha)
+function getHistoryDays(ent) {
+  const inTrial = !!ent?.inTrial;
+  if (inTrial) return null; // trial vê tudo
+
+  const plan = String(ent?.plan || 'FREE').toUpperCase();
+
+  // FREE e Plano 1 → 7 dias
+  if (plan === 'FREE' || plan === '1') return 7;
+
+  // Planos 2 e 3 → 30 dias
+  if (plan === '2' || plan === '3') return 30;
+
+  // Plano 4 → 90 dias
+  if (plan === '4') return 90;
+
+  // Plano 5 → 365 dias
+  if (plan === '5') return 365;
+
+  // fallback conservador
+  return 7;
+}
+
+function getHistoryRange(ent, queryStart, queryEnd) {
+  const now = new Date();
+  const historyDays = getHistoryDays(ent);
+
+  let minByPlan = null;
+  if (historyDays != null) {
+    minByPlan = new Date(now.getTime() - historyDays * 24 * 60 * 60 * 1000);
+  }
+
+  let from = null;
+  let to = now;
+
+  if (queryStart) {
+    const s = new Date(queryStart);
+    if (!isNaN(s.getTime())) {
+      from = minByPlan ? (s > minByPlan ? s : minByPlan) : s;
+    }
+  } else if (minByPlan) {
+    from = minByPlan;
+  }
+
+  if (queryEnd) {
+    const e = new Date(queryEnd);
+    if (!isNaN(e.getTime()) && e < now) {
+      to = e;
+    }
+  }
+
+  return { from, to };
+}
+
 exports.listarHistorico = async (req, res) => {
   try {
-    const hoje = new Date();
-    const { start, end } = req.query;
+    const { start, end } = req.query || {};
+
+    // 🔑 entitlements da organização atual (se orgContext estiver ativo)
+    const org = req._org || null;
+    const ent = req.entitlements || (org ? getEntitlementsFor(org) : getEntitlementsFor({}));
+    req.entitlements = ent; // mantém disponível adiante
+
+    const { from, to } = getHistoryRange(ent, start, end);
 
     const filtro = {
-      date: { $lt: hoje },
       musicLinks: { $exists: true, $ne: [] }
     };
 
-    if (start || end) {
+    if (from || to) {
       filtro.date = {};
-      if (start) filtro.date.$gte = new Date(start);
-      if (end) filtro.date.$lte = new Date(end);
+      if (from) filtro.date.$gte = from;
+      if (to) filtro.date.$lte = to;
+    }
+
+    // opcional: se orgContext estiver em uso, filtra por organização
+    if (req.orgId) {
+      filtro.org = req.orgId;
     }
 
     const eventos = await Event.find(filtro).select('musicLinks');
@@ -86,18 +151,26 @@ exports.listarHistorico = async (req, res) => {
 
 exports.listarExecucoesIndividuais = async (req, res) => {
   try {
-    const hoje = new Date();
-    const { start, end } = req.query;
+    const { start, end } = req.query || {};
+
+    const org = req._org || null;
+    const ent = req.entitlements || (org ? getEntitlementsFor(org) : getEntitlementsFor({}));
+    req.entitlements = ent;
+
+    const { from, to } = getHistoryRange(ent, start, end);
 
     const filtro = {
-      date: { $lt: hoje },
       musicLinks: { $exists: true, $ne: [] }
     };
 
-    if (start || end) {
+    if (from || to) {
       filtro.date = {};
-      if (start) filtro.date.$gte = new Date(start);
-      if (end) filtro.date.$lte = new Date(end);
+      if (from) filtro.date.$gte = from;
+      if (to) filtro.date.$lte = to;
+    }
+
+    if (req.orgId) {
+      filtro.org = req.orgId;
     }
 
     const eventos = await Event.find(filtro).select('musicLinks date');
