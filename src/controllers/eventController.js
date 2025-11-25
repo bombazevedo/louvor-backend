@@ -2,6 +2,8 @@ const Event = require('../models/Event'); // ✅ correção: linha descomentada
 const Scale = require('../models/Scale');
 const Song = require('../models/Song');
 const { normalizeMusicUrl } = require('../utils/normalizeMusicUrl');
+// 🔑 Limites por plano (entitlements)
+const { getEntitlementsFor } = require('../utils/entitlements');
 
 // ⬇️ [INSERÇÃO] Push agregado (chat/evento)
 const pushService = require('../services/pushService');
@@ -184,7 +186,7 @@ const createEvent = async (req, res) => {
       }
     }
 
-    // ⬇️ ✅ (adição cirúrgica) normalização mínima de anexos
+        // ⬇️ ✅ (adição cirúrgica) normalização mínima de anexos
     const normalizedAttachments = Array.isArray(attachments)
       ? attachments
           .filter(Boolean)
@@ -194,6 +196,33 @@ const createEvent = async (req, res) => {
             public_id: a?.public_id || undefined
           }))
       : [];
+
+    // 🔒 Limites por plano (músicas/anexos por evento)
+    const org = req._org || {};
+    const ent = req.entitlements || getEntitlementsFor(org);
+    req.entitlements = ent;
+
+    const limits = ent.limits || {};
+    const songsPerEvent = limits.songsPerEvent ?? null;
+    const attachmentsPerEvent = limits.attachmentsPerEvent ?? null;
+
+    if (songsPerEvent != null && Array.isArray(musicLinks) && normalizedMusicLinks.length > songsPerEvent) {
+      return res.status(422).json({
+        error: 'LIMIT_REACHED',
+        limit: 'songsPerEvent',
+        plan: ent.plan,
+        allowed: songsPerEvent
+      });
+    }
+
+    if (attachmentsPerEvent != null && normalizedAttachments.length > attachmentsPerEvent) {
+      return res.status(422).json({
+        error: 'LIMIT_REACHED',
+        limit: 'attachmentsPerEvent',
+        plan: ent.plan,
+        allowed: attachmentsPerEvent
+      });
+    }
 
     // Consistência entre paletteMode e showFullPalette
     const resolvedPaletteMode =
@@ -301,6 +330,33 @@ const updateEvent = async (req, res) => {
           song: songId
         });
       }
+    }
+
+    // 🔒 Limites por plano (músicas/anexos por evento)
+    const org = req._org || {};
+    const ent = req.entitlements || getEntitlementsFor(org);
+    req.entitlements = ent;
+
+    const limits = ent.limits || {};
+    const songsPerEvent = limits.songsPerEvent ?? null;
+    const attachmentsPerEvent = limits.attachmentsPerEvent ?? null;
+
+    if (songsPerEvent != null && Array.isArray(musicLinks) && normalizedMusicLinks.length > songsPerEvent) {
+      return res.status(422).json({
+        error: 'LIMIT_REACHED',
+        limit: 'songsPerEvent',
+        plan: ent.plan,
+        allowed: songsPerEvent
+      });
+    }
+
+    if (attachmentsPerEvent != null && Array.isArray(attachments) && attachments.length > attachmentsPerEvent) {
+      return res.status(422).json({
+        error: 'LIMIT_REACHED',
+        limit: 'attachmentsPerEvent',
+        plan: ent.plan,
+        allowed: attachmentsPerEvent
+      });
     }
 
     const updateData = {
