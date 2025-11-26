@@ -1,3 +1,4 @@
+// TODO: noop comment just to trigger deploy (staging-multi-org)
 const Event = require('../models/Event'); // ✅ correção: linha descomentada
 const Scale = require('../models/Scale');
 const Song = require('../models/Song');
