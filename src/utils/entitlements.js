@@ -1,4 +1,4 @@
- /**
+/**
  * src/utils/entitlements.js
  *
  * Matriz de planos + cálculo de trial e entitlements por organização.
@@ -26,7 +26,8 @@ const PLAN_MATRIX = {
     plan: 'FREE',
     write: { allowed: true, mode: 'limited' }, // pós-trial: escrita com limites (aplicar limitsGuard)
     features: {
-      teams: true,
+      // FREE não pode trabalhar com equipes
+      teams: false,
       statsBasic: true,
       statsAdvanced: false,
       palettePicker: true,
@@ -41,7 +42,7 @@ const PLAN_MATRIX = {
       songsPerEvent: 2,
       attachmentsPerEvent: 1,
       storageMB: 500,            // cota total por org (indicativa; tratar no upload se desejar)
-      teamsPerOrg: null,         // null = sem teto explícito pelo plano
+      teamsPerOrg: 0,            // FREE: não pode criar equipes
       membersPerTeam: null,
       // campos extras não são relevantes para o FREE por enquanto
       repertoireHistoryDays: 7,
