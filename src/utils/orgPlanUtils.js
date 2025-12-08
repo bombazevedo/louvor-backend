@@ -1,20 +1,27 @@
 // src/utils/orgPlanUtils.js
 const Organization = require('../models/Organization');
-const { getEntitlementsForOwner } = require('./entitlements'); 
-// use o nome real do seu helper de entitlements
+const { getEntitlementsFor } = require('./entitlements'); 
+// usamos o helper oficial baseado na ORGANIZAÇÃO, não em owner
 
 /**
  * Retorna as organizações do dono separadas por status de plano.
  */
 async function getOwnerOrgsPlanState(ownerId) {
-  // 1) Entitlements do dono (plano e limites)
-  const ent = await getEntitlementsForOwner(ownerId);
-  const orgLimit = ent?.limits?.orgsPerOwner ?? null;
-
-  // 2) Buscar todas as orgs do dono, em ordem de criação
+  // 1) Buscar todas as orgs do dono, em ordem de criação
   const orgs = await Organization.find({ owner: ownerId })
-    .sort({ createdAt: 1, _id: 1 }) // fallback por _id se não tiver createdAt
+    .sort({ createdAt: 1, _id: 1 })
     .select('_id name createdAt');
+
+  // ⚠️ Como os entitlements agora são por ORGANIZAÇÃO (não por owner),
+  // usamos a PRIMEIRA org como base de referência
+  // (mantendo compatibilidade com o fluxo existente).
+  let ent = null;
+  let orgLimit = null;
+
+  if (orgs.length > 0) {
+    ent = getEntitlementsFor(orgs[0]);
+    orgLimit = ent?.limits?.orgsPerOwner ?? null;
+  }
 
   if (orgLimit === null) {
     // Sem limite: tudo ativo
