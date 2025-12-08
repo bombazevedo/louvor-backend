@@ -30,6 +30,7 @@ const unavailabilityRoutes = require('./routes/unavailabilityRoutes'); // <-- AD
 const musicRoutes = require('./routes/musicRoutes');
 const chordRoutes = require('./routes/chordRoutes');
 const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 
 // ✅ Notificações com nome novo (OK)
 const notificationsRoutes = require('./routes/notifications.routes');
@@ -59,6 +60,8 @@ app.use('/api/notifications', notificationsRoutes);
 
 // ✅ Rotas de PUSH (cadastro de token / teste)
 app.use('/api/push', pushRoutes);
+
+app.use('/api/admin', adminRoutes);
 
 // Conexão MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
