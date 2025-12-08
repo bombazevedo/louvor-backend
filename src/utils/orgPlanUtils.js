@@ -1,6 +1,6 @@
 // src/utils/orgPlanUtils.js
 const Organization = require('../models/Organization');
-const { getEntitlementsForOwner } = require('./entitlementsService'); 
+const { getEntitlementsForOwner } = require('./entitlements'); 
 // use o nome real do seu helper de entitlements
 
 /**
