@@ -3,6 +3,7 @@ const crypto = require('crypto');
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
 const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ adição pontual
+const { getOwnerOrgsPlanState } = require('../utils/orgPlanUtils');
 
 const slugify = (s) => s.normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -19,6 +20,23 @@ exports.createOrg = async (req, res) => {
     // ✅ pega o ID do usuário autenticado em formatos comuns (id, _id, req.userId)
     const ownerId = (req.user && (req.user.id || req.user._id)) || req.userId || (req.auth && req.auth.id);
     if (!ownerId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
+    const state = await getOwnerOrgsPlanState(ownerId);
+    const ent = state.entitlements;
+    const orgLimit = ent?.limits?.orgsPerOwner ?? null;
+    const currentCount = state.orgs.length;
+
+    if (orgLimit !== null && currentCount >= orgLimit) {
+      return res.status(403).json({
+        error: 'ORG_LIMIT_REACHED',
+        message: `Seu plano permite criar até ${orgLimit} organização(ões). Exclua uma organização ou faça upgrade para criar novas.`,
+        plan: ent.plan,
+        inTrial: !!ent.inTrial,
+        allowed: orgLimit,
+        current: currentCount,
+      });
+    }
 
     const slug = slugify(name);
     const exists = await Organization.findOne({ slug });
@@ -103,10 +121,14 @@ exports.myOrgs = async (req, res) => {
   try {
     const userId = (req.user && (req.user._id || req.user.id)) || req.userId || (req.auth && req.auth.id);
 
-        const memberships = await OrgMember.find({ user: userId })
+    // 🔐 Estado de plano do dono: quais orgs dele estão ativas e quais estão travadas pelo limite
+    const state = await getOwnerOrgsPlanState(userId);
+    const ent = state.entitlements;
+    const lockedSet = new Set(state.lockedOrgIds.map(id => String(id)));
+
+    const memberships = await OrgMember.find({ user: userId })
       .populate('org', 'name slug license logoUrl cloudinaryPublicId')
       .lean();
-
 
     // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
     const memberOrgIds = memberships.map(m => String(m.org?._id || m.org));
@@ -116,8 +138,17 @@ exports.myOrgs = async (req, res) => {
     }).lean();
 
     const response = [
-      ...memberships.map(m => ({ org: m.org, role: m.role })),
-            ...ownedButNotMember.map(o => ({
+      // Orgs onde o usuário é membro (pode ou não ser dono)
+      ...memberships.map(m => ({
+        org: {
+          ...m.org,
+          // se esta org está na lista de travadas do dono, marcamos lockedByPlan
+          lockedByPlan: lockedSet.has(String(m.org?._id)),
+        },
+        role: m.role
+      })),
+      // Orgs onde o usuário é dono mas não tem membership explícito
+      ...ownedButNotMember.map(o => ({
         org: {
           _id: o._id,
           name: o.name,
@@ -125,13 +156,20 @@ exports.myOrgs = async (req, res) => {
           license: o.license,
           logoUrl: o.logoUrl,
           cloudinaryPublicId: o.cloudinaryPublicId,
+          lockedByPlan: lockedSet.has(String(o._id)),
         },
         role: 'coordenador'
       }))
-
     ];
 
-    res.json({ orgs: response });
+    res.json({
+      orgs: response,
+      plan: ent.plan,
+      inTrial: !!ent.inTrial,
+      limits: {
+        orgsPerOwner: ent.limits?.orgsPerOwner ?? null,
+      },
+    });
   } catch (err) {
     console.error('[myOrgs] err', err);
     res.status(500).json({ error: 'MY_ORGS_ERROR' });
