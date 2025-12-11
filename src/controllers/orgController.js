@@ -1,4 +1,3 @@
-//                               const crypto = require('crypto'); 
 const crypto = require('crypto');
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
@@ -42,7 +41,7 @@ exports.createOrg = async (req, res) => {
     const exists = await Organization.findOne({ slug });
     if (exists) return res.status(409).json({ error: 'ORG_SLUG_TAKEN' });
 
-        const org = await Organization.create({
+    const org = await Organization.create({
       name,
       slug,
       owner: ownerId,
@@ -200,7 +199,25 @@ exports.updateLogo = async (req, res) => {
     }
 
     const updated = await Organization.findByIdAndUpdate(
-      id,// ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
+      id,
+      {
+        $set: {
+          logoUrl,
+          cloudinaryPublicId,
+        },
+      },
+      { new: true }
+    ).lean();
+
+    return res.json({ org: updated });
+  } catch (err) {
+    console.error('[updateLogo] err', err);
+    return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
+  }
+};
+
+
+// ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
 exports.getLicense = async (req, res) => {
   try {
     // orgContext injeta req._org e req.orgId; usamos req._org como verdade
@@ -234,21 +251,3 @@ exports.getLicense = async (req, res) => {
     return res.status(500).json({ error: 'GET_LICENSE_ERROR' });
   }
 };
-
-      {
-        $set: {
-          logoUrl,
-          cloudinaryPublicId,
-        },
-      },
-      { new: true }
-    ).lean();
-
-    return res.json({ org: updated });
-  } catch (err) {
-    console.error('[updateLogo] err', err);
-    return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
-  }
-};
-
-
