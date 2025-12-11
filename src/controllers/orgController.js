@@ -200,7 +200,41 @@ exports.updateLogo = async (req, res) => {
     }
 
     const updated = await Organization.findByIdAndUpdate(
-      id,
+      id,// ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
+exports.getLicense = async (req, res) => {
+  try {
+    // orgContext injeta req._org e req.orgId; usamos req._org como verdade
+    const org = req._org || await Organization.findById(req.params.id).lean();
+    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
+
+    const ent = getEntitlementsFor(org);
+
+    // 🔎 Lemos os campos de assinatura diretamente da licença da organização
+    const license = org.license || {};
+    const planStart =
+      license.planStart || license.planStartsAt || null; // flexível para futuros ajustes
+    const planEnd =
+      license.planEnd || license.planExpiresAt || null;  // é o que o app vai usar para "Válido até"
+    const billingPeriod = license.billingPeriod || null; // 'monthly' | 'quarterly' | 'annual' | null
+
+    return res.json({
+      plan: ent.plan,           // FREE | '1' | '2' | '3' | '4' | '5' (código base)
+      inTrial: ent.inTrial,     // true/false
+      trialEndsAt: ent.trialEndsAt || null,
+
+      // 🔹 Infos de assinatura paga (para AboutScreen e futuras telas de planos)
+      planStart,
+      planEnd,
+      billingPeriod,
+
+      entitlements: ent         // write/features/limits completos para o app
+    });
+  } catch (err) {
+    console.error('[getLicense] err', err);
+    return res.status(500).json({ error: 'GET_LICENSE_ERROR' });
+  }
+};
+
       {
         $set: {
           logoUrl,
@@ -218,23 +252,3 @@ exports.updateLogo = async (req, res) => {
 };
 
 
-// ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
-exports.getLicense = async (req, res) => {
-  try {
-    // orgContext injeta req._org e req.orgId; usamos req._org como verdade
-    const org = req._org || await Organization.findById(req.params.id).lean();
-    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
-
-    const ent = getEntitlementsFor(org);
-
-    return res.json({
-            plan: ent.plan,           // FREE | '1' | '2' | '3' | '4' | '5' (rótulo base)
-      inTrial: ent.inTrial,     // true/false
-      trialEndsAt: ent.trialEndsAt || null,
-      entitlements: ent         // write/features/limits completos para o app
-    });
-  } catch (err) {
-    console.error('[getLicense] err', err);
-    return res.status(500).json({ error: 'GET_LICENSE_ERROR' });
-  }
-};
