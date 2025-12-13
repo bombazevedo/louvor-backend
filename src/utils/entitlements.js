@@ -76,7 +76,7 @@ const PLAN_MATRIX = {
       storageMB: null,
       teamsPerOrg: 1,
       membersPerTeam: null,
-      repertoireHistoryDays: 7,  // 7 dias de histórico
+      repertoireHistoryDays: 30,  // 30 dias de histórico
       dmsPerOrg: 2,
       orgsPerOwner: 1,
     },
@@ -138,7 +138,7 @@ const PLAN_MATRIX = {
       storageMB: null,
       teamsPerOrg: 3,
       membersPerTeam: null,
-      repertoireHistoryDays: 30,
+      repertoireHistoryDays: 90,
       dmsPerOrg: 4,
       orgsPerOwner: 2,
     },
@@ -169,7 +169,7 @@ const PLAN_MATRIX = {
       storageMB: null,
       teamsPerOrg: 5,
       membersPerTeam: null,
-      repertoireHistoryDays: 90,
+      repertoireHistoryDays: 180,
       dmsPerOrg: 5,
       orgsPerOwner: 4,
     },

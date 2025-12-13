@@ -18,23 +18,30 @@ function formatarNome(texto) {
     .trim();
 }
 
-// 🔑 Dias de histórico por plano (tabela da planilha)
+// 🔑 Dias de histórico por plano
 function getHistoryDays(ent) {
   const inTrial = !!ent?.inTrial;
   if (inTrial) return null; // trial vê tudo
 
+  // ✅ Fonte de verdade (quando existir): entitlements.limits.repertoireHistoryDays
+  const fromLimits = ent?.limits?.repertoireHistoryDays;
+  if (fromLimits === null) return null; // null = ilimitado
+  if (fromLimits !== undefined) {
+    const n = Number(fromLimits);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+
   const plan = String(ent?.plan || 'FREE').toUpperCase();
 
-  // FREE e Plano 1 → 7 dias
-  if (plan === 'FREE' || plan === '1') return 7;
+  // ✅ Fallback (tabela padrão do projeto)
+  // FREE → 7 dias
+  if (plan === 'FREE') return 7;
 
-  // Planos 2 e 3 → 30 dias
-  if (plan === '2' || plan === '3') return 30;
-
-  // Plano 4 → 90 dias
-  if (plan === '4') return 90;
-
-  // Plano 5 → 365 dias
+  // Planos → (ajuste para ficar coerente com a regra do histórico)
+  if (plan === '1') return 30;
+  if (plan === '2') return 60;
+  if (plan === '3') return 90;
+  if (plan === '4') return 180;
   if (plan === '5') return 365;
 
   // fallback conservador
