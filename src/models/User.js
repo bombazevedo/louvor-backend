@@ -39,13 +39,21 @@ const UserSchema = new mongoose.Schema({
     }
   },
 
-  role: {
+    role: {
     type: String,
     enum: ['admin', 'coordenador', 'dm', 'usuario'],
     default: 'usuario',
     lowercase: true,
     trim: true
-  }
+  },
+
+  // 🔐 Recuperação de senha (OTP por e-mail)
+  resetCodeHash: { type: String },
+  resetCodeExpires: { type: Date },
+  resetCodeLastSentAt: { type: Date },
+  resetCodeAttempts: { type: Number, default: 0 }
+
 }, { timestamps: true });
+
 
 module.exports = mongoose.model('User', UserSchema);
