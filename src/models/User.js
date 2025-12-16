@@ -48,10 +48,10 @@ const UserSchema = new mongoose.Schema({
   },
 
   // 🔐 Recuperação de senha (OTP por e-mail)
-  resetCodeHash: { type: String },
-  resetCodeExpires: { type: Date },
-  resetCodeLastSentAt: { type: Date },
-  resetCodeAttempts: { type: Number, default: 0 }
+  resetCodeHash: { type: String, select: false },
+  resetCodeExpires: { type: Date, select: false },
+  resetCodeLastSentAt: { type: Date, select: false },
+  resetCodeAttempts: { type: Number, default: 0, select: false }
 
 }, { timestamps: true });
 

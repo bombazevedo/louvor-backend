@@ -4,7 +4,7 @@ const axios = require('axios');
  * Envia e-mail via Resend (HTTP).
  * Requer:
  * - RESEND_API_KEY
- * - RESEND_FROM (ex: 'WorshipHub <[email protected]>' ou 'onboarding@resend.dev' para testes)
+ * - RESEND_FROM (ex: 'WorshipHub <no-reply@worshiphub-recover.org>' ou 'onboarding@resend.dev' para testes)
  */
 async function sendEmail({ to, subject, html, text }) {
   const apiKey = process.env.RESEND_API_KEY;
