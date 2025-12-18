@@ -206,8 +206,10 @@ exports.forgotPassword = async (req, res) => {
       return res.status(200).json(safeMsg);
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const user = await User.findOne({ email: normalizedEmail });
+        const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail })
+      .select('+resetCodeLastSentAt');
+
 
     // Sempre responde 200 (não revela existência de conta)
     if (!user) {
@@ -281,8 +283,10 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: 'A senha deve ter pelo menos 6 caracteres' });
     }
 
-    const normalizedEmail = String(email).toLowerCase().trim();
-    const user = await User.findOne({ email: normalizedEmail });
+        const normalizedEmail = String(email).toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail })
+      .select('+resetCodeHash +resetCodeExpires +resetCodeLastSentAt +resetCodeAttempts');
+
     if (!user) {
       return res.status(400).json({ message: 'Código inválido ou expirado' });
     }
