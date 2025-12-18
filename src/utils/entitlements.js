@@ -36,6 +36,7 @@ const PLAN_MATRIX = {
       attachments: true,
       chat: true,
       pushNotifications: true,
+      externalLinks: false, // 🔒 determinístico: FREE não tem links externos
     },
     limits: {
       eventsPerMonth: 6,
