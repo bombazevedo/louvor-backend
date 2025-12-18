@@ -225,14 +225,27 @@ const createEvent = async (req, res) => {
       });
     }
 
-    // Consistência entre paletteMode e showFullPalette
+        const paletteFeatureAllowed = ent?.features?.palettePicker === true;
+
+    // Se o plano não permitir paleta, ignora payload e salva valores neutros
+    const effectivePrimaryColor =
+      paletteFeatureAllowed && typeof primaryColor === 'string' ? primaryColor : null;
+
+    const effectiveColorPalette =
+      paletteFeatureAllowed && Array.isArray(colorPalette) ? colorPalette : [];
+
+    // Consistência entre paletteMode e showFullPalette (apenas se permitido)
     const resolvedPaletteMode =
-      paletteMode === 'mono' || paletteMode === 'full'
+      paletteFeatureAllowed && (paletteMode === 'mono' || paletteMode === 'full')
         ? paletteMode
-        : (typeof showFullPalette === 'boolean' ? (showFullPalette ? 'full' : 'mono') : 'full');
-    const resolvedShowFull = typeof showFullPalette === 'boolean'
-      ? showFullPalette
-      : (resolvedPaletteMode === 'full');
+        : (paletteFeatureAllowed && typeof showFullPalette === 'boolean'
+            ? (showFullPalette ? 'full' : 'mono')
+            : 'full');
+
+    const resolvedShowFull =
+      paletteFeatureAllowed && typeof showFullPalette === 'boolean'
+        ? showFullPalette
+        : (resolvedPaletteMode === 'full');
 
     const newEvent = new Event({
     org: req.orgId,
@@ -243,8 +256,8 @@ const createEvent = async (req, res) => {
       type,
   dnNotes: (typeof dnNotes === 'string') ? dnNotes : '',
       musicLinks: normalizedMusicLinks,
-      primaryColor: (typeof primaryColor === 'string') ? primaryColor : null,
-      colorPalette: Array.isArray(colorPalette) ? colorPalette : [],
+      primaryColor: effectivePrimaryColor,
+      colorPalette: effectiveColorPalette,
       paletteMode: resolvedPaletteMode,
       showFullPalette: resolvedShowFull,
       attachments: normalizedAttachments // ⬅️ ✅ (adição cirúrgica) salva anexos no evento
@@ -360,6 +373,19 @@ const updateEvent = async (req, res) => {
       });
     }
 
+    const paletteFeatureAllowed = ent?.features?.palettePicker === true;
+
+    // Se o plano NÃO permitir paleta, buscamos o estado atual para congelar
+    const currentEventForPalette = !paletteFeatureAllowed
+      ? await Event.findOne({ _id: req.params.id, org: req.orgId })
+          .select('primaryColor colorPalette paletteMode showFullPalette')
+          .lean()
+      : null;
+
+    if (!paletteFeatureAllowed && !currentEventForPalette) {
+      return res.status(404).json({ message: 'Evento não encontrado' });
+    }
+
     const updateData = {
       title,
       description,
@@ -367,23 +393,35 @@ const updateEvent = async (req, res) => {
       location,
       type,
       musicLinks: normalizedMusicLinks,
-      colorPalette: Array.isArray(colorPalette) ? colorPalette : []
+      colorPalette: paletteFeatureAllowed
+        ? (Array.isArray(colorPalette) ? colorPalette : [])
+        : (Array.isArray(currentEventForPalette?.colorPalette) ? currentEventForPalette.colorPalette : [])
     };
 
 if (typeof dnNotes === 'string') updateData.dnNotes = dnNotes;
 
-    if (typeof primaryColor === 'string') {
-      updateData.primaryColor = primaryColor;
-    }
+    if (paletteFeatureAllowed) {
+      if (typeof primaryColor === 'string') {
+        updateData.primaryColor = primaryColor;
+      }
 
-    // 🔒 Persistência do modo (coordenador define e todos visualizam igual)
-    if (paletteMode === 'mono' || paletteMode === 'full') {
-      updateData.paletteMode = paletteMode;
-      updateData.showFullPalette = (paletteMode === 'full');
-    }
-    if (typeof showFullPalette === 'boolean') {
-      updateData.showFullPalette = showFullPalette;
-      updateData.paletteMode = showFullPalette ? 'full' : 'mono';
+      // 🔒 Persistência do modo (coordenador define e todos visualizam igual)
+      if (paletteMode === 'mono' || paletteMode === 'full') {
+        updateData.paletteMode = paletteMode;
+        updateData.showFullPalette = (paletteMode === 'full');
+      }
+      if (typeof showFullPalette === 'boolean') {
+        updateData.showFullPalette = showFullPalette;
+        updateData.paletteMode = showFullPalette ? 'full' : 'mono';
+      }
+    } else {
+      // congela os campos de paleta no que já está salvo
+      updateData.primaryColor = currentEventForPalette?.primaryColor ?? null;
+      updateData.paletteMode = currentEventForPalette?.paletteMode ?? 'full';
+      updateData.showFullPalette =
+        typeof currentEventForPalette?.showFullPalette === 'boolean'
+          ? currentEventForPalette.showFullPalette
+          : (updateData.paletteMode === 'full');
     }
 
     // ⬇️ ✅ (adição cirúrgica) normalização e persistência dos anexos

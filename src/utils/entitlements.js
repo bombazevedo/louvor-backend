@@ -22,6 +22,7 @@ const TRIAL_DAYS_DEFAULT = 14;
 // ---------- Planos base ----------
 const PLAN_MATRIX = {
   // FREE continua sendo o plano demo, com limites bem restritos
+
   FREE: {
     plan: 'FREE',
     write: { allowed: true, mode: 'limited' }, // pós-trial: escrita com limites (aplicar limitsGuard)
@@ -30,7 +31,7 @@ const PLAN_MATRIX = {
       teams: false,
       statsBasic: true,
       statsAdvanced: false,
-      palettePicker: true,
+      palettePicker: false,
       duplicateEvent: false,
       attachments: true,
       chat: true,
