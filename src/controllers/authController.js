@@ -1,4 +1,7 @@
 const User = require('../models/User');
+const OrgMember = require('../models/OrgMember'); // ✅ (ADIÇÃO) trava DM por organização
+const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ (ADIÇÃO) matriz de planos
+
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const cloudinary = require('cloudinary').v2;
@@ -97,26 +100,80 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// 🎚 Atualizar função (somente coordenador)
+// 🎚 Atualizar função (somente coordenador) — com trava de DM por ORGANIZAÇÃO
 exports.updateUserRole = async (req, res) => {
   try {
-    if (req.user.role?.toLowerCase() !== 'coordenador') {
+    // ✅ Fonte de verdade: papel na organização (orgContext injeta req.orgRole/req.orgId/req._org)
+    if ((req.orgRole || req.user.role)?.toLowerCase() !== 'coordenador') {
       return res.status(403).json({ message: 'Apenas coordenadores podem alterar funções.' });
     }
 
-    const { role } = req.body;
+    const { role } = req.body || {};
+    const nextRole = String(role || '').toLowerCase().trim();
+
+    if (!nextRole) {
+      return res.status(400).json({ message: 'Role inválida.' });
+    }
+
+    const targetUserId = req.params.id;
+
+    // ✅ Trava por organização (quando promovendo para DM)
+    if (nextRole === 'dm') {
+      const orgId = req.orgId;
+      if (!orgId) {
+        return res.status(400).json({ message: 'Organização ativa não identificada.' });
+      }
+
+      // Entitlements do plano atual da org
+      const ent = getEntitlementsFor(req._org);
+      const dmLimit = ent?.limits?.dmsPerOrg ?? null; // null => ilimitado
+
+      if (dmLimit !== null) {
+        // Verifica membership do alvo e se já é DM (para não bloquear “setar DM” de quem já é DM)
+        const existingMember = await OrgMember.findOne({ org: orgId, user: targetUserId })
+          .select('_id role')
+          .lean();
+
+        const alreadyDm = existingMember?.role === 'dm';
+
+        if (!alreadyDm) {
+          const currentDmCount = await OrgMember.countDocuments({ org: orgId, role: 'dm' });
+
+          if (currentDmCount >= dmLimit) {
+            return res.status(403).json({
+              message: 'Limite de Diretores Musicais atingido para este plano. Faça upgrade para adicionar mais DMs.',
+              code: 'DM_LIMIT_REACHED',
+              limit: dmLimit,
+              current: currentDmCount,
+            });
+          }
+        }
+      }
+    }
+
+    // ✅ Atualiza papel no vínculo OrgMember (se existir)
+    // (mínima intervenção: não quebra estruturas antigas e atende multi-org)
+    if (req.orgId) {
+      await OrgMember.findOneAndUpdate(
+        { org: req.orgId, user: targetUserId },
+        { role: nextRole },
+        { new: true }
+      );
+    }
+
+    // ✅ Compatibilidade: mantém atualização do User.role (seu fluxo atual pode depender disso)
     const updatedUser = await User.findByIdAndUpdate(
-      req.params.id,
-      { role: role.toLowerCase() },
+      targetUserId,
+      { role: nextRole },
       { new: true }
     ).select('-password');
 
     if (!updatedUser) return res.status(404).json({ message: 'Usuário não encontrado' });
 
-    res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
+    return res.status(200).json({ message: 'Função atualizada com sucesso.', user: updatedUser });
   } catch (err) {
-    console.error('[updateUserRole] Erro:', err.message);
-    res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
+    console.error('[updateUserRole] Erro:', err?.message || err);
+    return res.status(500).json({ message: 'Erro ao atualizar função do usuário' });
   }
 };
 

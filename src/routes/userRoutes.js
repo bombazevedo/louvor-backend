@@ -57,7 +57,7 @@ router.get("/", authenticate, orgContext, async (req, res) => {
 router.get("/:id", authenticate, getUserById);
 
 // ✅ Atualizar função do usuário (somente coordenador)
-router.patch("/:id", authenticate, updateUserRole);
+router.patch("/:id", authenticate, orgContext, updateUserRole);
 
 // ✅ Atualização completa de perfil por ID (restrita a admin ou dono)
 router.put("/:id", authenticate, async (req, res) => {
