@@ -118,6 +118,7 @@ exports.updateUserRole = async (req, res) => {
     const targetUserId = req.params.id;
 
     // ✅ Trava por organização (quando promovendo para DM)
+    
     if (nextRole === 'dm') {
       const orgId = req.orgId;
       if (!orgId) {
@@ -125,16 +126,16 @@ exports.updateUserRole = async (req, res) => {
       }
 
       // Entitlements do plano atual da org
-      const ent = getEntitlementsFor(req._org);
+      const ent = getEntitlementsFor(req._org || req.org || null);
       const dmLimit = ent?.limits?.dmsPerOrg ?? null; // null => ilimitado
 
       if (dmLimit !== null) {
-        // Verifica membership do alvo e se já é DM (para não bloquear “setar DM” de quem já é DM)
+        // Verifica membership do alvo e se já é DM (evita bloquear “setar DM” de quem já é DM)
         const existingMember = await OrgMember.findOne({ org: orgId, user: targetUserId })
           .select('_id role')
           .lean();
 
-        const alreadyDm = existingMember?.role === 'dm';
+        const alreadyDm = String(existingMember?.role || '').toLowerCase() === 'dm';
 
         if (!alreadyDm) {
           const currentDmCount = await OrgMember.countDocuments({ org: orgId, role: 'dm' });

@@ -240,11 +240,51 @@ function resolvePlan(org) {
   const plan =
     (org && org.license && (org.license.plan || org.license.status)) || 'FREE';
 
-  const normalized = String(plan).toUpperCase();
+  // Normalização robusta (evita cair em FREE por variações como "PLANO 1", "PLAN_1", "P1", etc.)
+  const raw = String(plan || '').trim();
+  const upper = raw.toUpperCase();
 
-  // Agora os planos válidos são: FREE, '1', '2', '3', '4', '5'
-  if (Object.prototype.hasOwnProperty.call(PLAN_MATRIX, normalized)) {
-    return normalized;
+  // Primeiro: caso já seja uma chave válida (FREE, 1..5)
+  if (Object.prototype.hasOwnProperty.call(PLAN_MATRIX, upper)) {
+    return upper;
+  }
+
+  // Remove espaços/traços para reconhecer variações comuns
+  const compact = upper.replace(/\s+/g, '').replace(/[_-]+/g, '');
+
+  // Mapeia aliases comuns -> chaves oficiais da matriz
+  const aliasMap = {
+    // FREE
+    GRATUITO: 'FREE',
+    FREEPLAN: 'FREE',
+    PLANO0: 'FREE',
+    PLAN0: 'FREE',
+
+    // 1..5 (variações humanas)
+    PLANO1: '1',
+    PLAN1: '1',
+    P1: '1',
+
+    PLANO2: '2',
+    PLAN2: '2',
+    P2: '2',
+
+    PLANO3: '3',
+    PLAN3: '3',
+    P3: '3',
+
+    PLANO4: '4',
+    PLAN4: '4',
+    P4: '4',
+
+    PLANO5: '5',
+    PLAN5: '5',
+    P5: '5',
+  };
+
+  const mapped = aliasMap[compact] || aliasMap[upper] || null;
+  if (mapped && Object.prototype.hasOwnProperty.call(PLAN_MATRIX, mapped)) {
+    return mapped;
   }
 
   // status "trial" não é plano; será tratado no getEntitlementsFor
