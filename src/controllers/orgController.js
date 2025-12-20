@@ -136,30 +136,75 @@ exports.myOrgs = async (req, res) => {
       _id: { $nin: memberOrgIds }
     }).lean();
 
-    const response = [
-      // Orgs onde o usuário é membro (pode ou não ser dono)
-      ...memberships.map(m => ({
-        org: {
-          ...m.org,
-          // se esta org está na lista de travadas do dono, marcamos lockedByPlan
-          lockedByPlan: lockedSet.has(String(m.org?._id)),
-        },
+const DEFAULT_PLAN = 'FREE';
+
+const normalizeOrgForResponse = (orgDoc, lockedByPlan) => {
+  if (!orgDoc) return null;
+
+  const license = orgDoc.license || {};
+  const normalizedLicense = {
+    ...license,
+    plan: license.plan || DEFAULT_PLAN,
+  };
+
+  return {
+    ...orgDoc,
+    license: normalizedLicense,
+    lockedByPlan: !!lockedByPlan,
+  };
+};
+
+const response = [
+  // Orgs onde o usuário é membro (pode ou não ser dono)
+  ...memberships
+    .map(m => {
+      if (!m.org) {
+        console.warn('[myOrgs] membership com org=null (referência quebrada). Ignorando.', {
+          userId: String(userId),
+          membershipId: String(m?._id),
+          orgId: String(m?.org),
+        });
+        return null;
+      }
+
+      const orgNormalized = normalizeOrgForResponse(
+        m.org,
+        lockedSet.has(String(m.org?._id))
+      );
+
+      if (!orgNormalized) return null;
+
+      return {
+        org: orgNormalized,
         role: m.role
-      })),
-      // Orgs onde o usuário é dono mas não tem membership explícito
-      ...ownedButNotMember.map(o => ({
-        org: {
+      };
+    })
+    .filter(Boolean),
+
+  // Orgs onde o usuário é dono mas não tem membership explícito
+  ...ownedButNotMember
+    .map(o => {
+      const orgNormalized = normalizeOrgForResponse(
+        {
           _id: o._id,
           name: o.name,
           slug: o.slug,
           license: o.license,
           logoUrl: o.logoUrl,
           cloudinaryPublicId: o.cloudinaryPublicId,
-          lockedByPlan: lockedSet.has(String(o._id)),
         },
+        lockedSet.has(String(o._id))
+      );
+
+      if (!orgNormalized) return null;
+
+      return {
+        org: orgNormalized,
         role: 'coordenador'
-      }))
-    ];
+      };
+    })
+    .filter(Boolean)
+];
 
     res.json({
       orgs: response,
