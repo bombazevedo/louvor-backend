@@ -21,6 +21,11 @@ async function getOwnerOrgsPlanState(ownerId) {
   if (orgs.length > 0) {
     ent = getEntitlementsFor(orgs[0]);
     orgLimit = ent?.limits?.orgsPerOwner ?? null;
+  } else {
+    // ✅ Blindagem: usuário pode não ser owner de nenhuma org (ex.: entrou apenas por convite)
+    // Nesses casos, não podemos deixar entitlements nulo, pois /api/orgs/mine pode depender disso.
+    ent = getEntitlementsFor({ license: { plan: 'FREE' } });
+    orgLimit = ent?.limits?.orgsPerOwner ?? null;
   }
 
   if (orgLimit === null) {

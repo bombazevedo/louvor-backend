@@ -22,7 +22,7 @@ exports.createOrg = async (req, res) => {
 
     // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
     const state = await getOwnerOrgsPlanState(ownerId);
-    const ent = state.entitlements;
+     	 	
     const orgLimit = ent?.limits?.orgsPerOwner ?? null;
     const currentCount = state.orgs.length;
 
@@ -30,8 +30,9 @@ exports.createOrg = async (req, res) => {
       return res.status(403).json({
         error: 'ORG_LIMIT_REACHED',
         message: `Seu plano permite criar até ${orgLimit} organização(ões). Exclua uma organização ou faça upgrade para criar novas.`,
-        plan: ent.plan,
-        inTrial: !!ent.inTrial,
+       plan: ent?.plan || 'FREE',
+       inTrial: !!ent?.inTrial,
+
         allowed: orgLimit,
         current: currentCount,
       });
@@ -122,8 +123,8 @@ exports.myOrgs = async (req, res) => {
 
     // 🔐 Estado de plano do dono: quais orgs dele estão ativas e quais estão travadas pelo limite
     const state = await getOwnerOrgsPlanState(userId);
-    const ent = state.entitlements;
-    const lockedSet = new Set(state.lockedOrgIds.map(id => String(id)));
+const ent = state.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
+const lockedSet = new Set((state.lockedOrgIds || []).map(id => String(id)));
 
     const memberships = await OrgMember.find({ user: userId })
       .populate('org', 'name slug license logoUrl cloudinaryPublicId')
