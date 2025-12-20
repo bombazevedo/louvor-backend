@@ -19,19 +19,9 @@ async function getOwnerOrgsPlanState(ownerId) {
   let orgLimit = null;
 
   if (orgs.length > 0) {
-  // 🛡️ Blindagem mínima: garante license.plan para orgs legadas
-  const baseOrg = {
-    ...orgs[0].toObject?.() || orgs[0],
-    license: {
-      ...(orgs[0].license || {}),
-      plan: orgs[0].license?.plan || 'FREE',
-    },
-  };
-
-  ent = getEntitlementsFor(baseOrg);
-  orgLimit = ent?.limits?.orgsPerOwner ?? null;
-}
-
+    ent = getEntitlementsFor(orgs[0]);
+    orgLimit = ent?.limits?.orgsPerOwner ?? null;
+  }
 
   if (orgLimit === null) {
     // Sem limite: tudo ativo
