@@ -20,11 +20,12 @@ exports.createOrg = async (req, res) => {
     const ownerId = (req.user && (req.user.id || req.user._id)) || req.userId || (req.auth && req.auth.id);
     if (!ownerId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
 
-    // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
+        // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
     const state = await getOwnerOrgsPlanState(ownerId);
-     	 	
+    const ent = state?.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
+
     const orgLimit = ent?.limits?.orgsPerOwner ?? null;
-    const currentCount = state.orgs.length;
+    const currentCount = (state?.orgs || []).length;
 
     if (orgLimit !== null && currentCount >= orgLimit) {
       return res.status(403).json({
@@ -258,7 +259,11 @@ exports.updateLogo = async (req, res) => {
     return res.json({ org: updated });
   } catch (err) {
     console.error('[updateLogo] err', err);
+    return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
+  }
+};
 
+// ✅ remover membro da organização (multi-igrejas) — NÃO apaga o User global
 exports.removeMember = async (req, res) => {
   try {
     const { id: orgId, userId: targetUserId } = req.params;
@@ -296,11 +301,6 @@ exports.removeMember = async (req, res) => {
     return res.status(500).json({ error: 'REMOVE_MEMBER_ERROR' });
   }
 };
-
-    return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
-  }
-};
-
 
 // ✅ novo método (Passo 5): status de licença/entitlements da organização ativa
 exports.getLicense = async (req, res) => {
