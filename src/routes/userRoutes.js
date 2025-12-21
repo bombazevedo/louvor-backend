@@ -1,4 +1,4 @@
-const express = require("express");
+const express = require("express");router.get("/birthdays", authenticate, getBirthdays);
 const router = express.Router();
 const { authenticate } = require("../middleware/auth");
 const {
@@ -28,7 +28,7 @@ router.get("/me", authenticate, async (req, res) => {
 router.patch("/me", authenticate, updateMe);
 
 // ✅ Listar aniversariantes do mês
-router.get("/birthdays", authenticate, getBirthdays);
+router.get("/birthdays", authenticate, orgContext, getBirthdays);
 
 // ✅ Listar usuários da organização ativa (multi-igrejas)
 router.get("/", authenticate, orgContext, async (req, res) => {

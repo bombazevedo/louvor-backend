@@ -237,8 +237,21 @@ exports.deleteCloudinaryImage = async (req, res) => {
 exports.getBirthdays = async (req, res) => {
   try {
     const month = new Date().getMonth();
+
+    // ✅ Multi-igrejas: aniversariantes SOMENTE da organização ativa
+    if (!req.orgId) {
+      return res.status(400).json({ message: 'Org não informada (x-org-id)' });
+    }
+
+    const memberships = await OrgMember.find({ org: req.orgId }).select('user').lean();
+    const userIds = memberships.map(m => m.user).filter(Boolean);
+
+    if (!userIds.length) {
+      return res.status(200).json([]);
+    }
+
     const users = await User.find(
-      { birthDate: { $exists: true } },
+      { _id: { $in: userIds }, birthDate: { $exists: true } },
       { name: 1, birthDate: 1, photoUrl: 1 }
     );
 
@@ -247,10 +260,10 @@ exports.getBirthdays = async (req, res) => {
       return d.getMonth() === month;
     });
 
-    res.status(200).json(birthdays);
-    } catch (err) {
+    return res.status(200).json(birthdays);
+  } catch (err) {
     console.error('[getBirthdays] Erro ao buscar aniversariantes:', err.message);
-    res.status(500).json({ message: 'Erro ao buscar aniversariantes' });
+    return res.status(500).json({ message: 'Erro ao buscar aniversariantes' });
   }
 };
 
