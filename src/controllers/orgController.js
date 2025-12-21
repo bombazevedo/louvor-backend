@@ -258,6 +258,45 @@ exports.updateLogo = async (req, res) => {
     return res.json({ org: updated });
   } catch (err) {
     console.error('[updateLogo] err', err);
+
+exports.removeMember = async (req, res) => {
+  try {
+    const { id: orgId, userId: targetUserId } = req.params;
+
+    // normaliza userId autenticado
+    const userId =
+      (req.user && (req.user._id || req.user.id)) ||
+      req.userId ||
+      (req.auth && req.auth.id);
+
+    const org = await Organization.findById(orgId).lean();
+    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
+
+    const isOwner = String(org.owner) === String(userId);
+
+    // precisa ser owner ou coordenador da org
+    const membership = await OrgMember.findOne({ org: orgId, user: userId }).lean();
+    const isCoordinator = membership && membership.role === 'coordenador';
+
+    if (!isOwner && !isCoordinator) {
+      return res.status(403).json({ error: 'REMOVE_MEMBER_FORBIDDEN' });
+    }
+
+    // não permitir remover o owner da org (segurança mínima)
+    if (String(org.owner) === String(targetUserId)) {
+      return res.status(403).json({ error: 'CANNOT_REMOVE_OWNER' });
+    }
+
+    const result = await OrgMember.deleteOne({ org: orgId, user: targetUserId });
+
+    // idempotente: se não existia, retorna ok mesmo assim
+    return res.json({ ok: true, removed: result?.deletedCount ? 1 : 0 });
+  } catch (err) {
+    console.error('[removeMember] err', err);
+    return res.status(500).json({ error: 'REMOVE_MEMBER_ERROR' });
+  }
+};
+
     return res.status(500).json({ error: 'UPDATE_LOGO_ERROR' });
   }
 };

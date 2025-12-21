@@ -566,9 +566,14 @@ exports.exportScalesPDF = async (req, res) => {
     const source = (req.body && (req.body.start || req.body.period || req.body.ref)) ? req.body : req.query;
     const { start, end, label } = resolveDateRange(source);
 
+    // 🔒 Segurança: export SEMPRE é por organização ativa
+    if (!req.orgId) {
+      return res.status(400).json({ message: 'Organização ativa não identificada.' });
+    }
+
     // 1) Buscar eventos do período (projeção mínima; sem populate pesado aqui)
 const events = await Event.find(
-  { date: { $gte: start, $lte: end } },
+  { org: req.orgId, date: { $gte: start, $lte: end } },
   { title: 1, date: 1, location: 1, scale: 1 } // projeção mínima
 )
   .sort({ date: 1 })
@@ -584,8 +589,10 @@ const scaleIds = events
 // 2) Buscar TODAS as escalas relevantes em uma passada
 //    - por referência direta (campo eventId)
 //    - e por _id, caso o Event já aponte para Scale
+
 const scales = await Scale.find(
   {
+    org: req.orgId,
     $or: [
       { eventId: { $in: eventIds } },
       { _id: { $in: scaleIds } }

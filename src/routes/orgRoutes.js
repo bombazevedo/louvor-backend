@@ -45,5 +45,6 @@ router.post('/join', auth, orgCtl.joinByCode);
 router.put('/:id/logo', auth, orgCtl.updateLogo);
 router.get('/:id/license', auth, orgCtl.getLicense);
 router.get('/mine', auth, orgCtl.myOrgs);
+router.delete('/:id/members/:userId', auth, orgCtl.removeMember);
 
 module.exports = router;
