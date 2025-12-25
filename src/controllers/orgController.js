@@ -313,11 +313,27 @@ exports.getLicense = async (req, res) => {
 
     // 🔎 Lemos os campos de assinatura diretamente da licença da organização
     const license = org.license || {};
-    const planStart =
-      license.planStart || license.planStartsAt || null; // flexível para futuros ajustes
-    const planEnd =
-      license.planEnd || license.planExpiresAt || null;  // é o que o app vai usar para "Válido até"
+        const planStart =
+      license.planStart || license.planStartsAt || null;
+
+    let planEnd =
+      license.planEnd || license.planExpiresAt || null;
+
     const billingPeriod = license.billingPeriod || null; // 'monthly' | 'quarterly' | 'annual' | null
+
+    // ✅ inferência de planEnd quando não está salvo na licença:
+    // usa planStart + billingPeriod (sem gravar no banco; apenas resposta)
+    if (!planEnd && planStart && billingPeriod) {
+      const start = new Date(planStart);
+      if (!isNaN(start.getTime())) {
+        const derived = new Date(start);
+        if (billingPeriod === 'monthly') derived.setMonth(derived.getMonth() + 1);
+        else if (billingPeriod === 'quarterly') derived.setMonth(derived.getMonth() + 3);
+        else if (billingPeriod === 'annual') derived.setFullYear(derived.getFullYear() + 1);
+
+        planEnd = derived.toISOString();
+      }
+    }
 
     return res.json({
       plan: ent.plan,           // FREE | '1' | '2' | '3' | '4' | '5' (código base)
