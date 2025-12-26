@@ -11,7 +11,16 @@ const app = express();
 
 // Middlewares
 app.use(cors());
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({
+  limit: '20mb',
+  verify: (req, _res, buf) => {
+    // ✅ guarda o RAW BODY só para webhooks (necessário p/ assinatura de gateways como Pagar.me)
+    if (req.originalUrl && req.originalUrl.startsWith('/api/webhooks')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
+
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // Rotas
@@ -31,6 +40,10 @@ const musicRoutes = require('./routes/musicRoutes');
 const chordRoutes = require('./routes/chordRoutes');
 const spotifyAuthRoutes = require('./routes/spotifyAuthRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+
+// ✅ BILLING / WEBHOOKS (Pagar.me etc.)
+const billingRoutes = require('./routes/billingRoutes');
+const webhookRoutes = require('./routes/webhookRoutes');
 
 // ✅ Notificações com nome novo (OK)
 const notificationsRoutes = require('./routes/notifications.routes');
@@ -60,6 +73,10 @@ app.use('/api/notifications', notificationsRoutes);
 
 // ✅ Rotas de PUSH (cadastro de token / teste)
 app.use('/api/push', pushRoutes);
+
+// ✅ BILLING (assinaturas/checkout) + WEBHOOKS (confirmações do gateway)
+app.use('/api/billing', billingRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 app.use('/api/admin', adminRoutes);
 
