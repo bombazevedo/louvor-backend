@@ -319,17 +319,19 @@ exports.getLicense = async (req, res) => {
     let planEnd =
       license.planEnd || license.planExpiresAt || null;
 
-    const billingPeriod = license.billingPeriod || null; // 'monthly' | 'quarterly' | 'annual' | null
+    const billingPeriod = license.billingPeriod || null; // 'MONTHLY'|'QUARTERLY'|'YEARLY' ou legado ('monthly'|'quarterly'|'annual') ou null
+    const billingKey = billingPeriod ? String(billingPeriod).toUpperCase() : null;
 
     // ✅ inferência de planEnd quando não está salvo na licença:
     // usa planStart + billingPeriod (sem gravar no banco; apenas resposta)
-    if (!planEnd && planStart && billingPeriod) {
+    if (!planEnd && planStart && billingKey) {
       const start = new Date(planStart);
       if (!isNaN(start.getTime())) {
         const derived = new Date(start);
-        if (billingPeriod === 'monthly') derived.setMonth(derived.getMonth() + 1);
-        else if (billingPeriod === 'quarterly') derived.setMonth(derived.getMonth() + 3);
-        else if (billingPeriod === 'annual') derived.setFullYear(derived.getFullYear() + 1);
+
+        if (billingKey === 'MONTHLY') derived.setMonth(derived.getMonth() + 1);
+        else if (billingKey === 'QUARTERLY') derived.setMonth(derived.getMonth() + 3);
+        else if (billingKey === 'YEARLY' || billingKey === 'ANNUAL') derived.setFullYear(derived.getFullYear() + 1);
 
         planEnd = derived.toISOString();
       }

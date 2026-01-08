@@ -78,7 +78,20 @@ const listOrgs = async (req, res) => {
 const updateOrgLicense = async (req, res) => {
   try {
     const { id } = req.params;
-    const { plan, status, trialStart, trialEnd, trialEndsAt } = req.body;
+    const {
+  plan,
+  status,
+  trialStart,
+  trialEnd,
+  trialEndsAt,
+
+  // ✅ campos de assinatura paga (mesmos do webhook)
+  billingPeriod,
+  planStart,
+  planEnd,
+  pagarmeCustomerId,
+  pagarmeSubscriptionId,
+} = req.body;
 
     const org = await Organization.findById(id);
 
@@ -101,9 +114,31 @@ const updateOrgLicense = async (req, res) => {
       org.license.trialEnd = trialEnd ? new Date(trialEnd) : null;
     }
 
-    if (trialEndsAt !== undefined) {
+        if (trialEndsAt !== undefined) {
       org.license.trialEndsAt = trialEndsAt ? new Date(trialEndsAt) : null;
     }
+
+    // 🔽 INÍCIO — campos reais de assinatura (alinhado ao webhook Pagar.me)
+    if (billingPeriod !== undefined) {
+      org.license.billingPeriod = billingPeriod || null;
+    }
+
+    if (planStart !== undefined) {
+      org.license.planStart = planStart ? new Date(planStart) : null;
+    }
+
+    if (planEnd !== undefined) {
+      org.license.planEnd = planEnd ? new Date(planEnd) : null;
+    }
+
+    if (pagarmeCustomerId !== undefined) {
+      org.license.pagarmeCustomerId = pagarmeCustomerId ? String(pagarmeCustomerId) : null;
+    }
+
+    if (pagarmeSubscriptionId !== undefined) {
+      org.license.pagarmeSubscriptionId = pagarmeSubscriptionId ? String(pagarmeSubscriptionId) : null;
+    }
+    // 🔼 FIM — campos reais de assinatura
 
     await org.save();
 
