@@ -3,7 +3,12 @@ const { Schema } = mongoose;
 
 const LicenseSchema = new Schema({
  status: { type: String, enum: ['trial', 'pending', 'active', 'expired'], default: 'trial' },
+
+ // 🔑 plano base da organização: FREE | '1' | '2' | '3' | '4' | '5'
+ plan: { type: String, default: 'FREE' },
+
 billingPeriod: {
+
   type: String,
   // ✅ compatível com o padrão real do fluxo (billing/webhook) + compatível com legado
   enum: ['MONTHLY', 'QUARTERLY', 'YEARLY', 'monthly', 'quarterly', 'annual'],
