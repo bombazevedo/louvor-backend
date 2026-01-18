@@ -3,7 +3,6 @@ const { Schema } = mongoose;
 
 const LicenseSchema = new Schema({
  status: { type: String, enum: ['trial', 'pending', 'active', 'expired'], default: 'trial' },
-...
 billingPeriod: {
   type: String,
   // ✅ compatível com o padrão real do fluxo (billing/webhook) + compatível com legado
