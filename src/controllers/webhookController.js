@@ -42,12 +42,13 @@ async function pagarmeWebhook(req, res) {
 
     const planCode = meta?.planCode || org?.license?.plan || 'FREE';
     const billingPeriod = meta?.billingPeriod || org?.license?.billingPeriod || null;
+    const billingKey = billingPeriod ? String(billingPeriod).toUpperCase() : null;
 
     // decide meses (1/3/12)
     const months =
-      billingPeriod === 'MONTHLY' ? 1 :
-      billingPeriod === 'QUARTERLY' ? 3 :
-      billingPeriod === 'YEARLY' ? 12 :
+      billingKey === 'MONTHLY' ? 1 :
+      billingKey === 'QUARTERLY' ? 3 :
+      (billingKey === 'YEARLY' || billingKey === 'ANNUAL') ? 12 :
       null;
 
     // Heurística segura:
