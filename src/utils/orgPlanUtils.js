@@ -10,7 +10,7 @@ async function getOwnerOrgsPlanState(ownerId) {
   // 1) Buscar todas as orgs do dono, em ordem de criação
   const orgs = await Organization.find({ owner: ownerId })
     .sort({ createdAt: 1, _id: 1 })
-    .select('_id name createdAt');
+    .select('_id name createdAt license');
 
   // ⚠️ Como os entitlements agora são por ORGANIZAÇÃO (não por owner),
   // usamos a PRIMEIRA org como base de referência
