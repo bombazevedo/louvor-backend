@@ -98,6 +98,76 @@ module.exports = function limitsGuard(operation) {
           return next();
         }
 
+        case 'event:update': {
+          const limits = ent.limits || {};
+          const limitPerMonth = limits.eventsPerMonth ?? null;
+          const horizonDays = limits.planningHorizonDays ?? null;
+
+          const eventId =
+            req.params?.id ||
+            req.params?.eventId ||
+            req.body?.eventId ||
+            req.body?.event;
+
+          // Se não conseguimos identificar o evento, deixa o controller validar
+          if (!eventId) return next();
+
+          // Busca evento atual para comparar datas (e manter org scope)
+          const current = await Event.findOne({ _id: eventId, org: req.orgId })
+            .select('date')
+            .lean();
+
+          if (!current) return next(); // 404 tratado no controller
+
+          const currentDate = coerceDate(current.date, new Date());
+
+          // Se o front não está alterando a data, não há como burlar horizon/perMonth
+          if (typeof req.body?.date === 'undefined' || req.body?.date === null) {
+            return next();
+          }
+
+          const targetDate = coerceDate(req.body.date, currentDate);
+
+          // 1) Planning horizon (data futura máxima)
+          if (horizonDays != null) {
+            const now = new Date();
+            const maxDate = new Date(now.getTime() + horizonDays * 24 * 60 * 60 * 1000);
+
+            if (targetDate.getTime() > maxDate.getTime()) {
+              return res.status(422).json({
+                error: 'LIMIT_REACHED',
+                limit: 'planningHorizonDays',
+                plan: ent.plan,
+                allowed: horizonDays,
+              });
+            }
+          }
+
+          // 2) Events per month (no mês da data alvo) — exclui o próprio evento
+          if (limitPerMonth != null) {
+            const from = startOfMonth(targetDate);
+            const to = endOfMonth(targetDate);
+
+            const count = await Event.countDocuments({
+              org: req.orgId,
+              _id: { $ne: eventId },
+              date: { $gte: from, $lt: to },
+            });
+
+            if (count >= limitPerMonth) {
+              return res.status(422).json({
+                error: 'LIMIT_REACHED',
+                limit: 'eventsPerMonth',
+                plan: ent.plan,
+                allowed: limitPerMonth,
+              });
+            }
+          }
+
+          return next();
+        }
+
+
         case 'event:add-song': {
           const limits = ent.limits || {};
           const songsPerEvent = limits.songsPerEvent ?? null;

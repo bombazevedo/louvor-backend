@@ -43,6 +43,7 @@ router.patch('/:id',
   authenticate,
   orgContext,
   licenseGuard('write','event:update'),
+  limitsGuard('event:update'),
   updateEvent
 );
 
