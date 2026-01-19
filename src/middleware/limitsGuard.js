@@ -44,9 +44,23 @@ module.exports = function limitsGuard(operation) {
       const ent = req.entitlements || getEntitlementsFor(org);
       req.entitlements = ent; // garante disponibilidade adiante
 
+      console.log('[limitsGuard] op=', operation, {
+        orgId: req.orgId,
+        plan: ent?.plan,
+        writeMode: ent?.write?.mode,
+        horizon: ent?.limits?.planningHorizonDays,
+        perMonth: ent?.limits?.eventsPerMonth,
+        bodyDate: req.body?.date,
+        paramsId: req.params?.id,
+      });
+
+
       // Se plano/entitlements liberam completamente escrita, não há limites a aplicar.
       // 'limited' => aplicar; 'full' => seguir; 'blocked' já foi tratado no licenseGuard.
       const writeMode = ent?.write?.mode || 'full';
+
+      console.log('[limitsGuard] writeMode=', writeMode, '| willApplyLimits=', writeMode === 'limited');
+
       if (writeMode !== 'limited') return next();
 
       // Mapa de operações

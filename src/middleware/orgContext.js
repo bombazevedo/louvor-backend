@@ -5,6 +5,9 @@ const Organization = require('../models/Organization');
 module.exports = async function orgContext(req, res, next) {
   try {
     const orgId = req.header('x-org-id') || req.user?.activeOrgId;
+
+    console.log('[orgContext] x-org-id:', req.header('x-org-id'), '| activeOrgId:', req.user?.activeOrgId);
+
     if (!orgId || !mongoose.isValidObjectId(orgId)) {
       return res.status(400).json({ error: 'ORG_REQUIRED', message: 'Cabeçalho x-org-id é obrigatório.' });
     }
@@ -24,6 +27,9 @@ module.exports = async function orgContext(req, res, next) {
     req.orgId  = orgId;
     req.orgRole = membership ? membership.role : 'coordenador';
     req._org   = org; // cache p/ licenseGuard
+
+    console.log('[orgContext] resolved orgId:', req.orgId, '| orgRole:', req.orgRole, '| license.plan:', req._org?.license?.plan);
+
     next();
   } catch (err) {
     console.error('[orgContext] erro:', err);

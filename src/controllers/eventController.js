@@ -294,6 +294,14 @@ const createEvent = async (req, res) => {
  */
 const updateEvent = async (req, res) => {
   try {
+
+    console.log('[updateEvent] start', {
+      id: req.params?.id,
+      orgId: req.orgId,
+      bodyDate: req.body?.date,
+      keys: Object.keys(req.body || {}),
+    });
+
     const {
   title, description, date, location, type,
   musicLinks,
