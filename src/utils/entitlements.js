@@ -104,7 +104,7 @@ const PLAN_MATRIX = {
     limits: {
       eventsPerMonth: 20,
       planningHorizonDays: 60,   // até D+60
-      songsPerEvent: 5,
+      songsPerEvent: 6,
       attachmentsPerEvent: 2,
       storageMB: null,
       teamsPerOrg: 2,
@@ -133,7 +133,7 @@ const PLAN_MATRIX = {
       externalLinks: true,
     },
     limits: {
-      eventsPerMonth: 30,
+      eventsPerMonth: 25,
       planningHorizonDays: 90,   // até D+90
       songsPerEvent: 8,
       attachmentsPerEvent: 5,
