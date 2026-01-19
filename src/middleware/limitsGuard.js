@@ -162,10 +162,25 @@ module.exports = function limitsGuard(operation) {
             const from = startOfMonth(targetDate);
             const to = endOfMonth(targetDate);
 
+            console.log('[limitsGuard:event:update] perMonth-check', {
+              orgId: req.orgId,
+              eventId,
+              limitPerMonth,
+              targetDate: targetDate?.toISOString?.() || String(targetDate),
+              from: from?.toISOString?.() || String(from),
+              to: to?.toISOString?.() || String(to),
+            });
+
             const count = await Event.countDocuments({
               org: req.orgId,
               _id: { $ne: eventId },
               date: { $gte: from, $lt: to },
+            });
+
+            console.log('[limitsGuard:event:update] perMonth-count', {
+              count,
+              limitPerMonth,
+              willBlock: count >= limitPerMonth,
             });
 
             if (count >= limitPerMonth) {
