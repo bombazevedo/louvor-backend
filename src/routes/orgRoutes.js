@@ -47,4 +47,8 @@ router.get('/:id/license', auth, orgCtl.getLicense);
 router.get('/mine', auth, orgCtl.myOrgs);
 router.delete('/:id/members/:userId', auth, orgCtl.removeMember);
 
+// ✅ Hard delete org (owner-only) — libera espaço do limite do plano
+router.delete('/:id', auth, orgCtl.deleteOrgHard);
+
 module.exports = router;
+

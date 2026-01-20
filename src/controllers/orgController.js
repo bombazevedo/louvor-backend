@@ -1,6 +1,9 @@
 const crypto = require('crypto');
 const Organization = require('../models/Organization');
 const OrgMember = require('../models/OrgMember');
+const Event = require('../models/Event');
+const Scale = require('../models/Scale');
+const Team = require('../models/Team');
 const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ adição pontual
 const { getOwnerOrgsPlanState } = require('../utils/orgPlanUtils');
 
@@ -128,7 +131,7 @@ const ent = state.entitlements || getEntitlementsFor({ license: { plan: 'FREE' }
 const lockedSet = new Set((state.lockedOrgIds || []).map(id => String(id)));
 
     const memberships = await OrgMember.find({ user: userId })
-      .populate('org', 'name slug license logoUrl cloudinaryPublicId')
+      .populate('org', 'name slug license logoUrl cloudinaryPublicId owner')
       .lean();
 
     // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
@@ -194,6 +197,7 @@ const response = [
           license: o.license,
           logoUrl: o.logoUrl,
           cloudinaryPublicId: o.cloudinaryPublicId,
+          owner: o.owner,
         },
         lockedSet.has(String(o._id))
       );
@@ -352,5 +356,43 @@ exports.getLicense = async (req, res) => {
   } catch (err) {
     console.error('[getLicense] err', err);
     return res.status(500).json({ error: 'GET_LICENSE_ERROR' });
+  }
+};
+
+// ✅ HARD DELETE: exclui a organização (owner-only) e dados escopados para liberar limite do plano
+exports.deleteOrgHard = async (req, res) => {
+  try {
+    const { id: orgId } = req.params;
+
+    const userId =
+      (req.user && (req.user._id || req.user.id)) ||
+      req.userId ||
+      (req.auth && req.auth.id);
+
+    if (!orgId) return res.status(400).json({ error: 'ORG_ID_REQUIRED' });
+    if (!userId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    const org = await Organization.findById(orgId).lean();
+    if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
+
+    // 🔒 Somente o owner (criador/dono real) pode excluir
+    if (String(org.owner) !== String(userId)) {
+      return res.status(403).json({ error: 'ONLY_OWNER_CAN_DELETE_ORG' });
+    }
+
+    // 🔥 Hard delete dos dados escopados por org (mínimo necessário)
+    await Promise.all([
+      OrgMember.deleteMany({ org: orgId }),
+      Event.deleteMany({ org: orgId }),
+      Scale.deleteMany({ org: orgId }),
+      Team.deleteMany({ org: orgId }),
+    ]);
+
+    await Organization.deleteOne({ _id: orgId });
+
+    return res.json({ ok: true, deletedOrgId: orgId });
+  } catch (err) {
+    console.error('[deleteOrgHard] err', err);
+    return res.status(500).json({ error: 'DELETE_ORG_ERROR' });
   }
 };
