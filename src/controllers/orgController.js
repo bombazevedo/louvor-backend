@@ -6,6 +6,7 @@ const Scale = require('../models/Scale');
 const Team = require('../models/Team');
 const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ adição pontual
 const { getOwnerOrgsPlanState } = require('../utils/orgPlanUtils');
+const { getPlanLabel } = require('../utils/planCatalog'); // ✅ NOVO (nome fantasia)
 
 const slugify = (s) => s.normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -147,9 +148,12 @@ const normalizeOrgForResponse = (orgDoc, lockedByPlan) => {
   if (!orgDoc) return null;
 
   const license = orgDoc.license || {};
+  const normalizedPlan = license.plan || DEFAULT_PLAN;
+
   const normalizedLicense = {
     ...license,
-    plan: license.plan || DEFAULT_PLAN,
+    plan: normalizedPlan,
+    planLabel: getPlanLabel(normalizedPlan), // ✅ NOVO: nome fantasia vindo do backend
   };
 
   return {
@@ -215,6 +219,7 @@ const response = [
     res.json({
       orgs: response,
       plan: ent.plan,
+      planLabel: getPlanLabel(ent.plan), // ✅ NOVO: label geral do plano do usuário/dono
       inTrial: !!ent.inTrial,
       limits: {
         orgsPerOwner: ent.limits?.orgsPerOwner ?? null,
