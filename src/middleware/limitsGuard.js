@@ -1,5 +1,6 @@
 // src/middleware/limitsGuard.js
 const { getEntitlementsFor } = require('../utils/entitlements');
+const { getPlanLabel } = require('../utils/planCatalog'); // ✅ NOVO: nome fantasia centralizado
 const Event = require('../models/Event'); // usado em operações de evento (contagem e inspeção)
 
 function startOfMonth(d) {
@@ -83,6 +84,7 @@ module.exports = function limitsGuard(operation) {
                 error: 'LIMIT_REACHED',
                 limit: 'planningHorizonDays',
                 plan: ent.plan,
+                planLabel: getPlanLabel(ent.plan), // ✅ NOVO
                 allowed: horizonDays,
               });
             }
@@ -104,6 +106,7 @@ module.exports = function limitsGuard(operation) {
                 error: 'LIMIT_REACHED',
                 limit: 'eventsPerMonth',
                 plan: ent.plan,
+                planLabel: getPlanLabel(ent.plan), // ✅ NOVO
                 allowed: limitPerMonth,
               });
             }
