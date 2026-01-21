@@ -2,7 +2,7 @@
 const PLAN_LABELS = {
   FREE: 'Plano Gratuito',
   '1': 'Plano 1',
-  '2': 'Plano 2',
+  '2': 'teste de planos',
   '3': 'Plano 3',
   '4': 'Plano 4',
   '5': 'Plano 5',
