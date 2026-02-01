@@ -76,11 +76,19 @@ async function pagarmeWebhook(req, res) {
     if (data?.customer_id) org.license.pagarmeCustomerId = String(data.customer_id);
     if (data?.id) org.license.pagarmeSubscriptionId = String(data.id);
 
-    if (isPaidLike && months) {
+        if (isPaidLike && months) {
       const now = startOfNow();
+
+      const currentEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
+      const hasValidEnd = !!currentEnd && !isNaN(currentEnd.getTime());
+      const baseDate =
+        hasValidEnd && currentEnd.getTime() > now.getTime()
+          ? currentEnd
+          : now;
+
       org.license.status = 'active';
       org.license.planStart = now;
-      org.license.planEnd = addMonths(now, months);
+      org.license.planEnd = addMonths(baseDate, months);
     } else if (isCanceledLike) {
       org.license.status = 'expired';
       // não mexe em planEnd se já existir (mantém histórico)
