@@ -236,7 +236,21 @@ exports.deleteCloudinaryImage = async (req, res) => {
 // 🎂 Listar aniversariantes do mês atual
 exports.getBirthdays = async (req, res) => {
   try {
-    const month = new Date().getMonth();
+    const month = new Date().getMonth(); // (LEGADO) mês pelo relógio do servidor (provável UTC)
+
+    // ✅ Usa o fuso do app/usuário para definir "mês atual"
+    const tz = String(req.headers['x-tz'] || req.headers['x-timezone'] || 'America/Sao_Paulo');
+    const now = new Date();
+
+    const monthInTz = (() => {
+      try {
+        const m = new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'numeric' }).format(now);
+        const n = parseInt(m, 10);
+        return Number.isNaN(n) ? month : (n - 1); // 0-11
+      } catch (e) {
+        return month; // fallback seguro
+      }
+    })();
 
     // ✅ Multi-igrejas: aniversariantes SOMENTE da organização ativa
     if (!req.orgId) {
@@ -250,14 +264,32 @@ exports.getBirthdays = async (req, res) => {
       return res.status(200).json([]);
     }
 
+    // ✅ Garante que NÃO entra null/undefined (resolve "todo mundo em janeiro")
     const users = await User.find(
-      { _id: { $in: userIds }, birthDate: { $exists: true } },
+      { _id: { $in: userIds }, birthDate: { $type: 'date' } },
       { name: 1, birthDate: 1, photoUrl: 1 }
     );
 
+    const monthFmt = (() => {
+      try {
+        return new Intl.DateTimeFormat('en-US', { timeZone: tz, month: 'numeric' });
+      } catch (e) {
+        return null;
+      }
+    })();
+
     const birthdays = users.filter(u => {
       const d = new Date(u.birthDate);
-      return d.getMonth() === month;
+      if (Number.isNaN(d.getTime())) return false;
+
+      if (!monthFmt) {
+        // fallback: mês do Date() puro
+        return d.getMonth() === monthInTz;
+      }
+
+      const m = parseInt(monthFmt.format(d), 10);
+      if (Number.isNaN(m)) return false;
+      return (m - 1) === monthInTz;
     });
 
     return res.status(200).json(birthdays);
