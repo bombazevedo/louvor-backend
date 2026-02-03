@@ -240,6 +240,13 @@ function resolvePlan(org) {
   const plan =
     (org && org.license && (org.license.plan || org.license.status)) || 'FREE';
 
+  // ✅ Blindagem: pagamento pendente NÃO libera plano pago antes do webhook confirmar.
+  // Enquanto status === 'pending', tratamos o plano efetivo como FREE para entitlements/guards.
+  const licenseStatus = org && org.license ? org.license.status : null;
+  if (String(licenseStatus || '').toLowerCase() === 'pending') {
+    return 'FREE';
+  }
+
   // Normalização robusta (evita cair em FREE por variações como "PLANO 1", "PLAN_1", "P1", etc.)
   const raw = String(plan || '').trim();
   const upper = raw.toUpperCase();
@@ -323,6 +330,12 @@ function getEntitlementsFor(org) {
 
     // Trial ativo “eleva” temporariamente para modo completo (sem mudar o rótulo do plano)
   const inTrial = isTrialActive(org);
+
+  // ✅ Se estiver pendente, o trial não deve elevar entitlements.
+  // (A liberação só acontece quando o webhook confirmar o pagamento.)
+  const isPending =
+    !!(org && org.license && String(org.license.status || '').toLowerCase() === 'pending');
+
   if (inTrial) {
     // Durante o trial, emprestamos as permissões do plano mais alto (5)
     const trialPlanKey = '5';
@@ -335,6 +348,13 @@ function getEntitlementsFor(org) {
     });
   }
 
+  // ✅ Blindagem final: em pending, garantimos que nenhuma elevação por trial permaneça ativa.
+  // (Sem alterar linhas existentes: re-aplicamos a base FREE se necessário.)
+  if (isPending) {
+    const pendingBase = PLAN_MATRIX.FREE || PLAN_MATRIX['FREE'];
+    entitlements = JSON.parse(JSON.stringify(pendingBase));
+  }
+
   // Aplica overrides opcionais definidos na organização
   // Ex.: org.license.overrides = { limits: { songsPerEvent: 6 } }
   const overrides =
@@ -343,6 +363,13 @@ function getEntitlementsFor(org) {
 
   if (overrides) {
     entitlements = deepMerge(entitlements, overrides);
+  }
+
+  // ✅ Blindagem extra: overrides nunca podem re-liberar plano enquanto estiver "pending".
+  // Re-aplicamos FREE após overrides para evitar qualquer bypass.
+  if (isPending) {
+    const pendingBase = PLAN_MATRIX.FREE || PLAN_MATRIX['FREE'];
+    entitlements = JSON.parse(JSON.stringify(pendingBase));
   }
 
   // Metadados úteis para o app/middlewares
@@ -354,6 +381,18 @@ function getEntitlementsFor(org) {
     plan: entitlements.plan,         // FREE | PRO | PLUS (rótulo base)
     inTrial,
     trialEndsAt,
+
+    // ✅ Metadados de billing para UX premium no app (sem liberar recursos em pending)
+    billingStatus: (org && org.license && org.license.status) || null,
+    pendingPlan:
+      (org && org.license && String(org.license.status || '').toLowerCase() === 'pending')
+        ? (org.license.plan || null)
+        : null,
+    pendingBillingPeriod:
+      (org && org.license && String(org.license.status || '').toLowerCase() === 'pending')
+        ? (org.license.billingPeriod || null)
+        : null,
+
     write: entitlements.write,       // { allowed, mode }
     features: entitlements.features, // flags de features
     limits: entitlements.limits,     // números (null = ilimitado)
