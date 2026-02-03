@@ -19,6 +19,10 @@ billingPeriod: {
 pagarmeCustomerId: { type: String, default: null },
 pagarmeSubscriptionId: { type: String, default: null },
 
+// ✅ rastreio de Payment Link (checkout hospedado)
+pagarmePaymentLinkId: { type: String, default: null },
+pagarmeLastOrderId: { type: String, default: null },
+
 // Quando o ciclo de assinatura atual começou (ex.: 01/01/2026)
 planStart: { type: Date },
 // Quando o ciclo atual termina / expira (ex.: 31/01/2026 ou 31/12/2026)

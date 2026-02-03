@@ -97,4 +97,122 @@ async function subscribe(req, res) {
   }
 }
 
-module.exports = { subscribe };
+// GET /billing/catalog
+async function catalog(req, res) {
+  try {
+    // Mantém o catálogo 100% modular no backend (fonte de verdade)
+    const { PLAN_LABELS, BILLING_PERIODS, PRICES_CENTS } = require('../utils/planCatalog');
+
+    return res.json({
+      ok: true,
+      plans: PLAN_LABELS,
+      periods: BILLING_PERIODS,
+      pricesCents: PRICES_CENTS,
+    });
+  } catch (err) {
+    console.error('[billingController.catalog] error:', err);
+    return res.status(500).json({ error: 'Failed to load billing catalog' });
+  }
+}
+
+// POST /billing/checkout
+// body: { planCode: "1"|"2"|..., billingPeriod: "MONTHLY"|"QUARTERLY"|"YEARLY" }
+async function checkout(req, res) {
+  try {
+    const orgId = req.orgId;
+    const userId = req.user?.id;
+
+    const { planCode, billingPeriod } = req.body || {};
+    const periodKey = getBillingPeriod(billingPeriod);
+
+    if (!orgId) return res.status(400).json({ error: 'Missing orgId context' });
+    if (!planCode) return res.status(400).json({ error: 'Missing planCode' });
+    if (!periodKey) return res.status(400).json({ error: 'Invalid billingPeriod' });
+
+    const priceCents = getPriceCents(planCode, periodKey);
+    if (!priceCents) return res.status(400).json({ error: 'Invalid plan/period price' });
+
+    const org = await Organization.findById(orgId);
+    if (!org) return res.status(404).json({ error: 'Organization not found' });
+
+    const pagarme = createPagarmeClient();
+
+    // ✅ garante customer_id (mesma lógica robusta já usada no subscribe)
+    let customerId = org.license?.pagarmeCustomerId || null;
+
+    if (!customerId) {
+      const customerPayload = {
+        name: org.name || 'WorshipHub Customer',
+        email: org.ownerEmail || org.contactEmail || 'no-reply@worshiphub.app',
+        metadata: { orgId: String(orgId), createdByUserId: String(userId || '') },
+      };
+
+      const customerResp = await pagarme.post('/customers', customerPayload);
+      customerId = customerResp?.data?.id;
+
+      org.license = org.license || {};
+      org.license.pagarmeCustomerId = customerId;
+      await org.save();
+    }
+
+    // ✅ cria Payment Link (Checkout hospedado)
+    // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
+    const payload = {
+      is_building: false,
+      name: `WorshipHub Plano ${planCode} (${periodKey})`,
+      type: 'order',
+      payment_settings: {
+        accepted_payment_methods: ['credit_card', 'pix', 'boleto'],
+        credit_card_settings: { operation_type: 'auth_and_capture' },
+      },
+      cart_settings: {
+        items: [
+          {
+            name: `WorshipHub Plano ${planCode} (${periodKey})`,
+            amount: priceCents,
+            default_quantity: 1,
+          },
+        ],
+      },
+      customer_settings: {
+        customer_id: customerId,
+      },
+      metadata: {
+        orgId: String(orgId),
+        planCode: String(planCode),
+        billingPeriod: String(periodKey),
+        createdByUserId: String(userId || ''),
+        kind: 'order',
+      },
+    };
+
+    const linkResp = await pagarme.post('/paymentlinks', payload);
+    const paymentLink = linkResp?.data;
+
+    // ⚠️ Importante: só ativar licença como "active" após confirmação no webhook (pago)
+    // Aqui a gente só salva IDs e estado "pending"
+    org.license = org.license || {};
+    org.license.plan = String(planCode);
+    org.license.status = 'pending';
+    org.license.billingPeriod = periodKey;
+
+    // rastreio do checkout
+    org.license.pagarmePaymentLinkId = paymentLink?.id || null;
+
+    // não mexe no pagarmeSubscriptionId aqui (fluxo order)
+    await org.save();
+
+    return res.json({
+      ok: true,
+      url: paymentLink?.url || null,
+      paymentLinkId: paymentLink?.id || null,
+      status: paymentLink?.status || null,
+      paymentLink,
+    });
+  } catch (err) {
+    console.error('[billingController.checkout] error:', err?.response?.data || err);
+    return res.status(500).json({ error: 'Failed to create checkout link' });
+  }
+}
+
+module.exports = { subscribe, catalog, checkout };

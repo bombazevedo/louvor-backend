@@ -22,6 +22,7 @@ async function pagarmeWebhook(req, res) {
     const data = payload?.data || payload;
 
     // metadata que nós enviamos na assinatura
+
     const meta = data?.metadata || {};
     const orgId = meta?.orgId;
 
@@ -39,6 +40,10 @@ async function pagarmeWebhook(req, res) {
       console.log('[pagarmeWebhook] org not found. eventType=', eventType);
       return res.json({ ok: true }); // não re-tenta infinito
     }
+
+    // ✅ identifica eventos vindos do checkout via payment link (order)
+    const __prevSubId = org?.license?.pagarmeSubscriptionId || null;
+    const __isOrderFromLink = String(meta?.kind || '').toLowerCase() === 'order';
 
     const planCode = meta?.planCode || org?.license?.plan || 'FREE';
     const billingPeriod = meta?.billingPeriod || org?.license?.billingPeriod || null;
@@ -75,6 +80,12 @@ async function pagarmeWebhook(req, res) {
 
     if (data?.customer_id) org.license.pagarmeCustomerId = String(data.customer_id);
     if (data?.id) org.license.pagarmeSubscriptionId = String(data.id);
+
+// ✅ Se veio de payment link (order), NÃO deixamos sobrescrever pagarmeSubscriptionId
+if (__isOrderFromLink && data?.id) {
+  org.license.pagarmeLastOrderId = String(data.id);
+  org.license.pagarmeSubscriptionId = __prevSubId; // restaura
+}
 
         if (isPaidLike && months) {
       const now = startOfNow();
