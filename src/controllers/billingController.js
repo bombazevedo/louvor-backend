@@ -235,10 +235,24 @@ async function checkout(req, res) {
       status: paymentLink?.status || null,
       paymentLink,
     });
-  } catch (err) {
-    console.error('[billingController.checkout] error:', err?.response?.data || err);
+    } catch (err) {
+    const status = err?.response?.status;
+    const data = err?.response?.data;
+    const reqId =
+      err?.response?.headers?.['x-request-id'] ||
+      err?.response?.headers?.['request-id'] ||
+      err?.response?.headers?.['x-correlation-id'] ||
+      null;
+
+    console.error('[billingController.checkout] error:', {
+      status,
+      reqId,
+      data,
+    });
+
     return res.status(500).json({ error: 'Failed to create checkout link' });
   }
+
 }
 
 module.exports = { subscribe, catalog, checkout };
