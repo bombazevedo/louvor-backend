@@ -157,26 +157,31 @@ async function checkout(req, res) {
 
     // ✅ cria Payment Link (Checkout hospedado)
     // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
-    const payload = {
-      is_building: false,
+        const payload = {
       name: `WorshipHub Plano ${planCode} (${periodKey})`,
       type: 'order',
       payment_settings: {
         accepted_payment_methods: ['credit_card', 'pix', 'boleto'],
         credit_card_settings: { operation_type: 'auth_and_capture' },
       },
-      cart_settings: {
+
+      // ✅ Core v5: "cart" + "quantity"
+      cart: {
         items: [
           {
             name: `WorshipHub Plano ${planCode} (${periodKey})`,
             amount: priceCents,
-            default_quantity: 1,
+            quantity: 1,
           },
         ],
       },
-      customer_settings: {
-        customer_id: customerId,
+
+      // ✅ Core v5: "customer" (não "customer_settings")
+      // Como você já tem customerId, enviamos customer.id para reaproveitar
+      customer: {
+        id: customerId,
       },
+
       metadata: {
         orgId: String(orgId),
         planCode: String(planCode),
@@ -185,7 +190,6 @@ async function checkout(req, res) {
         kind: 'order',
       },
     };
-
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
 
