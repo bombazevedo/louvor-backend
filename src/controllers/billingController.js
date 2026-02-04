@@ -157,6 +157,19 @@ async function checkout(req, res) {
 
     // ✅ cria Payment Link (Checkout hospedado)
     // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
+
+    const isTestKey = String(process.env.PAGARME_SECRET_KEY || '').startsWith('sk_test_');
+
+    // ✅ Customer mínimo para Payment Link (evita depender de customer_id existente no Pagar.me)
+    // Em TESTE usamos documento placeholder; em PRODUÇÃO você vai querer puxar CPF real do usuário/organização.
+    const customerForLink = {
+      name: org.name || 'WorshipHub Customer',
+      email: org.ownerEmail || org.contactEmail || 'no-reply@worshiphub.app',
+      type: 'individual',
+      document_type: 'CPF',
+      document: isTestKey ? '11111111111' : undefined,
+    };
+
           const boletoDueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
     const payload = {
@@ -200,9 +213,7 @@ async function checkout(req, res) {
         ],
       },
 
-      customer_settings: {
-        customer_id: customerId,
-      },
+            customer: customerForLink,
 
       metadata: {
         orgId: String(orgId),
