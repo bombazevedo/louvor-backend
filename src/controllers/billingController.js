@@ -157,29 +157,51 @@ async function checkout(req, res) {
 
     // ✅ cria Payment Link (Checkout hospedado)
     // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
-        const payload = {
+          const boletoDueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+
+    const payload = {
+      is_building: false,
       name: `WorshipHub Plano ${planCode} (${periodKey})`,
       type: 'order',
+      payment_link_type: 'order',
+
       payment_settings: {
         accepted_payment_methods: ['credit_card', 'pix', 'boleto'],
-        credit_card_settings: { operation_type: 'auth_and_capture' },
+
+        credit_card_settings: {
+          operation_type: 'auth_and_capture',
+
+          // ✅ atende o requisito: installments OU installments_setup OU brand_installments
+          // (o validador reclama se nenhum estiver presente)
+          installments: [1, 2, 3, 4, 5, 6, 12],
+        },
+
+        // ✅ atende requisito: BoletoSettings não vazio
+        boleto_settings: {
+          due_at: boletoDueAt,
+          instructions: 'Pagamento do plano WorshipHub',
+        },
+
+        // ✅ atende requisito: PixSettings não vazio
+        pix_settings: {
+          expires_in: 3600,
+        },
       },
 
-      // ✅ Core v5: "cart" + "quantity"
-      cart: {
+      // ✅ atende requisito: CartSettings não vazio
+      cart_settings: {
         items: [
           {
             name: `WorshipHub Plano ${planCode} (${periodKey})`,
             amount: priceCents,
+            default_quantity: 1,
             quantity: 1,
           },
         ],
       },
 
-      // ✅ Core v5: "customer" (não "customer_settings")
-      // Como você já tem customerId, enviamos customer.id para reaproveitar
-      customer: {
-        id: customerId,
+      customer_settings: {
+        customer_id: customerId,
       },
 
       metadata: {
