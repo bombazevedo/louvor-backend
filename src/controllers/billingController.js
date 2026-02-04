@@ -158,63 +158,52 @@ async function checkout(req, res) {
     // ✅ cria Payment Link (Checkout hospedado)
     // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
 
-    const isTestKey = String(process.env.PAGARME_SECRET_KEY || '').startsWith('sk_test_');
+        const boletoDueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
-    // ✅ Customer mínimo para Payment Link (evita depender de customer_id existente no Pagar.me)
-    // Em TESTE usamos documento placeholder; em PRODUÇÃO você vai querer puxar CPF real do usuário/organização.
-    const customerForLink = {
-      name: org.name || 'WorshipHub Customer',
-      email: org.ownerEmail || org.contactEmail || 'no-reply@worshiphub.app',
-      type: 'individual',
-      document_type: 'CPF',
-      document: isTestKey ? '11111111111' : undefined,
-    };
-
-          const boletoDueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    // ✅ Formato exigido no checkout link (type=order):
+    // installments: [{ number, total }]
+    // installments_setup: { interest_type }
+    // boleto_settings/pix_settings obrigatórios se aceitos
+    const installmentsNumbers = [1, 2, 3, 4, 5, 6, 12];
+    const installments = installmentsNumbers.map((n) => ({ number: n, total: priceCents }));
 
     const payload = {
       is_building: false,
       name: `WorshipHub Plano ${planCode} (${periodKey})`,
       type: 'order',
-      payment_link_type: 'order',
 
       payment_settings: {
         accepted_payment_methods: ['credit_card', 'pix', 'boleto'],
 
         credit_card_settings: {
           operation_type: 'auth_and_capture',
-
-          // ✅ atende o requisito: installments OU installments_setup OU brand_installments
-          // (o validador reclama se nenhum estiver presente)
-          installments: [1, 2, 3, 4, 5, 6, 12],
+          installments_setup: {
+            interest_type: 'simple',
+          },
+          installments,
         },
 
-        // ✅ atende requisito: BoletoSettings não vazio
         boleto_settings: {
           due_at: boletoDueAt,
           instructions: 'Pagamento do plano WorshipHub',
         },
 
-        // ✅ atende requisito: PixSettings não vazio
         pix_settings: {
           expires_in: 3600,
         },
       },
 
-      // ✅ atende requisito: CartSettings não vazio
       cart_settings: {
         items: [
           {
             name: `WorshipHub Plano ${planCode} (${periodKey})`,
             amount: priceCents,
-            default_quantity: 1,
             quantity: 1,
           },
         ],
       },
 
-            customer: customerForLink,
-
+      // ✅ Mantém rastreabilidade total via metadata (suficiente pro webhook)
       metadata: {
         orgId: String(orgId),
         planCode: String(planCode),
@@ -223,6 +212,7 @@ async function checkout(req, res) {
         kind: 'order',
       },
     };
+
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
 

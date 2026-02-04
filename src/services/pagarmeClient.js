@@ -13,8 +13,7 @@ function createPagarmeClient() {
   }
 
   // ✅ Teste (sk_test_*) usa sdx-api. Produção (sk_live_*) usa api.
-  // Documentação oficial do endpoint /paymentlinks (Core v5).
-  const isTestKey = String(secretKey).startsWith('sk_test');
+  const isTestKey = String(secretKey).startsWith('sk_test_');
 
   return axios.create({
     baseURL: isTestKey
