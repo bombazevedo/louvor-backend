@@ -239,14 +239,14 @@ async function checkout(req, res) {
     // não mexe no pagarmeSubscriptionId aqui (fluxo order)
     await org.save();
 
-    return res.json({
+        return res.json({
       ok: true,
       url: paymentLink?.url || null,
       paymentLinkId: paymentLink?.id || null,
       status: paymentLink?.status || null,
       paymentLink,
     });
-    } catch (err) {
+  } catch (err) {
     const status = err?.response?.status;
     const data = err?.response?.data;
     const reqId =
@@ -263,7 +263,6 @@ async function checkout(req, res) {
 
     return res.status(500).json({ error: 'Failed to create checkout link' });
   }
-
 }
 
 module.exports = { subscribe, catalog, checkout };

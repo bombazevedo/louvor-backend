@@ -12,7 +12,9 @@ function createPagarmeClient() {
     throw new Error('[pagarmeClient] Missing env PAGARME_SECRET_KEY');
   }
 
-    const isTestKey = String(secretKey || '').startsWith('sk_test');
+  // ✅ Teste (sk_test_*) usa sdx-api. Produção (sk_live_*) usa api.
+  // Documentação oficial do endpoint /paymentlinks (Core v5).
+  const isTestKey = String(secretKey).startsWith('sk_test');
 
   return axios.create({
     baseURL: isTestKey

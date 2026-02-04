@@ -7,8 +7,10 @@ function verifyWebhook(req) {
   // Configure no Pagar.me a URL e envie esse header (ou use um query token)
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
   if (!secret) return true; // se não setou secret, não bloqueia (dev)
-  const received = req.header('x-worshiphub-webhook-secret');
-  return received && received === secret;
+    const receivedHeader = req.header('x-worshiphub-webhook-secret');
+  const receivedQuery = req?.query?.secret;
+  const received = receivedHeader || receivedQuery;
+  return received && String(received) === String(secret);
 }
 
 async function pagarmeWebhook(req, res) {
