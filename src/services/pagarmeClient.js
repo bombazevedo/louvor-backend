@@ -12,8 +12,12 @@ function createPagarmeClient() {
     throw new Error('[pagarmeClient] Missing env PAGARME_SECRET_KEY');
   }
 
+    const isTestKey = String(secretKey || '').startsWith('sk_test');
+
   return axios.create({
-    baseURL: 'https://api.pagar.me/core/v5',
+    baseURL: isTestKey
+      ? 'https://sdx-api.pagar.me/core/v5'
+      : 'https://api.pagar.me/core/v5',
     headers: {
       Authorization: buildBasicAuth(secretKey),
       'Content-Type': 'application/json',
