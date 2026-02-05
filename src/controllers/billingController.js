@@ -166,18 +166,17 @@ async function checkout(req, res) {
 
     const allowedInstallments = [1, 2, 3, 4, 5, 6, 12];
 
-    // ✅ payload minimalista (reduz chance de 400 por schema)
+    // ✅ payload minimalista (Pagar.me: order + installments NÃO aceita installments_setup)
     const payload = {
       is_building: false,
       payment_settings: {
         credit_card_settings: {
-  operation_type: 'auth_and_capture',
-  installments: allowedInstallments.map((n) => ({
-    number: n,
-    total: priceCents,
-  })),
-},
-
+          operation_type: 'auth_and_capture',
+          installments: allowedInstallments.map((n) => ({
+            number: n,
+            total: priceCents,
+          })),
+        },
         accepted_payment_methods: ['credit_card'],
       },
       cart_settings: {
@@ -203,11 +202,8 @@ async function checkout(req, res) {
         total: it.total,
         totalType: typeof it.total,
       })),
-      interest_type: payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type || null,
-interest_typeType: payload?.payment_settings?.credit_card_settings?.installments_setup
-  ? typeof payload.payment_settings.credit_card_settings.installments_setup.interest_type
-  : null,
-
+      installments_setup_present: !!payload?.payment_settings?.credit_card_settings?.installments_setup,
+    });
 
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
