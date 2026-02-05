@@ -155,100 +155,81 @@ async function checkout(req, res) {
       await org.save();
     }
 
-    // ✅ cria Payment Link (Checkout hospedado)
-    // IMPORTANTE: metadata.kind='order' para o webhook não sobrescrever pagarmeSubscriptionId
-
-        const boletoDueAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
-
-    // ✅ Formato exigido no checkout link (type=order):
-    // installments: [{ number, total }]
-    // installments_setup: { interest_type }
-    // boleto_settings/pix_settings obrigatórios se aceitos
-    const installmentsNumbers = [1, 2, 3, 4, 5, 6, 12];
-    const installments = installmentsNumbers.map((n) => ({ number: n, total: priceCents }));
-
-        // ✅ cria Payment Link (Checkout hospedado) — formato alinhado ao exemplo oficial
-    // Fonte: docs.pagar.me (paymentlinks type=order) — installments deve ser array de { number, total }
     const allowedInstallments = [1, 2, 3, 4, 5, 6, 12];
 
+    // ✅ payload minimalista (reduz chance de 400 por schema)
     const payload = {
       is_building: false,
-      const payload = {
-  is_building: false,
-  payment_settings: {
-    credit_card_settings: {
-      installments_setup: {
-        interest_type: 'simple',
+      payment_settings: {
+        credit_card_settings: {
+          installments_setup: { interest_type: 'simple' },
+          operation_type: 'auth_and_capture',
+          installments: allowedInstallments.map((n) => ({
+            number: n,
+            total: priceCents,
+          })),
+        },
+        accepted_payment_methods: ['credit_card'],
       },
-      operation_type: 'auth_and_capture',
-      installments: allowedInstallments.map((n) => ({
-        number: n,
-        total: priceCents,
-      })),
-    },
-    accepted_payment_methods: ['credit_card'],
-  },
-  cart_settings: {
-    items: [
-      {
-        amount: priceCents,
-        name: `WorshipHub Plano ${planCode} (${periodKey})`,
-        default_quantity: 1,
+      cart_settings: {
+        items: [
+          {
+            amount: priceCents,
+            name: `WorshipHub Plano ${planCode} (${periodKey})`,
+            default_quantity: 1,
+          },
+        ],
       },
-    ],
-  },
-  name: `WorshipHub Plano ${planCode} (${periodKey})`,
-  type: 'order',
-};
+      name: `WorshipHub Plano ${planCode} (${periodKey})`,
+      type: 'order',
+    };
 
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
 
-    // ⚠️ Importante: só ativar licença como "active" após confirmação no webhook (pago)
-    // Aqui a gente só salva IDs e estado "pending"
-org.license = org.license || {};
-org.license.plan = String(planCode);
-org.license.status = 'pending';
-org.license.billingPeriod = periodKey;
+    org.license = org.license || {};
+    org.license.plan = String(planCode);
+    org.license.status = 'pending';
+    org.license.billingPeriod = periodKey;
 
-// rastreio do checkout
-org.license.pagarmePaymentLinkId = paymentLink?.id || null;
+    // rastreio do checkout
+    org.license.pagarmePaymentLinkId = paymentLink?.id || null;
 
-// rastreio pendente (para o webhook casar sem risco de plano errado)
-org.license.pendingPayment = {
-  provider: 'pagarme',
-  kind: 'order',
-  paymentLinkId: paymentLink?.id || null,
-  planCode: String(planCode),
-  billingPeriod: String(periodKey),
-  createdByUserId: String(userId || ''),
-  createdAt: new Date().toISOString(),
-};
+    // rastreio pendente (para o webhook casar sem risco)
+    org.license.pendingPayment = {
+      provider: 'pagarme',
+      kind: 'order',
+      paymentLinkId: paymentLink?.id || null,
+      planCode: String(planCode),
+      billingPeriod: String(periodKey),
+      createdByUserId: String(userId || ''),
+      createdAt: new Date().toISOString(),
+    };
 
-// não mexe no pagarmeSubscriptionId aqui (fluxo order)
-await org.save();
+    await org.save();
 
-        return res.json({
+    return res.json({
       ok: true,
       url: paymentLink?.url || null,
       paymentLinkId: paymentLink?.id || null,
       status: paymentLink?.status || null,
       paymentLink,
     });
-  } catch (err) {console.error('[billingController.checkout] error RAW:', {
-  status,
-  reqId,
-  data,
-  message: err?.message,
-});
-
-    const status = err?.response?.status;
+  } catch (err) {
+    const status = err?.response?.status || null;
     const data = err?.response?.data;
     const reqId =
       err?.response?.headers?.['x-request-id'] ||
       err?.response?.headers?.['request-id'] ||
       err?.response?.headers?.['x-correlation-id'] ||
       null;
+
+    console.error('[billingController.checkout] error RAW:', {
+      status,
+      reqId,
+      data,
+      message: err?.message,
+    });
 
     return res.status(500).json({ error: 'Failed to create checkout link' });
   }

@@ -23,6 +23,9 @@ pagarmeSubscriptionId: { type: String, default: null },
 pagarmePaymentLinkId: { type: String, default: null },
 pagarmeLastOrderId: { type: String, default: null },
 
+// ✅ rastreio pendente (para o webhook casar com segurança)
+pendingPayment: { type: Schema.Types.Mixed, default: null },
+
 // Quando o ciclo de assinatura atual começou (ex.: 01/01/2026)
 planStart: { type: Date },
 // Quando o ciclo atual termina / expira (ex.: 31/01/2026 ou 31/12/2026)

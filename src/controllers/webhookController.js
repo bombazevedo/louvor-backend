@@ -3,13 +3,15 @@ const Organization = require('../models/Organization');
 const { addMonths, startOfNow } = require('../utils/dateUtils');
 
 function verifyWebhook(req) {
-  // ✅ simples e robusto: compare um secret em header
-  // Configure no Pagar.me a URL e envie esse header (ou use um query token)
+  // ✅ determinístico: use ?secret=... na URL do webhook cadastrada no Pagar.me
+  // (header custom pode não ser enviado pelo provedor)
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
-  if (!secret) return true; // se não setou secret, não bloqueia (dev)
-    const receivedHeader = req.header('x-worshiphub-webhook-secret');
+  if (!secret) return true; // dev: se não setou, não bloqueia
+
   const receivedQuery = req?.query?.secret;
-  const received = receivedHeader || receivedQuery;
+  const receivedHeader = req.header('x-worshiphub-webhook-secret'); // mantém compatibilidade
+  const received = receivedQuery || receivedHeader;
+
   return received && String(received) === String(secret);
 }
 
@@ -43,12 +45,15 @@ async function pagarmeWebhook(req, res) {
       return res.json({ ok: true }); // não re-tenta infinito
     }
 
-    // ✅ identifica eventos vindos do checkout via payment link (order)
-    const __prevSubId = org?.license?.pagarmeSubscriptionId || null;
-    const __isOrderFromLink = String(meta?.kind || '').toLowerCase() === 'order';
+        // ✅ identifica tipo do evento (order.* vs subscription.*)
+    const isOrderEvent = String(eventType || '').toLowerCase().startsWith('order.');
+    const isSubscriptionEvent = String(eventType || '').toLowerCase().startsWith('subscription.');
 
-    const planCode = meta?.planCode || org?.license?.plan || 'FREE';
-    const billingPeriod = meta?.billingPeriod || org?.license?.billingPeriod || null;
+    // ✅ preferir metadata do próprio evento; fallback para pendingPayment (caso metadata não venha)
+    const pending = org?.license?.pendingPayment || null;
+
+    const planCode = meta?.planCode || pending?.planCode || org?.license?.plan || 'FREE';
+    const billingPeriod = meta?.billingPeriod || pending?.billingPeriod || org?.license?.billingPeriod || null;
     const billingKey = billingPeriod ? String(billingPeriod).toUpperCase() : null;
 
     // decide meses (1/3/12)
@@ -58,9 +63,6 @@ async function pagarmeWebhook(req, res) {
       (billingKey === 'YEARLY' || billingKey === 'ANNUAL') ? 12 :
       null;
 
-    // Heurística segura:
-    // - se evento indicar "paid/active": ativa
-    // - se indicar "canceled/ended": expira
     const status = String(data?.status || '').toLowerCase();
 
     const isPaidLike =
@@ -77,19 +79,25 @@ async function pagarmeWebhook(req, res) {
       status === 'ended';
 
     org.license = org.license || {};
-    org.license.plan = String(planCode);
-    if (billingPeriod) org.license.billingPeriod = billingPeriod;
-
     if (data?.customer_id) org.license.pagarmeCustomerId = String(data.customer_id);
-    if (data?.id) org.license.pagarmeSubscriptionId = String(data.id);
 
-// ✅ Se veio de payment link (order), NÃO deixamos sobrescrever pagarmeSubscriptionId
-if (__isOrderFromLink && data?.id) {
-  org.license.pagarmeLastOrderId = String(data.id);
-  org.license.pagarmeSubscriptionId = __prevSubId; // restaura
-}
+    // ✅ para order.*: data.id é orderId (NUNCA subscriptionId)
+    if (isOrderEvent && data?.id) {
+      org.license.pagarmeLastOrderId = String(data.id);
+    }
 
-        if (isPaidLike && months) {
+    // ✅ para subscription.*: data.id pode ser subscriptionId
+    if (isSubscriptionEvent && data?.id) {
+      org.license.pagarmeSubscriptionId = String(data.id);
+    }
+
+    // ✅ só “assume plano” quando de fato pagou e temos período válido
+    if (isPaidLike && months) {
+      org.license.plan = String(planCode);
+      if (billingPeriod) org.license.billingPeriod = billingPeriod;
+    }
+
+          if (isPaidLike && months) {
       const now = startOfNow();
 
       const currentEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
@@ -102,9 +110,13 @@ if (__isOrderFromLink && data?.id) {
       org.license.status = 'active';
       org.license.planStart = now;
       org.license.planEnd = addMonths(baseDate, months);
+
+      // ✅ consumo do pendingPayment (não deixa um link antigo ativar depois)
+      if (org.license.pendingPayment) {
+        org.license.pendingPayment = undefined;
+      }
     } else if (isCanceledLike) {
       org.license.status = 'expired';
-      // não mexe em planEnd se já existir (mantém histórico)
       if (!org.license.planEnd) org.license.planEnd = startOfNow();
     }
 
