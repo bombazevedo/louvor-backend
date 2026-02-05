@@ -171,13 +171,13 @@ async function checkout(req, res) {
       is_building: false,
       payment_settings: {
         credit_card_settings: {
-          installments_setup: { interest_type: 'simple' },
-          operation_type: 'auth_and_capture',
-          installments: allowedInstallments.map((n) => ({
-            number: n,
-            total: priceCents,
-          })),
-        },
+  operation_type: 'auth_and_capture',
+  installments: allowedInstallments.map((n) => ({
+    number: n,
+    total: priceCents,
+  })),
+},
+
         accepted_payment_methods: ['credit_card'],
       },
       cart_settings: {
@@ -203,9 +203,11 @@ async function checkout(req, res) {
         total: it.total,
         totalType: typeof it.total,
       })),
-      interest_type: payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type,
-      interest_typeType: typeof payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type,
-    });
+      interest_type: payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type || null,
+interest_typeType: payload?.payment_settings?.credit_card_settings?.installments_setup
+  ? typeof payload.payment_settings.credit_card_settings.installments_setup.interest_type
+  : null,
+
 
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
