@@ -30,18 +30,34 @@ async function pagarmeWebhook(req, res) {
     const meta = data?.metadata || {};
     const orgId = meta?.orgId;
 
+        // ✅ order.paid (payment link) pode não trazer orgId no metadata.
+    // Casamos a org pelo code do payment link (integration.code / code / charges[0].code)
+    const paymentLinkCode =
+      data?.integration?.code ||
+      data?.code ||
+      data?.charges?.[0]?.code ||
+      null;
+
     // fallback: se vier só subscription_id, tentamos buscar org por pagarmeSubscriptionId
     let org = null;
     if (orgId) {
       org = await Organization.findById(orgId);
+    } else if (paymentLinkCode) {
+      org = await Organization.findOne({
+        $or: [
+          { 'license.pagarmePaymentLinkId': String(paymentLinkCode) },
+          { 'license.pendingPayment.paymentLinkId': String(paymentLinkCode) },
+        ],
+      });
     } else if (data?.id) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.id) });
     } else if (data?.subscription?.id) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.subscription.id) });
     }
 
-    if (!org) {
-      console.log('[pagarmeWebhook] org not found. eventType=', eventType);
+
+        if (!org) {
+      console.log('[pagarmeWebhook] org not found. eventType=', eventType, '| paymentLinkCode=', paymentLinkCode);
       return res.json({ ok: true }); // não re-tenta infinito
     }
 
