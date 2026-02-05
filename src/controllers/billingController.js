@@ -129,8 +129,17 @@ async function checkout(req, res) {
     if (!planCode) return res.status(400).json({ error: 'Missing planCode' });
     if (!periodKey) return res.status(400).json({ error: 'Invalid billingPeriod' });
 
-    const priceCents = getPriceCents(planCode, periodKey);
-    if (!priceCents) return res.status(400).json({ error: 'Invalid plan/period price' });
+    const rawPriceCents = getPriceCents(planCode, periodKey);
+    const priceCents = Number(rawPriceCents);
+
+    if (!rawPriceCents && rawPriceCents !== 0) {
+      return res.status(400).json({ error: 'Invalid plan/period price' });
+    }
+
+    if (!Number.isInteger(priceCents) || priceCents <= 0) {
+      console.error('[billingController.checkout] invalid priceCents:', { rawPriceCents, priceCents });
+      return res.status(400).json({ error: 'Invalid priceCents (must be integer cents)' });
+    }
 
     const org = await Organization.findById(orgId);
     if (!org) return res.status(404).json({ error: 'Organization not found' });
@@ -184,6 +193,20 @@ async function checkout(req, res) {
       type: 'order',
     };
 
+    console.log('[billingController.checkout] payload:', JSON.stringify(payload, null, 2));
+    console.log('[billingController.checkout] payload types:', {
+      priceCents,
+      priceCentsType: typeof priceCents,
+      installments: payload?.payment_settings?.credit_card_settings?.installments?.map((it) => ({
+        number: it.number,
+        numberType: typeof it.number,
+        total: it.total,
+        totalType: typeof it.total,
+      })),
+      interest_type: payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type,
+      interest_typeType: typeof payload?.payment_settings?.credit_card_settings?.installments_setup?.interest_type,
+    });
+
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
 
@@ -227,9 +250,15 @@ async function checkout(req, res) {
     console.error('[billingController.checkout] error RAW:', {
       status,
       reqId,
-      data,
       message: err?.message,
+      data,
     });
+
+    if (data?.errors) {
+      console.error('[billingController.checkout] error DETAILS:', JSON.stringify(data.errors, null, 2));
+    } else {
+      console.error('[billingController.checkout] error DETAILS:', JSON.stringify(data, null, 2));
+    }
 
     return res.status(500).json({ error: 'Failed to create checkout link' });
   }
