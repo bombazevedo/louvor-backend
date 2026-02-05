@@ -167,43 +167,42 @@ async function checkout(req, res) {
     const installmentsNumbers = [1, 2, 3, 4, 5, 6, 12];
     const installments = installmentsNumbers.map((n) => ({ number: n, total: priceCents }));
 
+        // ✅ cria Payment Link (Checkout hospedado) — formato alinhado ao exemplo oficial
+    // Fonte: docs.pagar.me (paymentlinks type=order) — installments deve ser array de { number, total }
+    const allowedInstallments = [1, 2, 3, 4, 5, 6, 12];
+
     const payload = {
       is_building: false,
       name: `WorshipHub Plano ${planCode} (${periodKey})`,
       type: 'order',
 
       payment_settings: {
-        accepted_payment_methods: ['credit_card', 'pix', 'boleto'],
+        // ✅ Para destravar de forma determinística: começa só com cartão (não exige pix/boleto_settings)
+        accepted_payment_methods: ['credit_card'],
 
         credit_card_settings: {
-          operation_type: 'auth_and_capture',
+          // ✅ exemplo oficial usa installments_setup + installments
           installments_setup: {
             interest_type: 'simple',
           },
-          installments,
-        },
-
-        boleto_settings: {
-          due_at: boletoDueAt,
-          instructions: 'Pagamento do plano WorshipHub',
-        },
-
-        pix_settings: {
-          expires_in: 3600,
+          operation_type: 'auth_and_capture',
+          installments: allowedInstallments.map((n) => ({
+            number: n,
+            total: priceCents,
+          })),
         },
       },
 
       cart_settings: {
         items: [
           {
-            name: `WorshipHub Plano ${planCode} (${periodKey})`,
             amount: priceCents,
-            quantity: 1,
+            name: `WorshipHub Plano ${planCode} (${periodKey})`,
+            default_quantity: 1,
           },
         ],
       },
 
-      // ✅ Mantém rastreabilidade total via metadata (suficiente pro webhook)
       metadata: {
         orgId: String(orgId),
         planCode: String(planCode),
