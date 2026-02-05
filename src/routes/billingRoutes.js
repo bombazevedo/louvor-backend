@@ -9,6 +9,6 @@ const { subscribe, catalog, checkout } = require('../controllers/billingControll
 router.get('/catalog', authenticate, orgContext, catalog);
 router.post('/checkout', authenticate, orgContext, checkout);
 
-router.post('/subscribe', authenticate, orgContext, subscribe);
+// router.post('/subscribe', authenticate, orgContext, subscribe);
 
 module.exports = router;

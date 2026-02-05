@@ -15,7 +15,7 @@ function createPagarmeClient() {
   // ✅ Teste (sk_test_*) usa sdx-api. Produção (sk_live_*) usa api.
   const isTestKey = String(secretKey).startsWith('sk_test_');
 
-  return axios.create({
+    const client = axios.create({
     baseURL: isTestKey
       ? 'https://sdx-api.pagar.me/core/v5'
       : 'https://api.pagar.me/core/v5',
@@ -25,6 +25,28 @@ function createPagarmeClient() {
     },
     timeout: 20000,
   });
+
+  // debug cirúrgico: preserva request-id e response.data no erro
+  client.interceptors.response.use(
+    (resp) => resp,
+    (err) => {
+      try {
+        err._pagarme = {
+          status: err?.response?.status,
+          reqId:
+            err?.response?.headers?.['x-request-id'] ||
+            err?.response?.headers?.['request-id'] ||
+            err?.response?.headers?.['x-correlation-id'] ||
+            null,
+          data: err?.response?.data,
+        };
+      } catch (_) {}
+      return Promise.reject(err);
+    }
+  );
+
+  return client;
+
 }
 
 module.exports = { createPagarmeClient };
