@@ -69,28 +69,39 @@ async function pagarmeWebhook(req, res) {
         // ✅ order.paid (payment link) pode não trazer orgId no metadata.
     // Casamos a org pelo code do payment link (integration.code / code / charges[0].code)
     const paymentLinkCode =
-      data?.integration?.code ||
-      data?.code ||
-      data?.charges?.[0]?.code ||
-      null;
+  data?.integration?.code ||
+  data?.code ||
+  data?.charges?.[0]?.code ||
+
+  // ✅ fallbacks comuns
+  payload?.data?.integration?.code ||
+  payload?.data?.code ||
+  payload?.data?.charges?.[0]?.code ||
+
+  null;
 
     // fallback: se vier só subscription_id, tentamos buscar org por pagarmeSubscriptionId
     let org = null;
     if (orgId) {
       org = await Organization.findById(orgId);
     } else if (paymentLinkCode) {
-      org = await Organization.findOne({
-        $or: [
-          { 'license.pagarmePaymentLinkId': String(paymentLinkCode) },
-          { 'license.pendingPayment.paymentLinkId': String(paymentLinkCode) },
-        ],
-      });
+  org = await Organization.findOne({
+    $or: [
+      // pode acontecer de alguém ter salvo "code" em pagarmePaymentLinkId em algum momento
+      { 'license.pagarmePaymentLinkId': String(paymentLinkCode) },
+
+      // caso antigo: comparar code contra paymentLinkId (se por acaso forem iguais)
+      { 'license.pendingPayment.paymentLinkId': String(paymentLinkCode) },
+
+      // ✅ caso correto: comparar code com paymentLinkCode salvo no checkout
+      { 'license.pendingPayment.paymentLinkCode': String(paymentLinkCode) },
+    ],
+  });
     } else if (data?.id) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.id) });
     } else if (data?.subscription?.id) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.subscription.id) });
     }
-
 
         if (!org) {
       console.log('[pagarmeWebhook] org not found. eventType=', eventType, '| paymentLinkCode=', paymentLinkCode);
