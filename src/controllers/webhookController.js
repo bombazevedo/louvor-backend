@@ -145,7 +145,18 @@ async function pagarmeWebhook(req, res) {
       status === 'ended';
 
         org.license = org.license || {};
-    if (data?.customer_id) org.license.pagarmeCustomerId = String(data.customer_id);
+
+    // ✅ order.paid normalmente vem com customer em data.customer.id (não customer_id)
+    const customerIdFromPayload =
+      data?.customer_id ||
+      data?.customer?.id ||
+      payload?.data?.customer_id ||
+      payload?.data?.customer?.id ||
+      null;
+
+    if (customerIdFromPayload) {
+      org.license.pagarmeCustomerId = String(customerIdFromPayload);
+    }
 
     // ✅ para subscription.*: data.id pode ser subscriptionId
     if (isSubscriptionEvent && data?.id) {
@@ -172,34 +183,85 @@ async function pagarmeWebhook(req, res) {
       });
       return res.json({ ok: true, ignored: true, reason: 'duplicate_order' });
     }
-    // ✅ MODELO 1:
-    // - se mudou de plano => perde saldo (base = now)
-    // - se é o mesmo plano => soma (base = currentEnd se ainda válido)
+        // ✅ MODELO 1 (determinístico e blindado):
+    // - mudou de plano => perde saldo (base = now)
+    // - mesmo plano => soma (base = previousPlanEnd/panEnd se ainda válido)
+    // Fonte de verdade para "plano anterior": pendingPayment.previousPlanCode/previousPlanEnd (quando existir).
     if (isPaidLike && months) {
       const now = startOfNow();
 
-      const prevPlan = String(org.license.plan || 'FREE');
-      const nextPlan = String(planCode || 'FREE');
-      const isSamePlan = prevPlan === nextPlan;
+      const pendingNow = org?.license?.pendingPayment || null;
 
-      const currentEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
-      const hasValidEnd = !!currentEnd && !isNaN(currentEnd.getTime());
-      const canStack = isSamePlan && hasValidEnd && currentEnd.getTime() > now.getTime();
-      const baseDate = canStack ? currentEnd : now;
+      // ✅ Para order.*: só aplicamos mudança se o webhook estiver casando com o pending do checkout
+      // (evita reenviar webhook/colisão estender período indevidamente)
+      if (isOrderEvent) {
+        const incomingCode = paymentLinkCode ? String(paymentLinkCode) : null;
 
-      org.license.plan = nextPlan;
-      if (billingPeriod) org.license.billingPeriod = billingPeriod;
+        const pendingCode = pendingNow?.paymentLinkCode ? String(pendingNow.paymentLinkCode) : null;
+        const pendingUrl = pendingNow?.paymentLinkUrl ? String(pendingNow.paymentLinkUrl) : null;
+        const pendingId = pendingNow?.paymentLinkId ? String(pendingNow.paymentLinkId) : null;
+
+        const orgLinkId = org?.license?.pagarmePaymentLinkId ? String(org.license.pagarmePaymentLinkId) : null;
+
+        const matchesPending =
+          (!!incomingCode && !!pendingCode && incomingCode === pendingCode) ||
+          (!!incomingCode && !!pendingUrl && pendingUrl.endsWith(`/${incomingCode}`)) ||
+          (!!incomingCode && !!orgLinkId && (orgLinkId === incomingCode || orgLinkId.endsWith(`/${incomingCode}`)));
+
+        // Se houver pending e não casar, não altera licença (segurança).
+        if (pendingNow && !matchesPending) {
+          console.log('[pagarmeWebhook] order.paid ignored (pending mismatch)', {
+            orgId: String(org._id),
+            incomingCode,
+            pendingCode,
+            pendingId,
+          });
+          return res.json({ ok: true, ignored: true, reason: 'pending_mismatch' });
+        }
+      }
+
+      // ✅ Plano/Período alvo: prioridade para pending (checkout/subscription) e só depois metadata
+      const targetPlan = String(pendingNow?.planCode || meta?.planCode || planCode || 'FREE');
+      const targetPeriod = pendingNow?.billingPeriod || meta?.billingPeriod || billingPeriod || null;
+
+      // ✅ Fonte do "plano anterior" para MODELO 1:
+      // Se existir snapshot, ele manda. Senão, cai no estado vigente atual.
+      const prevPlanForModel = String(pendingNow?.previousPlanCode || org.license.plan || 'FREE');
+
+      const prevEndSnapshot = (() => {
+        try {
+          if (pendingNow?.previousPlanEnd) {
+            const d = new Date(pendingNow.previousPlanEnd);
+            if (!isNaN(d.getTime())) return d;
+          }
+        } catch {}
+        const d2 = org.license.planEnd ? new Date(org.license.planEnd) : null;
+        return d2 && !isNaN(d2.getTime()) ? d2 : null;
+      })();
+
+      const isSamePlan = prevPlanForModel === targetPlan;
+
+      const canStack =
+        isSamePlan &&
+        prevEndSnapshot &&
+        prevEndSnapshot.getTime() > now.getTime();
+
+      const baseDate = canStack ? prevEndSnapshot : now;
+
+      // ✅ aplica licença
+      org.license.plan = targetPlan;
+      if (targetPeriod) org.license.billingPeriod = String(targetPeriod);
 
       org.license.status = 'active';
       org.license.planStart = now;
       org.license.planEnd = addMonths(baseDate, months);
 
-      // ✅ para order.*: data.id é orderId (NUNCA subscriptionId)
-      if (incomingOrderId) {
+      // ✅ order id (idempotência usa esse campo)
+      if (isOrderEvent && incomingOrderId) {
         org.license.pagarmeLastOrderId = incomingOrderId;
       }
 
-      // ✅ consumo do pendingPayment (não deixa um link antigo ativar depois)
+      // ✅ consumo do pendingPayment
       if (org.license.pendingPayment != null) {
         org.license.pendingPayment = null;
         if (typeof org.markModified === 'function') org.markModified('license');
