@@ -213,14 +213,23 @@ async function checkout(req, res) {
     org.license.status = 'pending';
     org.license.billingPeriod = periodKey;
 
-    // rastreio do checkout
-    org.license.pagarmePaymentLinkId = paymentLink?.id || null;
+        // rastreio do checkout
+    // ✅ IMPORTANTÍSSIMO: o webhook order.paid chega com "integration.code"/"code"/"charges[0].code"
+    // então salvamos o "code" como identificador principal de casamento
+    const paymentLinkMatchKey =
+      paymentLink?.code ||
+      paymentLink?.url || // fallback extremo (não ideal, mas evita null)
+      paymentLink?.id ||
+      null;
+
+    org.license.pagarmePaymentLinkId = paymentLinkMatchKey;
 
     // rastreio pendente (para o webhook casar sem risco)
     org.license.pendingPayment = {
       provider: 'pagarme',
       kind: 'order',
-      paymentLinkId: paymentLink?.id || null,
+      paymentLinkId: paymentLinkMatchKey, // ✅ mesma chave do webhook
+      paymentLinkInternalId: paymentLink?.id || null, // extra (não usado no match)
       planCode: String(planCode),
       billingPeriod: String(periodKey),
       createdByUserId: String(userId || ''),
