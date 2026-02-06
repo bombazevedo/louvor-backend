@@ -4,17 +4,31 @@ const { addMonths, startOfNow } = require('../utils/dateUtils');
 
 function verifyWebhook(req) {
   // ✅ determinístico: use ?secret=... na URL do webhook cadastrada no Pagar.me
-  const secret = process.env.PAGARME_WEBHOOK_SECRET;
-  if (!secret) return true; // dev: se não setou, não bloqueia
+  const webhookSecret = process.env.PAGARME_WEBHOOK_SECRET;
+  const apiSecretKey = process.env.PAGARME_SECRET_KEY; // ⚠️ fallback temporário (teste controlado)
+
+  // dev: se não setou nenhum, não bloqueia
+  if (!webhookSecret && !apiSecretKey) return true;
 
   const receivedQuery = req?.query?.secret;
   const receivedHeader = req.header('x-worshiphub-webhook-secret'); // fallback (compat)
   const received = receivedQuery || receivedHeader;
 
-  const expected = String(secret || '').trim();
+  const expected = String(webhookSecret || '').trim();
   const got = received != null ? String(received).trim() : '';
 
-  const ok = !!got && got === expected;
+  // ✅ regra oficial: webhookSecret (wh_...)
+  let ok = !!got && !!expected && got === expected;
+
+  // ✅ fallback controlado: se o provedor estiver chamando com sk_test_... no ?secret=
+  // Aceita SOMENTE se for exatamente igual à PAGARME_SECRET_KEY.
+  if (!ok && apiSecretKey) {
+    const expectedApi = String(apiSecretKey || '').trim();
+    if (!!got && !!expectedApi && got === expectedApi) {
+      ok = true;
+      console.warn('[pagarmeWebhook.verify] WARNING: webhook called using PAGARME_SECRET_KEY as ?secret (sk_test...). Provider URL is divergent/old; accepting temporarily for controlled test.');
+    }
+  }
 
   // ✅ log mínimo quando falhar (sem vazar secret inteiro)
   if (!ok) {
