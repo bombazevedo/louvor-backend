@@ -144,31 +144,34 @@ async function pagarmeWebhook(req, res) {
       status === 'inactive' ||
       status === 'ended';
 
-    org.license = org.license || {};
+        org.license = org.license || {};
     if (data?.customer_id) org.license.pagarmeCustomerId = String(data.customer_id);
-
-    // ✅ para order.*: data.id é orderId (NUNCA subscriptionId)
-    if (isOrderEvent && data?.id) {
-      org.license.pagarmeLastOrderId = String(data.id);
-    }
 
     // ✅ para subscription.*: data.id pode ser subscriptionId
     if (isSubscriptionEvent && data?.id) {
       org.license.pagarmeSubscriptionId = String(data.id);
     }
 
-        // ✅ idempotência: reenviar o mesmo order.paid NÃO pode extender período
+    // ✅ idempotência correta: comparar ANTES de gravar pagarmeLastOrderId
+    // Reenviar o MESMO order.paid não pode estender período
     const incomingOrderId = isOrderEvent && data?.id ? String(data.id) : null;
     const prevLastOrderId = org?.license?.pagarmeLastOrderId ? String(org.license.pagarmeLastOrderId) : null;
 
-    if (isPaidLike && months && incomingOrderId && prevLastOrderId && incomingOrderId === prevLastOrderId) {
+    // Só ignora duplicado quando a licença já estiver ativa (evita travar a primeira ativação)
+    if (
+      isPaidLike &&
+      months &&
+      incomingOrderId &&
+      prevLastOrderId &&
+      incomingOrderId === prevLastOrderId &&
+      String(org?.license?.status || '') === 'active'
+    ) {
       console.log('[pagarmeWebhook] duplicate order.paid ignored', {
         orgId: String(org._id),
         orderId: incomingOrderId,
       });
       return res.json({ ok: true, ignored: true, reason: 'duplicate_order' });
     }
-
     // ✅ MODELO 1:
     // - se mudou de plano => perde saldo (base = now)
     // - se é o mesmo plano => soma (base = currentEnd se ainda válido)
