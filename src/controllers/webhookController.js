@@ -4,13 +4,37 @@ const { addMonths, startOfNow } = require('../utils/dateUtils');
 
 function verifyWebhook(req) {
   // ✅ determinístico: use ?secret=... na URL do webhook cadastrada no Pagar.me
-  // (header custom pode não ser enviado pelo provedor)
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
   if (!secret) return true; // dev: se não setou, não bloqueia
 
-const received = req?.query?.secret;
-return received && String(received) === String(secret);
+  const receivedQuery = req?.query?.secret;
+  const receivedHeader = req.header('x-worshiphub-webhook-secret'); // fallback (compat)
+  const received = receivedQuery || receivedHeader;
 
+  const expected = String(secret || '').trim();
+  const got = received != null ? String(received).trim() : '';
+
+  const ok = !!got && got === expected;
+
+  // ✅ log mínimo quando falhar (sem vazar secret inteiro)
+  if (!ok) {
+    const mask = (v) => {
+      const s = String(v || '');
+      if (!s) return '';
+      if (s.length <= 8) return '***';
+      return `${s.slice(0, 4)}***${s.slice(-4)}`;
+    };
+
+    console.log('[pagarmeWebhook.verify] invalid secret', {
+      originalUrl: req?.originalUrl,
+      hasQuery: !!receivedQuery,
+      hasHeader: !!receivedHeader,
+      got: mask(got),
+      expected: mask(expected),
+    });
+  }
+
+  return ok;
 }
 
 async function pagarmeWebhook(req, res) {
