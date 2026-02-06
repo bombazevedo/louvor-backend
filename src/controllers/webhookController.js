@@ -69,34 +69,37 @@ async function pagarmeWebhook(req, res) {
         // ✅ order.paid (payment link) pode não trazer orgId no metadata.
     // Casamos a org pelo code do payment link (integration.code / code / charges[0].code)
     const paymentLinkCode =
-  data?.integration?.code ||
-  data?.code ||
-  data?.charges?.[0]?.code ||
-
-  // ✅ fallbacks comuns
-  payload?.data?.integration?.code ||
-  payload?.data?.code ||
-  payload?.data?.charges?.[0]?.code ||
-
-  null;
+      data?.integration?.code ||
+      data?.code ||
+      data?.charges?.[0]?.code ||
+      // ✅ fallbacks comuns
+      payload?.data?.integration?.code ||
+      payload?.data?.code ||
+      payload?.data?.charges?.[0]?.code ||
+      null;
 
     // fallback: se vier só subscription_id, tentamos buscar org por pagarmeSubscriptionId
     let org = null;
     if (orgId) {
       org = await Organization.findById(orgId);
-    } else if (paymentLinkCode) {
-  org = await Organization.findOne({
-    $or: [
-      // pode acontecer de alguém ter salvo "code" em pagarmePaymentLinkId em algum momento
-      { 'license.pagarmePaymentLinkId': String(paymentLinkCode) },
+        } else if (paymentLinkCode) {
+      const code = String(paymentLinkCode);
+      const codeAtEnd = new RegExp(`${code}$`); // aceita URL terminando com /pl_xxx
 
-      // caso antigo: comparar code contra paymentLinkId (se por acaso forem iguais)
-      { 'license.pendingPayment.paymentLinkId': String(paymentLinkCode) },
+      org = await Organization.findOne({
+        $or: [
+          // pode acontecer de alguém ter salvo "code" em pagarmePaymentLinkId em algum momento
+          { 'license.pagarmePaymentLinkId': code },
+          { 'license.pagarmePaymentLinkId': codeAtEnd },
 
-      // ✅ caso correto: comparar code com paymentLinkCode salvo no checkout
-      { 'license.pendingPayment.paymentLinkCode': String(paymentLinkCode) },
-    ],
-  });
+          // comparar code contra paymentLinkId (pode estar como URL)
+          { 'license.pendingPayment.paymentLinkId': code },
+          { 'license.pendingPayment.paymentLinkId': codeAtEnd },
+
+          // ✅ caso correto: comparar code com paymentLinkCode salvo no checkout
+          { 'license.pendingPayment.paymentLinkCode': code },
+        ],
+      });
     } else if (data?.id) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.id) });
     } else if (data?.subscription?.id) {
@@ -154,29 +157,49 @@ async function pagarmeWebhook(req, res) {
       org.license.pagarmeSubscriptionId = String(data.id);
     }
 
-    // ✅ só “assume plano” quando de fato pagou e temos período válido
-    if (isPaidLike && months) {
-      org.license.plan = String(planCode);
-      if (billingPeriod) org.license.billingPeriod = billingPeriod;
+        // ✅ idempotência: reenviar o mesmo order.paid NÃO pode extender período
+    const incomingOrderId = isOrderEvent && data?.id ? String(data.id) : null;
+    const prevLastOrderId = org?.license?.pagarmeLastOrderId ? String(org.license.pagarmeLastOrderId) : null;
+
+    if (isPaidLike && months && incomingOrderId && prevLastOrderId && incomingOrderId === prevLastOrderId) {
+      console.log('[pagarmeWebhook] duplicate order.paid ignored', {
+        orgId: String(org._id),
+        orderId: incomingOrderId,
+      });
+      return res.json({ ok: true, ignored: true, reason: 'duplicate_order' });
     }
 
-          if (isPaidLike && months) {
+    // ✅ MODELO 1:
+    // - se mudou de plano => perde saldo (base = now)
+    // - se é o mesmo plano => soma (base = currentEnd se ainda válido)
+    if (isPaidLike && months) {
       const now = startOfNow();
+
+      const prevPlan = String(org.license.plan || 'FREE');
+      const nextPlan = String(planCode || 'FREE');
+      const isSamePlan = prevPlan === nextPlan;
 
       const currentEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
       const hasValidEnd = !!currentEnd && !isNaN(currentEnd.getTime());
-      const baseDate =
-        hasValidEnd && currentEnd.getTime() > now.getTime()
-          ? currentEnd
-          : now;
+      const canStack = isSamePlan && hasValidEnd && currentEnd.getTime() > now.getTime();
+      const baseDate = canStack ? currentEnd : now;
+
+      org.license.plan = nextPlan;
+      if (billingPeriod) org.license.billingPeriod = billingPeriod;
 
       org.license.status = 'active';
       org.license.planStart = now;
       org.license.planEnd = addMonths(baseDate, months);
 
+      // ✅ para order.*: data.id é orderId (NUNCA subscriptionId)
+      if (incomingOrderId) {
+        org.license.pagarmeLastOrderId = incomingOrderId;
+      }
+
       // ✅ consumo do pendingPayment (não deixa um link antigo ativar depois)
-      if (org.license.pendingPayment) {
-        org.license.pendingPayment = undefined;
+      if (org.license.pendingPayment != null) {
+        org.license.pendingPayment = null;
+        if (typeof org.markModified === 'function') org.markModified('license');
       }
     } else if (isCanceledLike) {
       org.license.status = 'expired';
