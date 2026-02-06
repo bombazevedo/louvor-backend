@@ -8,11 +8,9 @@ function verifyWebhook(req) {
   const secret = process.env.PAGARME_WEBHOOK_SECRET;
   if (!secret) return true; // dev: se não setou, não bloqueia
 
-  const receivedQuery = req?.query?.secret;
-  const receivedHeader = req.header('x-worshiphub-webhook-secret'); // mantém compatibilidade
-  const received = receivedQuery || receivedHeader;
+const received = req?.query?.secret;
+return received && String(received) === String(secret);
 
-  return received && String(received) === String(secret);
 }
 
 async function pagarmeWebhook(req, res) {
