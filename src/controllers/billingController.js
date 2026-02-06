@@ -73,13 +73,34 @@ async function subscribe(req, res) {
     const subResp = await pagarme.post('/subscriptions', subscriptionPayload);
     const subscription = subResp?.data;
 
-    // ⚠️ Importante: só ativar licença como "active" após confirmação no webhook (pago)
-    // Aqui a gente só salva IDs e estado "pending"
+        // ⚠️ Importante: só ativar licença como "active" após confirmação no webhook (pago)
+    // Aqui a gente só salva IDs e estado "pending" + preserva o plano anterior (MODELO 1 determinístico)
     org.license = org.license || {};
+
+    const prevPlanCode = String(org.license.plan || 'FREE');
+    const prevBillingPeriod = org.license.billingPeriod ? String(org.license.billingPeriod) : null;
+    const prevPlanEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
+
     org.license.plan = String(planCode);
     org.license.status = 'pending';
     org.license.billingPeriod = periodKey;
     org.license.pagarmeSubscriptionId = subscription?.id || null;
+
+    // ✅ rastreio determinístico (se futuramente você usar subscription webhooks)
+    org.license.pendingPayment = {
+      provider: 'pagarme',
+      kind: 'subscription',
+      subscriptionId: subscription?.id || null,
+
+      previousPlanCode: prevPlanCode,
+      previousBillingPeriod: prevBillingPeriod,
+      previousPlanEnd: prevPlanEnd && !isNaN(prevPlanEnd.getTime()) ? prevPlanEnd.toISOString() : null,
+
+      planCode: String(planCode),
+      billingPeriod: String(periodKey),
+      createdByUserId: String(userId || ''),
+      createdAt: new Date().toISOString(),
+    };
 
     await org.save();
 
@@ -208,37 +229,63 @@ async function checkout(req, res) {
     const linkResp = await pagarme.post('/paymentlinks', payload);
     const paymentLink = linkResp?.data;
 
-    org.license = org.license || {};
+        org.license = org.license || {};
+
+    // ✅ MODELO 1 (determinístico): preserve o estado vigente ANTES de sobrescrever para pending
+    const prevPlanCode = String(org.license.plan || 'FREE');
+    const prevBillingPeriod = org.license.billingPeriod ? String(org.license.billingPeriod) : null;
+    const prevPlanEnd = org.license.planEnd ? new Date(org.license.planEnd) : null;
+
     org.license.plan = String(planCode);
     org.license.status = 'pending';
     org.license.billingPeriod = periodKey;
 
-        // rastreio do checkout
-    // ✅ IMPORTANTÍSSIMO: o webhook order.paid chega com "integration.code"/"code"/"charges[0].code"
-    // então salvamos o "code" como identificador principal de casamento
-    const paymentLinkMatchKey =
+    // ✅ casamento do webhook: preferir URL (termina com /pl_xxx) e guardar code separado
+    const url = paymentLink?.url || null;
+
+    // tenta obter code do response; se não vier, extrai do final da URL (/pl_xxx)
+    const codeFromUrl = (() => {
+      try {
+        if (!url) return null;
+        const parts = String(url).split('/');
+        const last = parts[parts.length - 1] || null;
+        return last && String(last).startsWith('pl_') ? String(last) : null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const paymentLinkCode =
       paymentLink?.code ||
-      paymentLink?.url || // fallback extremo (não ideal, mas evita null)
-      paymentLink?.id ||
+      paymentLink?.integration?.code ||
+      codeFromUrl ||
       null;
 
-    org.license.pagarmePaymentLinkId = paymentLinkMatchKey;
+    // ✅ guardar URL como fonte principal (o webhook já aceita URL terminando com /pl_xxx)
+    org.license.pagarmePaymentLinkId = url || paymentLink?.id || null;
 
-    // rastreio pendente (para o webhook casar sem risco)
-org.license.pendingPayment = {
-  provider: 'pagarme',
-  kind: 'order',
-  paymentLinkId: paymentLink?.id || null,
+    // rastreio pendente (para o webhook casar sem risco + decidir MODELO 1)
+    org.license.pendingPayment = {
+      provider: 'pagarme',
+      kind: 'order',
 
-  // ✅ IMPORTANTÍSSIMO: alguns eventos (order.paid) referenciam o "code" do link/pedido
-  // via integration.code / code / charges[0].code. Guardamos aqui para casar no webhook.
-  paymentLinkCode: paymentLink?.code || null,
+      // manter id e url (ambos úteis para debug/casamento)
+      paymentLinkId: paymentLink?.id || null,
+      paymentLinkUrl: url,
 
-  planCode: String(planCode),
-  billingPeriod: String(periodKey),
-  createdByUserId: String(userId || ''),
-  createdAt: new Date().toISOString(),
-};
+      // ✅ chave principal de casamento do webhook (integration.code/code/charges[0].code)
+      paymentLinkCode: paymentLinkCode,
+
+      // ✅ decisão do MODELO 1
+      previousPlanCode: prevPlanCode,
+      previousBillingPeriod: prevBillingPeriod,
+      previousPlanEnd: prevPlanEnd && !isNaN(prevPlanEnd.getTime()) ? prevPlanEnd.toISOString() : null,
+
+      planCode: String(planCode),
+      billingPeriod: String(periodKey),
+      createdByUserId: String(userId || ''),
+      createdAt: new Date().toISOString(),
+    };
 
     await org.save();
 
