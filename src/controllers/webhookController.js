@@ -266,9 +266,13 @@ async function pagarmeWebhook(req, res) {
         org.license.pendingPayment = null;
         if (typeof org.markModified === 'function') org.markModified('license');
       }
-    } else if (isCanceledLike) {
-      org.license.status = 'expired';
-      if (!org.license.planEnd) org.license.planEnd = startOfNow();
+       } else if (isCanceledLike) {
+      // ✅ IMPORTANTÍSSIMO: falha/cancelamento de um checkout (order.*) NÃO pode expirar o plano vigente.
+      // O plano vigente só muda no isPaidLike (order.paid / subscription.active etc).
+      if (!isOrderEvent) {
+        org.license.status = 'expired';
+        if (!org.license.planEnd) org.license.planEnd = startOfNow();
+      }
     }
 
     await org.save();
