@@ -185,20 +185,28 @@ async function checkout(req, res) {
     }
 
     const allowedInstallments = [1, 2, 3, 4, 5, 6, 12];
+// ✅ Pix no link (expiração do QR em segundos)
+// docs: pix_settings.expires_in é mandatório quando aceitamos "pix"
+const PIX_EXPIRES_IN_SECONDS = 60 * 60; // 1h
 
     // ✅ payload minimalista (Pagar.me: order + installments NÃO aceita installments_setup)
     const payload = {
       is_building: false,
       payment_settings: {
-        credit_card_settings: {
-          operation_type: 'auth_and_capture',
-          installments: allowedInstallments.map((n) => ({
-            number: n,
-            total: priceCents,
-          })),
-        },
-        accepted_payment_methods: ['credit_card'],
-      },
+  credit_card_settings: {
+    operation_type: 'auth_and_capture',
+    installments: allowedInstallments.map((n) => ({
+      number: n,
+      total: priceCents,
+    })),
+  },
+  // ✅ habilita Pix no mesmo Checkout hospedado
+  pix_settings: {
+    expires_in: PIX_EXPIRES_IN_SECONDS,
+  },
+  accepted_payment_methods: ['credit_card', 'pix'],
+},
+
       cart_settings: {
         items: [
           {
