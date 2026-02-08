@@ -24,6 +24,28 @@ module.exports = async function orgContext(req, res, next) {
     const org = await Organization.findById(orgId).lean();
     if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
 
+    // 🔒 Trava determinística: se a org estiver além do limite do plano do owner, bloqueia também no backend
+    // (fecha bypass via header x-org-id fora do app / clientes alternativos)
+    try {
+      const { getOwnerOrgsPlanState } = require('../utils/orgPlanUtils');
+
+      const ownerId = org.owner;
+      if (ownerId) {
+        const planState = await getOwnerOrgsPlanState(ownerId);
+        const lockedOrgIds = (planState && planState.lockedOrgIds) ? planState.lockedOrgIds : [];
+
+        if (lockedOrgIds.includes(String(orgId))) {
+          return res.status(403).json({
+            error: 'ORG_LOCKED_BY_PLAN',
+            message: 'Esta organização está travada pelo limite do plano. Faça upgrade para continuar.',
+          });
+        }
+      }
+    } catch (lockErr) {
+      // Falha no cálculo do lock não pode derrubar o app; seguimos o fluxo normal (fail-open com log)
+      console.error('[orgContext] lock-check erro:', lockErr);
+    }
+
     req.orgId  = orgId;
     req.orgRole = membership ? membership.role : 'coordenador';
     req._org   = org; // cache p/ licenseGuard

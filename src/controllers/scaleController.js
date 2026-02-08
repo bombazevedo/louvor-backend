@@ -70,7 +70,7 @@ function pickUserIds(members = []) {
   )];
 }
 
-async function notifyUserOfScale(userId, eventDoc) {
+async function notifyUserOfScale(userId, eventDoc, orgId) {
   try {
     const title = 'Escala Confirmada';
     const when = eventDoc?.date ? moment(eventDoc.date).format('DD/MM/YYYY') : '';
@@ -78,17 +78,22 @@ async function notifyUserOfScale(userId, eventDoc) {
       ? `Você foi escalado para "${eventDoc.title}" ${when ? `em ${when}` : ''}.`
       : `Você foi escalado${when ? ` em ${when}` : ''}.`;
 
+    const orgIdStr = orgId ? String(orgId) : null;
+    const relatedIdStr = eventDoc?._id?.toString?.() || '';
+
     // 1) Persistência
     await Notification.create({
       user: userId,
+      org: orgId || undefined,
       title,
       message: body,
       type: 'scale',
       referenceModel: 'Event',
       reference: eventDoc?._id,
       data: {
+        orgId: orgIdStr,
         relatedModel: 'Event',
-        relatedId: eventDoc?._id?.toString?.()
+        relatedId: relatedIdStr,
       },
       sentAt: new Date()
     });
@@ -99,9 +104,10 @@ async function notifyUserOfScale(userId, eventDoc) {
         title,
         body,
         data: {
+          orgId: orgIdStr,
           type: 'scale',
           relatedModel: 'Event',
-          relatedId: eventDoc?._id?.toString?.()
+          relatedId: relatedIdStr,
         }
       })
       .catch(err => {
@@ -114,7 +120,7 @@ async function notifyUserOfScale(userId, eventDoc) {
 }
 
 // ⬇️ NOVO: notificação de REMOÇÃO de escala (top-level, fora da função acima)
-async function notifyUserRemovedFromScale(userId, eventDoc) {
+async function notifyUserRemovedFromScale(userId, eventDoc, orgId) {
   try {
     const title = 'Atualização de Escala';
     const when = eventDoc?.date ? moment(eventDoc.date).format('DD/MM/YYYY') : '';
@@ -122,16 +128,21 @@ async function notifyUserRemovedFromScale(userId, eventDoc) {
       ? `Você foi removido de "${eventDoc.title}" ${when ? `(${when})` : ''}.`
       : `Você foi removido da escala${when ? ` (${when})` : ''}.`;
 
+    const orgIdStr = orgId ? String(orgId) : null;
+    const relatedIdStr = eventDoc?._id?.toString?.() || '';
+
     await Notification.create({
       user: userId,
+      org: orgId || undefined,
       title,
       message: body,
       type: 'scale',
       referenceModel: 'Event',
       reference: eventDoc?._id,
       data: {
+        orgId: orgIdStr,
         relatedModel: 'Event',
-        relatedId: eventDoc?._id?.toString?.(),
+        relatedId: relatedIdStr,
         action: 'removed'
       },
       sentAt: new Date()
@@ -142,15 +153,17 @@ async function notifyUserRemovedFromScale(userId, eventDoc) {
         title,
         body,
         data: {
+          orgId: orgIdStr,
           type: 'scale',
           action: 'removed',
           relatedModel: 'Event',
-          relatedId: eventDoc?._id?.toString?.()
+          relatedId: relatedIdStr,
         }
       })
       .catch(() => {});
   } catch (_) {}
 }
+
 // ⬆️ FIM DOS HELPERS
 
 exports.createScale = async (req, res) => {
@@ -172,11 +185,12 @@ exports.createScale = async (req, res) => {
 
     // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar membros iniciais ⬇️⬇️⬇️
     if (req.body.eventId && Array.isArray(req.body.members) && req.body.members.length > 0) {
-      const eventDoc = await Event.findById(req.body.eventId).select('title date').lean();
-      const userIds = pickUserIds(req.body.members);
-      // dispara em paralelo, sem bloquear
-      Promise.all(userIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
-    }
+  const eventDoc = await Event.findOne({ _id: req.body.eventId, org: req.orgId }).select('title date').lean();
+  const userIds = pickUserIds(req.body.members);
+  // dispara em paralelo, sem bloquear
+  Promise.all(userIds.map(uid => notifyUserOfScale(uid, eventDoc, req.orgId))).catch(() => {});
+}
+
     // ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM createScale ⬆️⬆️⬆️
 
     res.status(201).json(newScale);
@@ -212,14 +226,17 @@ if (req.body.members) {
 
     // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: notificar adicionados **e** removidos ⬇️⬇️⬇️
 const eventId = updated.eventId || req.body.eventId;
-const eventDoc = eventId ? await Event.findById(eventId).select('title date').lean() : null;
+const eventDoc = eventId
+  ? await Event.findOne({ _id: eventId, org: req.orgId }).select('title date').lean()
+  : null;
 
 if (addedUserIds.length > 0) {
-  Promise.all(addedUserIds.map(uid => notifyUserOfScale(uid, eventDoc))).catch(() => {});
+  Promise.all(addedUserIds.map(uid => notifyUserOfScale(uid, eventDoc, req.orgId))).catch(() => {});
 }
 if (removedUserIds.length > 0) {
-  Promise.all(removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc))).catch(() => {});
+  Promise.all(removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc, req.orgId))).catch(() => {});
 }
+
 // ⬆️⬆️⬆️ FIM DA ALTERAÇÃO EM updateScale ⬆️⬆️⬆️
 
     res.json(updated);
@@ -238,13 +255,13 @@ exports.deleteScale = async (req, res) => {
     const removedUserIds = pickUserIds(scale.members);
 
     // tenta resolver o evento para mensagem (via eventId da escala ou referência do Event.scale)
-    let eventDoc = null;
-    if (scale.eventId) {
-      eventDoc = await Event.findById(scale.eventId).select('title date').lean();
-    } else {
-      const ev = await Event.findOne({ scale: scale._id }).select('title date').lean();
-      eventDoc = ev || null;
-    }
+let eventDoc = null;
+if (scale.eventId) {
+  eventDoc = await Event.findOne({ _id: scale.eventId, org: req.orgId }).select('title date').lean();
+} else {
+  const ev = await Event.findOne({ scale: scale._id, org: req.orgId }).select('title date').lean();
+  eventDoc = ev || null;
+}
 
     // desfaz ponte no(s) evento(s) e remove a escala
     await Event.updateMany({ scale: scale._id }, { $unset: { scale: '' } });
@@ -252,10 +269,10 @@ exports.deleteScale = async (req, res) => {
 
     // avisa todos que foram removidos
     if (removedUserIds.length && eventDoc) {
-      Promise.all(
-        removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc))
-      ).catch(() => {});
-    }
+  Promise.all(
+    removedUserIds.map(uid => notifyUserRemovedFromScale(uid, eventDoc, req.orgId))
+  ).catch(() => {});
+}
 
     res.json({ message: 'Escala removida com sucesso' });
   } catch (err) {

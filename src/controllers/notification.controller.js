@@ -8,10 +8,16 @@ exports.listMine = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
 
-    // (AJUSTE CIRÚRGICO) Suporte opcional a paginação (compatível com apiService: ?page&limit)
+        // (AJUSTE CIRÚRGICO) Suporte opcional a paginação (compatível com apiService: ?page&limit)
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit, 10) || 0, 0); // 0 = sem paginação
-    const query = { user: userId };
+
+    // ✅ multi-igrejas: se houver org ativa, filtra por org + fallback para antigas (org:null)
+    const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+
+    const query = orgId
+      ? { user: userId, $or: [{ org: orgId }, { org: null }] }
+      : { user: userId };
 
     let q = Notification.find(query).sort({ createdAt: -1 }).lean();
     if (limit > 0) {
@@ -26,9 +32,16 @@ exports.listMine = async (req, res, next) => {
 // (NOVO) Contagem de não lidas — para badge no ícone
 exports.unreadCount = async (req, res, next) => {
   try {
-    const userId = req.userId || req.user?.id || req.user?._id;
-    const count = await Notification.countDocuments({ user: userId, read: false });
+        const userId = req.userId || req.user?.id || req.user?._id;
+
+    const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+    const query = orgId
+      ? { user: userId, read: false, $or: [{ org: orgId }, { org: null }] }
+      : { user: userId, read: false };
+
+    const count = await Notification.countDocuments(query);
     return res.json({ unread: count });
+
   } catch (err) { return next(err); }
 };
 
@@ -53,8 +66,14 @@ exports.create = async (req, res, next) => {
     }
 
     // Mapear para os campos do schema (user/referenceModel/reference/data)
+        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+
     const doc = await Notification.create({
       user: userId,
+
+      // ✅ multi-igrejas: amarra a notificação à org ativa quando existir
+      org: orgId || null,
+
       title: title || 'Notificação',
       message,
       type,
@@ -88,8 +107,14 @@ exports.markOneRead = async (req, res, next) => {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
+        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+
+    const filter = orgId
+      ? { _id: id, user: userId, $or: [{ org: orgId }, { org: null }] }
+      : { _id: id, user: userId };
+
     const doc = await Notification.findOneAndUpdate(
-      { _id: id, user: userId },
+      filter,
       { $set: { read: true } },
       { new: true }
     ).lean();
@@ -103,10 +128,17 @@ exports.markOneRead = async (req, res, next) => {
 exports.markAllRead = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
+        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+
+    const filter = orgId
+      ? { user: userId, read: false, $or: [{ org: orgId }, { org: null }] }
+      : { user: userId, read: false };
+
     const r = await Notification.updateMany(
-      { user: userId, read: false },
+      filter,
       { $set: { read: true } }
     );
+
     return res.json({ matched: r.matchedCount ?? r.n, modified: r.modifiedCount ?? r.nModified });
   } catch (err) { return next(err); }
 };
@@ -117,7 +149,14 @@ exports.removeOne = async (req, res, next) => {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
-    const r = await Notification.deleteOne({ _id: id, user: userId });
+        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+
+    const filter = orgId
+      ? { _id: id, user: userId, $or: [{ org: orgId }, { org: null }] }
+      : { _id: id, user: userId };
+
+    const r = await Notification.deleteOne(filter);
+
     if ((r.deletedCount ?? r.n) === 0) {
       return res.status(404).json({ message: 'Notificação não encontrada' });
     }

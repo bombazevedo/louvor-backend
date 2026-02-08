@@ -101,8 +101,14 @@ const NotificationSchema = new Schema(
         // - expor "relatedModel" como alias de "referenceModel"
         // - manter _id e também id para conveniência
         // - expor "userId" para o front (mesmo persistindo "user" no banco)
-        ret.id = ret._id?.toString?.() || ret._id;
+                ret.id = ret._id?.toString?.() || ret._id;
         ret.relatedModel = ret.referenceModel;
+
+        // 🔥 multi-igrejas: expõe orgId para o front filtrar por org ativa
+        ret.orgId = ret.org?._id
+          ? ret.org._id.toString()
+          : (ret.org?.toString?.() || ret.org || null);
+
         if (ret.user && typeof ret.user === 'object' && ret.user._id) {
           ret.userId = ret.user._id.toString();
         } else {
@@ -116,6 +122,10 @@ const NotificationSchema = new Schema(
 
 /** Índices úteis para listagens e filtros */
 NotificationSchema.index({ user: 1, read: 1, createdAt: -1 });
+
+// multi-igrejas: acelera listagens por organização ativa
+NotificationSchema.index({ org: 1, user: 1, createdAt: -1 });
+
 NotificationSchema.index({ createdAt: -1 });
 
 /** Marca leitura automaticamente */
