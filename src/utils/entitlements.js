@@ -200,10 +200,10 @@ const PLAN_MATRIX = {
       songsPerEvent: null,       // Ilimitado
       attachmentsPerEvent: null, // Ilimitado
       storageMB: null,
-      teamsPerOrg: null,         // SIM (sem teto explícito)
+      teamsPerOrg: 15,
       membersPerTeam: null,
       repertoireHistoryDays: 365,
-      dmsPerOrg: null,           // Ilimitado
+      dmsPerOrg: 10,
       orgsPerOwner: 5,
     },
   },
