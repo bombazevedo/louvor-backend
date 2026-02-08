@@ -3,20 +3,38 @@ const Notification = require('../models/Notification');
 // (NOVO) envio premium com prefs/quiet hours/badge
 const { sendUserPush } = require('../services/pushService');
 
+// ✅ helper: orgId só quando o client pedir (multi-igrejas)
+function getRequestedOrgId(req) {
+  const raw = req?.query?.orgId;
+
+  // default = todas
+  if (!raw) return null;
+
+  const v = String(raw).trim().toLowerCase();
+
+  // permite "all" explicitamente
+  if (v === 'all' || v === '*') return null;
+
+  // orgId específico
+  return String(raw).trim();
+}
+
 // Lista as notificações do usuário autenticado
 exports.listMine = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
 
-        // (AJUSTE CIRÚRGICO) Suporte opcional a paginação (compatível com apiService: ?page&limit)
+    // (AJUSTE CIRÚRGICO) paginação opcional (compatível com apiService: ?page&limit)
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit, 10) || 0, 0); // 0 = sem paginação
 
-    // ✅ multi-igrejas: se houver org ativa, filtra por org + fallback para antigas (org:null)
-    const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+    // ✅ multi-igrejas (definitivo):
+    // - default: traz TODAS as orgs
+    // - se vier ?orgId=<id>: filtra somente aquela org + fallback p/ antigas (org:null)
+    const requestedOrgId = getRequestedOrgId(req);
 
-    const query = orgId
-      ? { user: userId, $or: [{ org: orgId }, { org: null }] }
+    const query = requestedOrgId
+      ? { user: userId, $or: [{ org: requestedOrgId }, { org: null }] }
       : { user: userId };
 
     let q = Notification.find(query).sort({ createdAt: -1 }).lean();
@@ -26,23 +44,30 @@ exports.listMine = async (req, res, next) => {
 
     const docs = await q;
     return res.json(docs);
-  } catch (err) { return next(err); }
+  } catch (err) {
+    return next(err);
+  }
 };
 
 // (NOVO) Contagem de não lidas — para badge no ícone
 exports.unreadCount = async (req, res, next) => {
   try {
-        const userId = req.userId || req.user?.id || req.user?._id;
+    const userId = req.userId || req.user?.id || req.user?._id;
 
-    const orgId = req.orgId || req.headers?.['x-org-id'] || null;
-    const query = orgId
-      ? { user: userId, read: false, $or: [{ org: orgId }, { org: null }] }
+    // ✅ mesmo comportamento da listagem:
+    // - default: unread de TODAS as orgs
+    // - ?orgId=<id>: unread só daquela org (+ org:null)
+    const requestedOrgId = getRequestedOrgId(req);
+
+    const query = requestedOrgId
+      ? { user: userId, read: false, $or: [{ org: requestedOrgId }, { org: null }] }
       : { user: userId, read: false };
 
     const count = await Notification.countDocuments(query);
     return res.json({ unread: count });
-
-  } catch (err) { return next(err); }
+  } catch (err) {
+    return next(err);
+  }
 };
 
 // Cria e (opcionalmente) envia push. Útil quando seu backend quiser disparar e já persistir.
@@ -107,10 +132,13 @@ exports.markOneRead = async (req, res, next) => {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
-        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+    // ✅ multi-igrejas:
+    // - por padrão, marca independentemente da org (evita 404 quando a notificação é de outra org)
+    // - se o client estiver filtrando (passou ?orgId=), respeita o filtro
+    const requestedOrgId = getRequestedOrgId(req);
 
-    const filter = orgId
-      ? { _id: id, user: userId, $or: [{ org: orgId }, { org: null }] }
+    const filter = requestedOrgId
+      ? { _id: id, user: userId, $or: [{ org: requestedOrgId }, { org: null }] }
       : { _id: id, user: userId };
 
     const doc = await Notification.findOneAndUpdate(
@@ -121,17 +149,20 @@ exports.markOneRead = async (req, res, next) => {
 
     if (!doc) return res.status(404).json({ message: 'Notificação não encontrada' });
     return res.json(doc);
-  } catch (err) { return next(err); }
+  } catch (err) {
+    return next(err);
+  }
 };
 
 // Marca todas como lidas
 exports.markAllRead = async (req, res, next) => {
   try {
     const userId = req.userId || req.user?.id || req.user?._id;
-        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
 
-    const filter = orgId
-      ? { user: userId, read: false, $or: [{ org: orgId }, { org: null }] }
+    const requestedOrgId = getRequestedOrgId(req);
+
+    const filter = requestedOrgId
+      ? { user: userId, read: false, $or: [{ org: requestedOrgId }, { org: null }] }
       : { user: userId, read: false };
 
     const r = await Notification.updateMany(
@@ -139,8 +170,13 @@ exports.markAllRead = async (req, res, next) => {
       { $set: { read: true } }
     );
 
-    return res.json({ matched: r.matchedCount ?? r.n, modified: r.modifiedCount ?? r.nModified });
-  } catch (err) { return next(err); }
+    return res.json({
+      matched: r.matchedCount ?? r.n,
+      modified: r.modifiedCount ?? r.nModified
+    });
+  } catch (err) {
+    return next(err);
+  }
 };
 
 // Exclui uma notificação
@@ -149,10 +185,13 @@ exports.removeOne = async (req, res, next) => {
     const userId = req.userId || req.user?.id || req.user?._id;
     const { id } = req.params;
 
-        const orgId = req.orgId || req.headers?.['x-org-id'] || null;
+    // ✅ multi-igrejas:
+    // - por padrão, remove independente da org (evita 404 quando a notificação é de outra org)
+    // - se o client estiver filtrando (passou ?orgId=), respeita o filtro
+    const requestedOrgId = getRequestedOrgId(req);
 
-    const filter = orgId
-      ? { _id: id, user: userId, $or: [{ org: orgId }, { org: null }] }
+    const filter = requestedOrgId
+      ? { _id: id, user: userId, $or: [{ org: requestedOrgId }, { org: null }] }
       : { _id: id, user: userId };
 
     const r = await Notification.deleteOne(filter);
@@ -161,5 +200,7 @@ exports.removeOne = async (req, res, next) => {
       return res.status(404).json({ message: 'Notificação não encontrada' });
     }
     return res.status(204).send();
-  } catch (err) { return next(err); }
+  } catch (err) {
+    return next(err);
+  }
 };
