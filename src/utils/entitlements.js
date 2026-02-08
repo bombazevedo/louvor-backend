@@ -29,7 +29,7 @@ const PLAN_MATRIX = {
     features: {
       // FREE não pode trabalhar com equipes
       teams: false,
-      statsBasic: true,
+      statsBasic: false,
       statsAdvanced: false,
       palettePicker: false,
       duplicateEvent: false,
@@ -90,7 +90,7 @@ const PLAN_MATRIX = {
     write: { allowed: true, mode: 'limited' },
     features: {
       teams: true,
-      statsBasic: false,
+      statsBasic: true,
       statsAdvanced: false,
       palettePicker: true,
       duplicateEvent: false,
@@ -109,7 +109,7 @@ const PLAN_MATRIX = {
       storageMB: null,
       teamsPerOrg: 2,
       membersPerTeam: null,
-      repertoireHistoryDays: 30,
+      repertoireHistoryDays: 60,
       dmsPerOrg: 3,
       orgsPerOwner: 1,
     },
@@ -197,8 +197,8 @@ const PLAN_MATRIX = {
     limits: {
       eventsPerMonth: null,      // Ilimitado
       planningHorizonDays: null, // sem limite
-      songsPerEvent: null,       // Ilimitado
-      attachmentsPerEvent: null, // Ilimitado
+      songsPerEvent: 15,
+      attachmentsPerEvent: 15,
       storageMB: null,
       teamsPerOrg: 15,
       membersPerTeam: null,
