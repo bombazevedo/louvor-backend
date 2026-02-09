@@ -40,7 +40,16 @@ function getPriceCents(planCode, billingPeriod) {
 
 module.exports = {
   PLAN_LABELS,
+
+  // ✅ mantém export atual (compatibilidade)
   BILLING,
+
+  // ✅ export esperado pelo billingController.catalog (compatibilidade retroativa)
+  BILLING_PERIODS: BILLING,
+
+  // ✅ export esperado pelo billingController.catalog (preços no app)
+  PRICES_CENTS,
+
   getPlanLabel,
   getBillingPeriod,
   getPriceCents,
