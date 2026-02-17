@@ -221,13 +221,20 @@ function coerceDate(d) {
 function isTrialActive(org) {
   if (!org || !org.license) return false;
   // status pode vir "trial" ou afins; priorizamos datas
-  const { trialStart, trialEnd, status } = org.license || {};
+  const { trialStart, trialEnd, trialStartsAt, trialEndsAt, status } = org.license || {};
   const now = new Date();
 
-  // Se trialEnd existir, usa a data; senão, infere por status e TRIAL_DAYS_DEFAULT
-  const start = coerceDate(trialStart) || (status === 'trial' ? now : null);
+  // ✅ start determinístico: nunca "now" como base (para não “reiniciar” o trial)
+  // Ordem: trialStart -> trialStartsAt -> org.createdAt
+  const start =
+    coerceDate(trialStart) ||
+    coerceDate(trialStartsAt) ||
+    (status === 'trial' ? coerceDate(org.createdAt) : null);
+
+  // ✅ end: prioriza datas explícitas, senão deriva do start + TRIAL_DAYS_DEFAULT
   const end =
     coerceDate(trialEnd) ||
+    coerceDate(trialEndsAt) ||
     (status === 'trial' && start
       ? new Date(start.getTime() + TRIAL_DAYS_DEFAULT * 24 * 60 * 60 * 1000)
       : null);
@@ -375,7 +382,18 @@ function getEntitlementsFor(org) {
   // Metadados úteis para o app/middlewares
   const trialEndsAt =
     (org && org.license && (org.license.trialEnd || org.license.trialEndsAt)) ||
-    null;
+    (inTrial
+      ? (() => {
+          const start =
+            coerceDate(org?.license?.trialStart) ||
+            coerceDate(org?.license?.trialStartsAt) ||
+            coerceDate(org?.createdAt);
+
+          return start
+            ? new Date(start.getTime() + TRIAL_DAYS_DEFAULT * 24 * 60 * 60 * 1000)
+            : null;
+        })()
+      : null);
 
   return {
     plan: entitlements.plan,         // FREE | PRO | PLUS (rótulo base)

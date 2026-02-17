@@ -28,10 +28,18 @@ const LicenseSchema = new Schema({
   // ✅ rastreio pendente (para o webhook casar com segurança)
   pendingPayment: { type: Schema.Types.Mixed, default: null },
 
+  // ✅ trial (datas reais para contagem regressiva no app e cálculo consistente)
+  trialStartsAt: { type: Date, default: null },
+  trialEndsAt: { type: Date, default: null },
+
   // Quando o ciclo de assinatura atual começou (ex.: 01/01/2026)
   planStart: { type: Date },
   // Quando o ciclo atual termina / expira (ex.: 31/01/2026 ou 31/12/2026)
   planEnd: { type: Date },
+
+  // ✅ TRIAL: datas para contagem regressiva (frontend) e cálculo determinístico (backend)
+  trialStartsAt: { type: Date, default: null },
+  trialEndsAt: { type: Date, default: null },
 
   overrides: { type: Schema.Types.Mixed, default: null },
   entitlements: { type: Schema.Types.Mixed, default: null }

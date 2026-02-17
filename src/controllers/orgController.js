@@ -24,6 +24,10 @@ exports.createOrg = async (req, res) => {
     const ownerId = (req.user && (req.user.id || req.user._id)) || req.userId || (req.auth && req.auth.id);
     if (!ownerId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
 
+    // ✅ TRIAL determinístico: 14 dias a partir da criação da organização
+    const trialStartsAt = new Date();
+    const trialEndsAt = new Date(trialStartsAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+
         // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
     const state = await getOwnerOrgsPlanState(ownerId);
     const ent = state?.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
@@ -56,6 +60,10 @@ exports.createOrg = async (req, res) => {
         // plano base FREE: durante o trial, o entitlements eleva temporariamente
         // para o plano mais alto (5) conforme src/utils/entitlements.js
         plan: 'FREE',
+
+        // ✅ Datas reais do trial para contagem regressiva no app e cálculo consistente
+        trialStartsAt,
+        trialEndsAt,
       },
     });
 
