@@ -15,9 +15,17 @@ async function subscribe(req, res) {
     const periodKey = getBillingPeriod(billingPeriod);
 
     if (!orgId) return res.status(400).json({ error: 'Missing orgId context' });
-    if (!planCode) return res.status(400).json({ error: 'Missing planCode' });
-    if (!periodKey) return res.status(400).json({ error: 'Invalid billingPeriod' });
+if (!planCode) return res.status(400).json({ error: 'Missing planCode' });
+if (!periodKey) return res.status(400).json({ error: 'Invalid billingPeriod' });
 
+// 🔒 Somente owner/coordenador pode criar checkout de plano
+// (orgContext já mapeia owner como 'coordenador' quando necessário)
+if (String(req.orgRole || '').toLowerCase() !== 'coordenador') {
+  return res.status(403).json({
+    error: 'BILLING_FORBIDDEN',
+    message: 'Somente o coordenador da organização pode alterar ou assinar planos.',
+  });
+}
     const priceCents = getPriceCents(planCode, periodKey);
     if (!priceCents) return res.status(400).json({ error: 'Invalid plan/period price' });
 
@@ -149,6 +157,13 @@ async function checkout(req, res) {
     if (!planCode) return res.status(400).json({ error: 'Missing planCode' });
     if (!periodKey) return res.status(400).json({ error: 'Invalid billingPeriod' });
 
+// 🔒 Somente owner/coordenador pode assinar plano
+if (String(req.orgRole || '').toLowerCase() !== 'coordenador') {
+  return res.status(403).json({
+    error: 'BILLING_FORBIDDEN',
+    message: 'Somente o coordenador da organização pode alterar ou assinar planos.',
+  });
+}
     const rawPriceCents = getPriceCents(planCode, periodKey);
     const priceCents = Number(rawPriceCents);
 
