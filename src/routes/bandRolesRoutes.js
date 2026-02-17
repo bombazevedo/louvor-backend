@@ -62,24 +62,43 @@ const DEFAULT_BAND_ROLES = [
   'Fotografia',
 ];
 
-// GET: Todas as funções
-router.get('/', authenticate, async (req, res) => {
+// GET: Todas as funções (por organização)
+router.get('/', authenticate, orgContext, async (req, res) => {
   try {
-    // Inserção cirúrgica: seed automático caso a coleção esteja vazia
-    const count = await BandRole.estimatedDocumentCount();
+    // ✅ Migração cirúrgica: se existir índice legado "name_1" (unique global),
+    // derruba para permitir mesmos nomes em orgs diferentes.
+    // (executa de forma segura: fail-silent)
+    if (!global.__bandRolesIndexFixed) {
+      global.__bandRolesIndexFixed = true;
+      try {
+        await BandRole.collection.dropIndex('name_1');
+      } catch (_e) {
+        // ok: não existia
+      }
+      try {
+        await BandRole.syncIndexes();
+      } catch (_e2) {
+        // fail-silent: não pode derrubar o fluxo
+      }
+    }
+
+    const orgId = req.orgId;
+
+    // Seed idempotente POR ORG (aplica no primeiro GET quando vazio para a org)
+    const count = await BandRole.countDocuments({ orgId });
     if (count === 0) {
       await BandRole.bulkWrite(
         DEFAULT_BAND_ROLES.map((name) => ({
           updateOne: {
-            filter: { name },
-            update: { $setOnInsert: { name } },
+            filter: { orgId, name },
+            update: { $setOnInsert: { orgId, name } },
             upsert: true,
           },
         }))
       );
     }
 
-    const roles = await BandRole.find();
+    const roles = await BandRole.find({ orgId }).sort({ name: 1 });
     res.json(roles);
   } catch (error) {
     console.error('Erro ao buscar funções:', error);
@@ -87,7 +106,7 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// POST: Criar nova função
+// POST: Criar nova função (por organização)
 router.post(
   '/',
   authenticate,
@@ -99,12 +118,16 @@ router.post(
     if (!name) return res.status(400).json({ message: 'Nome é obrigatório' });
 
     try {
+      const orgId = req.orgId;
+
       const exists = await BandRole.findOne({
+        orgId,
         name: { $regex: `^${name}$`, $options: 'i' },
       });
+
       if (exists) return res.status(409).json({ message: 'Função já existe' });
 
-      const newRole = new BandRole({ name });
+      const newRole = new BandRole({ orgId, name });
       await newRole.save();
       res.status(201).json(newRole);
     } catch (error) {
@@ -114,7 +137,7 @@ router.post(
   }
 );
 
-// PATCH: Atualizar função
+// PATCH: Atualizar função (por organização)
 router.patch(
   '/:id',
   authenticate,
@@ -123,14 +146,18 @@ router.patch(
   canEditBandRoles,
   async (req, res) => {
     try {
-      const updated = await BandRole.findByIdAndUpdate(
-        req.params.id,
+      const orgId = req.orgId;
+
+      const updated = await BandRole.findOneAndUpdate(
+        { _id: req.params.id, orgId },
         { name: req.body.name },
         { new: true }
       );
+
       if (!updated) {
         return res.status(404).json({ message: 'Função não encontrada' });
       }
+
       res.json(updated);
     } catch (error) {
       console.error('Erro ao atualizar função:', error);
@@ -139,7 +166,7 @@ router.patch(
   }
 );
 
-// DELETE: Excluir função
+// DELETE: Excluir função (por organização)
 router.delete(
   '/:id',
   authenticate,
@@ -148,10 +175,13 @@ router.delete(
   canEditBandRoles,
   async (req, res) => {
     try {
-      const deleted = await BandRole.findByIdAndDelete(req.params.id);
+      const orgId = req.orgId;
+
+      const deleted = await BandRole.findOneAndDelete({ _id: req.params.id, orgId });
       if (!deleted) {
         return res.status(404).json({ message: 'Função não encontrada' });
       }
+
       res.json({ message: 'Função excluída com sucesso' });
     } catch (error) {
       console.error('Erro ao excluir função:', error);
