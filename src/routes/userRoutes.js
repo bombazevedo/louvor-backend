@@ -11,6 +11,14 @@ const {
 const User = require("../models/User");
 const orgContext = require("../middleware/orgContext"); // ⬅️ novo
 const OrgMember = require("../models/OrgMember");       // ⬅️ novo
+const DeviceToken = require("../models/DeviceToken");
+const Notification = require("../models/Notification");
+const Unavailability = require("../models/Unavailability");
+const SearchHistory = require("../models/SearchHistory");
+const Team = require("../models/Team");
+const Scale = require("../models/Scale");
+const Event = require("../models/Event");
+
 
 // ✅ Retorna dados do usuário autenticado
 router.get("/me", authenticate, async (req, res) => {
@@ -26,6 +34,58 @@ router.get("/me", authenticate, async (req, res) => {
 
 // ✅ Atualizar perfil próprio
 router.patch("/me", authenticate, updateMe);
+
+// ✅ Excluir conta (hard delete) — remove vínculos e referências básicas
+router.delete("/me", authenticate, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    // 🔒 Proteção: NÃO permitir excluir o fundador da organização (ou fundador global como fallback)
+    // (mantém coerência com a proteção já existente em DELETE /users/:id)
+    try {
+      const orgKey = ['organizationId', 'organization', 'orgId', 'groupId', 'communityId', 'teamId']
+        .find(k => user?.[k] !== undefined && user?.[k] !== null);
+
+      const founderQuery = orgKey ? { [orgKey]: user[orgKey] } : {};
+      const founder = await User.findOne(founderQuery)
+        .sort({ createdAt: 1, _id: 1 })
+        .select('_id createdAt');
+
+      if (founder && String(founder._id) === String(user._id)) {
+        return res.status(403).json({ message: 'Não é possível excluir o coordenador fundador desta organização.' });
+      }
+    } catch (e) {
+      console.warn('[users:deleteMe] Falha ao checar fundador:', e?.message);
+    }
+
+    // 1) Remove documentos “do usuário”
+    await Promise.allSettled([
+      OrgMember.deleteMany({ user: userId }),
+      DeviceToken.deleteMany({ user: userId }),
+      Notification.deleteMany({ user: userId }),
+      Unavailability.deleteMany({ userId }),
+      SearchHistory.deleteMany({ userId }),
+    ]);
+
+    // 2) Remove o usuário de listas/vetores (escala/equipe)
+    await Promise.allSettled([
+      Team.updateMany({ 'members.user': userId }, { $pull: { members: { user: userId } } }),
+      Scale.updateMany({ 'members.user': userId }, { $pull: { members: { user: userId } } }),
+      // Eventos: createdBy é opcional — evita populate pendurado
+      Event.updateMany({ createdBy: userId }, { $set: { createdBy: null } }),
+    ]);
+
+    // 3) Remove o usuário
+    await User.findByIdAndRemove(userId);
+
+    return res.status(200).json({ message: 'Conta excluída com sucesso.' });
+  } catch (err) {
+    console.error('[DELETE /users/me] Erro:', err);
+    return res.status(500).json({ message: 'Erro ao excluir conta.' });
+  }
+});
 
 // ✅ Listar aniversariantes do mês
 router.get("/birthdays", authenticate, orgContext, getBirthdays);
