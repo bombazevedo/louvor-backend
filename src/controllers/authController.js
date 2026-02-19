@@ -33,10 +33,17 @@ exports.loginUser = async (req, res) => {
       return res.status(500).json({ message: 'JWT_SECRET não configurado' });
     }
 
+    // ✅ (NOVO) trava 1 dispositivo por login:
+    // gera um nonce novo; ao salvar no usuário, invalida tokens anteriores automaticamente
+    const sessionNonce = crypto.randomBytes(24).toString('hex');
+    user.sessionNonce = sessionNonce;
+    await user.save();
+
     const token = jwt.sign(
       {
         id: user._id,
-        role: user.role.toLowerCase()
+        role: user.role.toLowerCase(),
+        sid: sessionNonce
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }

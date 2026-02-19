@@ -47,6 +47,9 @@ const UserSchema = new mongoose.Schema({
     trim: true
   },
 
+  // ✅ (NOVO) trava 1 dispositivo por login: apenas o último token emitido é válido
+  sessionNonce: { type: String, default: null, select: false },
+
   // 🔐 Recuperação de senha (OTP por e-mail)
   resetCodeHash: { type: String, select: false },
   resetCodeExpires: { type: Date, select: false },

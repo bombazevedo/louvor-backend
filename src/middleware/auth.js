@@ -1,19 +1,35 @@
 const jwt = require("jsonwebtoken");
 const OrgMember = require("../models/OrgMember");          // ✅ adição cirúrgica
+const User = require("../models/User");                   // ✅ (NOVO) valida sessão (1 device)
 const Organization = require("../models/Organization");    // ✅ adição cirúrgica
 
 // 🔐 Autenticador global
-exports.authenticate = (req, res, next) => {
+exports.authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ message: "Token ausente." });
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // ✅ (NOVO) trava 1 dispositivo por login
+    // se token antigo (sem sid), força relogar para entrar na regra
+    if (!decoded?.sid) {
+      return res.status(401).json({ message: "Sessão expirada. Faça login novamente." });
+    }
+
+    const user = await User.findById(decoded.id).select("+sessionNonce").lean();
+    if (!user) return res.status(401).json({ message: "Token inválido." });
+
+    // se o sid do token for diferente do último salvo, este token foi “derrubado”
+    if (!user.sessionNonce || String(user.sessionNonce) !== String(decoded.sid)) {
+      return res.status(401).json({ message: "Sessão encerrada por novo login." });
+    }
+
     req.user = decoded;
     req.userId = decoded.id; // 🔥 🔥 🔥 Alinhado com o Canvas → Obrigatório
     next();
   } catch (error) {
-    res.status(401).json({ message: "Token inválido." });
+    return res.status(401).json({ message: "Token inválido." });
   }
 };
 
