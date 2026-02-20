@@ -296,14 +296,21 @@ exports.removeMember = async (req, res) => {
 
     const isOwner = String(org.owner) === String(userId);
 
-    // precisa ser owner ou coordenador da org
+   // precisa ser owner ou coordenador da org
     const membership = await OrgMember.findOne({ org: orgId, user: userId }).lean();
     const isCoordinator = membership && membership.role === 'coordenador';
 
-    if (!isOwner && !isCoordinator) {
+    // ✅ self-leave: o próprio usuário pode sair da org (desde que seja membro)
+    const isSelfLeave = String(targetUserId) === String(userId);
+
+    if (!isSelfLeave && !isOwner && !isCoordinator) {
       return res.status(403).json({ error: 'REMOVE_MEMBER_FORBIDDEN' });
     }
 
+    // se for self-leave e não existe membership, não permite (evita abuso/ruído)
+    if (isSelfLeave && !membership) {
+      return res.status(403).json({ error: 'REMOVE_MEMBER_FORBIDDEN' });
+    }
     // não permitir remover o owner da org (segurança mínima)
     if (String(org.owner) === String(targetUserId)) {
       return res.status(403).json({ error: 'CANNOT_REMOVE_OWNER' });
