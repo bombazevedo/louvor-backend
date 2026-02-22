@@ -1,11 +1,11 @@
 // src/utils/planCatalog.js
 const PLAN_LABELS = {
   FREE: 'Plano Gratuito',
-  '1': 'One',
-  '2': 'teste de planos',
-  '3': 'Plano 3',
-  '4': 'Plano 4',
-  '5': 'Plano 5',
+  '1': 'Prelude',
+  '2': 'Chorus',
+  '3': 'Harmony',
+  '4': 'Anthem',
+  '5': 'Maestro',
 };
 
 const BILLING = {
