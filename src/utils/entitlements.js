@@ -254,6 +254,18 @@ function resolvePlan(org) {
     return 'FREE';
   }
 
+  // ✅ Trial ativo não deve sofrer downgrade por planEnd (blindagem anti-conflito).
+  const inTrial = isTrialActive(org);
+
+  // ✅ SaaS padrão: se o ciclo expirou (planEnd no passado), o plano efetivo regride para FREE
+  // (sem depender de webhook de falha/cancelamento; comportamento determinístico por data).
+  if (!inTrial) {
+    const planEnd = coerceDate(org?.license?.planEnd);
+    if (planEnd && new Date() > planEnd) {
+      return 'FREE';
+    }
+  }
+
   // Normalização robusta (evita cair em FREE por variações como "PLANO 1", "PLAN_1", "P1", etc.)
   const raw = String(plan || '').trim();
   const upper = raw.toUpperCase();
@@ -400,8 +412,13 @@ function getEntitlementsFor(org) {
     inTrial,
     trialEndsAt,
 
-    // ✅ Metadados de billing para UX premium no app (sem liberar recursos em pending)
-    billingStatus: (org && org.license && org.license.status) || null,
+       // ✅ Metadados de billing para UX premium no app (sem liberar recursos em pending)
+    billingStatus: (() => {
+      const st = (org && org.license && org.license.status) || null;
+      const pending = String(st || '').toLowerCase() === 'pending';
+      const pe = coerceDate(org?.license?.planEnd);
+      return !pending && !inTrial && pe && new Date() > pe ? 'expired' : st;
+    })(),
     pendingPlan:
       (org && org.license && String(org.license.status || '').toLowerCase() === 'pending')
         ? (org.license.plan || null)
