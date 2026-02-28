@@ -256,6 +256,10 @@ async function pagarmeWebhook(req, res) {
       org.license.planStart = now;
       org.license.planEnd = addMonths(baseDate, months);
 
+      // ✅ pagou: encerra trial imediatamente (evita conflito trial + plano pago)
+      org.license.trialStartsAt = null;
+      org.license.trialEndsAt = null;
+
       // ✅ order id (idempotência usa esse campo)
       if (isOrderEvent && incomingOrderId) {
         org.license.pagarmeLastOrderId = incomingOrderId;
