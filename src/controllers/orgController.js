@@ -143,8 +143,12 @@ const lockedSet = new Set((state.lockedOrgIds || []).map(id => String(id)));
       .populate('org', 'name slug license logoUrl cloudinaryPublicId owner')
       .lean();
 
-    // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
-    const memberOrgIds = memberships.map(m => String(m.org?._id || m.org));
+     // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
+    const memberOrgIdsRaw = memberships.map(m => String(m.org?._id || m.org));
+
+    // ✅ FIX: remove "null"/"undefined" e qualquer lixo antes do $nin (evita CastError)
+    const memberOrgIds = memberOrgIdsRaw.filter(id => /^[0-9a-fA-F]{24}$/.test(String(id)));
+
     const ownedButNotMember = await Organization.find({
       owner: userId,
       _id: { $nin: memberOrgIds }
