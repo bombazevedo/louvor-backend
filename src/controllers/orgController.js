@@ -28,7 +28,7 @@ exports.createOrg = async (req, res) => {
     const trialStartsAt = new Date();
     const trialEndsAt = new Date(trialStartsAt.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-        // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
+    // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
     const state = await getOwnerOrgsPlanState(ownerId);
     const ent = state?.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
 
@@ -39,9 +39,8 @@ exports.createOrg = async (req, res) => {
       return res.status(403).json({
         error: 'ORG_LIMIT_REACHED',
         message: `Seu plano permite criar até ${orgLimit} organização(ões). Exclua uma organização ou faça upgrade para criar novas.`,
-       plan: ent?.plan || 'FREE',
-       inTrial: !!ent?.inTrial,
-
+        plan: ent?.plan || 'FREE',
+        inTrial: !!ent?.inTrial,
         allowed: orgLimit,
         current: currentCount,
       });
@@ -51,10 +50,18 @@ exports.createOrg = async (req, res) => {
     const exists = await Organization.findOne({ slug });
     if (exists) return res.status(409).json({ error: 'ORG_SLUG_TAKEN' });
 
+    const existingOwnerOrgs = await Organization.find({ owner: ownerId })
+      .sort({ createdAt: 1, _id: 1 })
+      .select('_id isBillingAnchor')
+      .lean();
+
+    const shouldBeBillingAnchor = existingOwnerOrgs.length === 0;
+
     const org = await Organization.create({
       name,
       slug,
       owner: ownerId,
+      isBillingAnchor: shouldBeBillingAnchor,
       license: {
         status: 'trial',
         // plano base FREE: durante o trial, o entitlements eleva temporariamente
@@ -75,7 +82,6 @@ exports.createOrg = async (req, res) => {
     res.status(500).json({ error: 'CREATE_ORG_ERROR' });
   }
 };
-
 exports.generateInvite = async (req, res) => {
   try {
     const { id } = req.params; // orgId
@@ -399,13 +405,21 @@ exports.deleteOrgHard = async (req, res) => {
     const org = await Organization.findById(orgId).lean();
     if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
 
-        // 🔒 Somente o owner (criador/dono real) pode excluir
+    // 🔒 Somente o owner (criador/dono real) pode excluir
     if (String(org.owner) !== String(userId)) {
       return res.status(403).json({ error: 'ONLY_OWNER_CAN_DELETE_ORG' });
     }
 
+    const ownerOrgs = await Organization.find({ owner: userId })
+      .sort({ createdAt: 1, _id: 1 })
+      .select('_id isBillingAnchor')
+      .lean();
+
+    const explicitAnchor = ownerOrgs.find((item) => item.isBillingAnchor === true) || null;
+    const fallbackAnchor = explicitAnchor || ownerOrgs[0] || null;
+
     // 🔒 Não permitir excluir a organização âncora do billing
-    if (org.isBillingAnchor === true) {
+    if (fallbackAnchor && String(fallbackAnchor._id) === String(orgId)) {
       return res.status(403).json({
         error: 'CANNOT_DELETE_BILLING_ANCHOR_ORG',
         message: 'A organização âncora do plano não pode ser excluída.',
@@ -414,7 +428,6 @@ exports.deleteOrgHard = async (req, res) => {
 
     // 🔥 Hard delete dos dados escopados por org (mínimo necessário)
     await Promise.all([
-
       OrgMember.deleteMany({ org: orgId }),
       Event.deleteMany({ org: orgId }),
       Scale.deleteMany({ org: orgId }),
