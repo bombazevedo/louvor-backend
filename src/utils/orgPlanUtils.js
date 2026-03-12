@@ -10,16 +10,18 @@ async function getOwnerOrgsPlanState(ownerId) {
   // 1) Buscar todas as orgs do dono, em ordem de criação
   const orgs = await Organization.find({ owner: ownerId })
     .sort({ createdAt: 1, _id: 1 })
-    .select('_id name createdAt license');
+    .select('_id name createdAt license isBillingAnchor');
 
-  // ⚠️ Como os entitlements agora são por ORGANIZAÇÃO (não por owner),
-  // usamos a PRIMEIRA org como base de referência
-  // (mantendo compatibilidade com o fluxo existente).
+    // ⚠️ Como os entitlements são por ORGANIZAÇÃO (não por owner),
+  // usamos primeiro a org âncora explícita, quando existir.
+  // Se não houver âncora marcada, mantemos a compatibilidade total
+  // com o fluxo atual usando a PRIMEIRA org como base de referência.
   let ent = null;
   let orgLimit = null;
 
   if (orgs.length > 0) {
-    ent = getEntitlementsFor(orgs[0]);
+    const anchorOrg = orgs.find((org) => org.isBillingAnchor === true) || orgs[0];
+    ent = getEntitlementsFor(anchorOrg);
     orgLimit = ent?.limits?.orgsPerOwner ?? null;
   } else {
     // ✅ Blindagem: usuário pode não ser owner de nenhuma org (ex.: entrou apenas por convite)
@@ -27,7 +29,6 @@ async function getOwnerOrgsPlanState(ownerId) {
     ent = getEntitlementsFor({ license: { plan: 'FREE' } });
     orgLimit = ent?.limits?.orgsPerOwner ?? null;
   }
-
   if (orgLimit === null) {
     // Sem limite: tudo ativo
     return {

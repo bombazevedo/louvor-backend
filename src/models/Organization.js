@@ -57,6 +57,7 @@ const OrganizationSchema = new Schema({
   owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   logoUrl: { type: String, default: null },
   cloudinaryPublicId: { type: String, default: null },
+  isBillingAnchor: { type: Boolean, default: false },
   license: { type: LicenseSchema, default: () => ({}) },
   invites: { type: [InviteSchema], default: [] }
 }, { timestamps: true });

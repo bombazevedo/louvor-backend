@@ -399,22 +399,13 @@ exports.deleteOrgHard = async (req, res) => {
     const org = await Organization.findById(orgId).lean();
     if (!org) return res.status(404).json({ error: 'ORG_NOT_FOUND' });
 
-        // 🔒 Somente o owner (criador/dono real) pode excluir
+    // 🔒 Somente o owner (criador/dono real) pode excluir
     if (String(org.owner) !== String(userId)) {
       return res.status(403).json({ error: 'ONLY_OWNER_CAN_DELETE_ORG' });
     }
 
-    // 🔒 Não permitir excluir a organização âncora do billing
-    if (org.isBillingAnchor === true) {
-      return res.status(403).json({
-        error: 'CANNOT_DELETE_BILLING_ANCHOR_ORG',
-        message: 'A organização âncora do plano não pode ser excluída.',
-      });
-    }
-
     // 🔥 Hard delete dos dados escopados por org (mínimo necessário)
     await Promise.all([
-
       OrgMember.deleteMany({ org: orgId }),
       Event.deleteMany({ org: orgId }),
       Scale.deleteMany({ org: orgId }),
