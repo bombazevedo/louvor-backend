@@ -57,6 +57,24 @@ async function resolveOwnerAnchorOrganization(ownerId, selectedAnchorOrgId = nul
   };
 }
 
+async function getCurrentOwnerAnchorOrganization(ownerId) {
+  const orgs = await getOwnerOrganizationsOrdered(ownerId);
+
+  if (!orgs.length) {
+    return {
+      orgs: [],
+      currentAnchorOrg: null,
+    };
+  }
+
+  const currentAnchorOrg = orgs.find((org) => org.isBillingAnchor === true) || orgs[0];
+
+  return {
+    orgs,
+    currentAnchorOrg,
+  };
+}
+
 // POST /billing/subscribe
 // body: { planCode: "1"|"2"|..., billingPeriod: "MONTHLY"|"QUARTERLY"|"YEARLY" }
 async function subscribe(req, res) {
@@ -337,6 +355,9 @@ const PIX_EXPIRES_IN_SECONDS = 60 * 60; // 1h
     // ✅ manter rastreio do link gerado (não mexe no plano vigente)
     org.license.pagarmePaymentLinkId = url || paymentLink?.id || null;
 
+        const ownerAnchorState = await getCurrentOwnerAnchorOrganization(org.owner);
+    const currentAnchorOrg = ownerAnchorState.currentAnchorOrg || null;
+
     // ✅ pendingPayment = intenção de compra (não afeta o plano vigente)
     org.license.pendingPayment = {
       provider: 'pagarme',
@@ -356,8 +377,12 @@ const PIX_EXPIRES_IN_SECONDS = 60 * 60; // 1h
       billingPeriod: String(periodKey),
       createdByUserId: String(userId || ''),
       createdAt: new Date().toISOString(),
-    };
 
+      // ✅ Android/in-app: a org atual do contexto passa a ser a candidata a âncora
+      anchorOrgId: String(org._id),
+      anchorChangedByApp: !!currentAnchorOrg && String(currentAnchorOrg._id) !== String(org._id),
+      previousAnchorOrgId: currentAnchorOrg?._id ? String(currentAnchorOrg._id) : null,
+    };
     await org.save();
 
     return res.json({
