@@ -48,36 +48,15 @@ async function resolveOwnerAnchorOrganization(ownerId, selectedAnchorOrgId = nul
     };
   }
 
-  if (String(currentAnchorOrg._id) === String(selectedOrg._id)) {
-    return {
-      orgs,
-      anchorOrg: currentAnchorOrg,
-      currentAnchorOrg,
-      selectedOrg,
-      changed: false,
-    };
-  }
-
-  await Organization.updateMany(
-    { owner: ownerId, isBillingAnchor: true },
-    { $set: { isBillingAnchor: false } }
-  );
-
-  await Organization.updateOne(
-    { _id: selectedOrg._id, owner: ownerId },
-    { $set: { isBillingAnchor: true } }
-  );
-
-  const updatedAnchorOrg = await Organization.findById(selectedOrg._id);
-
   return {
     orgs,
-    anchorOrg: updatedAnchorOrg,
+    anchorOrg: selectedOrg,
     currentAnchorOrg,
     selectedOrg,
-    changed: true,
+    changed: String(currentAnchorOrg._id) !== String(selectedOrg._id),
   };
 }
+
 // POST /billing/subscribe
 // body: { planCode: "1"|"2"|..., billingPeriod: "MONTHLY"|"QUARTERLY"|"YEARLY" }
 async function subscribe(req, res) {
