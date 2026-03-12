@@ -589,7 +589,7 @@ async function landingCheckout(req, res) {
 
     await org.save();
 
-    return res.json({
+     return res.json({
       ok: true,
       url: paymentLink?.url || null,
       paymentLinkId: paymentLink?.id || null,
@@ -599,9 +599,11 @@ async function landingCheckout(req, res) {
         _id: org._id,
         name: org.name,
         isBillingAnchor: org.isBillingAnchor === true,
+        selectedForPendingCheckout: true,
       },
       anchorChanged: anchorResolution.changed === true,
     });
+
   } catch (err) {
     const status = err?.response?.status || null;
     const data = err?.response?.data;
