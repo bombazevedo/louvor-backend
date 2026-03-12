@@ -260,10 +260,70 @@ async function pagarmeWebhook(req, res) {
       org.license.trialStartsAt = null;
       org.license.trialEndsAt = null;
 
+      // 🔁 aplicar troca de organização âncora se solicitado pela landing
+      if (
+        pendingNow &&
+        pendingNow.anchorChangedByLanding === true &&
+        pendingNow.anchorOrgId
+      ) {
+        const newAnchorId = String(pendingNow.anchorOrgId);
+        const previousAnchorId = pendingNow.previousAnchorOrgId
+          ? String(pendingNow.previousAnchorOrgId)
+          : null;
+
+        // remove âncora atual
+        await Organization.updateMany(
+          { owner: org.owner, isBillingAnchor: true },
+          { $set: { isBillingAnchor: false } }
+        );
+
+        // define nova âncora
+        await Organization.updateOne(
+          { _id: newAnchorId, owner: org.owner },
+          { $set: { isBillingAnchor: true } }
+        );
+
+        console.log('[pagarmeWebhook] billing anchor updated', {
+          ownerId: String(org.owner),
+          newAnchorId,
+          previousAnchorId,
+        });
+      }
+
       // ✅ order id (idempotência usa esse campo)
       if (isOrderEvent && incomingOrderId) {
         org.license.pagarmeLastOrderId = incomingOrderId;
       }
+
+// 🔁 aplicar troca de organização âncora se solicitado pela landing
+if (
+  pendingNow &&
+  pendingNow.anchorChangedByLanding === true &&
+  pendingNow.anchorOrgId
+) {
+  const newAnchorId = String(pendingNow.anchorOrgId);
+  const previousAnchorId = pendingNow.previousAnchorOrgId
+    ? String(pendingNow.previousAnchorOrgId)
+    : null;
+
+  // remove âncora atual
+  await Organization.updateMany(
+    { owner: org.owner, isBillingAnchor: true },
+    { $set: { isBillingAnchor: false } }
+  );
+
+  // define nova âncora
+  await Organization.updateOne(
+    { _id: newAnchorId, owner: org.owner },
+    { $set: { isBillingAnchor: true } }
+  );
+
+  console.log('[pagarmeWebhook] billing anchor updated', {
+    ownerId: String(org.owner),
+    newAnchorId,
+    previousAnchorId,
+  });
+}
 
       // ✅ consumo do pendingPayment
       if (org.license.pendingPayment != null) {
