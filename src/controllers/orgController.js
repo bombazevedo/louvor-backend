@@ -297,7 +297,9 @@ const response = [
       };
     })
     .filter(Boolean)
-    .sort(sortMyOrgsForResponse);
+];
+
+response.sort(sortMyOrgsForResponse);
 
     res.json({
       orgs: response,
