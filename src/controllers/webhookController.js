@@ -62,11 +62,10 @@ async function pagarmeWebhook(req, res) {
     const data = payload?.data || payload;
 
     // metadata que nós enviamos na assinatura
-
     const meta = data?.metadata || {};
     const orgId = meta?.orgId;
 
-        // ✅ order.paid (payment link) pode não trazer orgId no metadata.
+    // ✅ order.paid (payment link) pode não trazer orgId no metadata.
     // Casamos a org pelo code do payment link (integration.code / code / charges[0].code)
     const paymentLinkCode =
       data?.integration?.code ||
@@ -82,7 +81,7 @@ async function pagarmeWebhook(req, res) {
     let org = null;
     if (orgId) {
       org = await Organization.findById(orgId);
-        } else if (paymentLinkCode) {
+    } else if (paymentLinkCode) {
       const code = String(paymentLinkCode);
       const codeAtEnd = new RegExp(`${code}$`); // aceita URL terminando com /pl_xxx
 
@@ -106,12 +105,12 @@ async function pagarmeWebhook(req, res) {
       org = await Organization.findOne({ 'license.pagarmeSubscriptionId': String(data.subscription.id) });
     }
 
-        if (!org) {
+    if (!org) {
       console.log('[pagarmeWebhook] org not found. eventType=', eventType, '| paymentLinkCode=', paymentLinkCode);
       return res.json({ ok: true }); // não re-tenta infinito
     }
 
-        // ✅ identifica tipo do evento (order.* vs subscription.*)
+    // ✅ identifica tipo do evento (order.* vs subscription.*)
     const isOrderEvent = String(eventType || '').toLowerCase().startsWith('order.');
     const isSubscriptionEvent = String(eventType || '').toLowerCase().startsWith('subscription.');
 
@@ -144,7 +143,7 @@ async function pagarmeWebhook(req, res) {
       status === 'inactive' ||
       status === 'ended';
 
-        org.license = org.license || {};
+    org.license = org.license || {};
 
     // ✅ order.paid normalmente vem com customer em data.customer.id (não customer_id)
     const customerIdFromPayload =
@@ -183,7 +182,8 @@ async function pagarmeWebhook(req, res) {
       });
       return res.json({ ok: true, ignored: true, reason: 'duplicate_order' });
     }
-        // ✅ MODELO 1 (determinístico e blindado):
+
+    // ✅ MODELO 1 (determinístico e blindado):
     // - mudou de plano => perde saldo (base = now)
     // - mesmo plano => soma (base = previousPlanEnd/panEnd se ainda válido)
     // Fonte de verdade para "plano anterior": pendingPayment.previousPlanCode/previousPlanEnd (quando existir).
@@ -308,18 +308,83 @@ async function pagarmeWebhook(req, res) {
       if (isOrderEvent && incomingOrderId) {
         org.license.pagarmeLastOrderId = incomingOrderId;
       }
+
       // ✅ consumo do pendingPayment
       if (org.license.pendingPayment != null) {
         org.license.pendingPayment = null;
         if (typeof org.markModified === 'function') org.markModified('license');
       }
-       } else if (isCanceledLike) {
+
+      await org.save();
+
+      // ✅ replica a licença da âncora para as organizações filhas do mesmo owner
+      if (org.isBillingAnchor === true) {
+        const replicatedLicenseSource =
+          typeof org.license?.toObject === 'function'
+            ? org.license.toObject()
+            : org.license;
+
+        const replicatedLicense = {
+          ...replicatedLicenseSource,
+          pendingPayment: null,
+          trialStartsAt: null,
+          trialEndsAt: null,
+        };
+
+        await Organization.updateMany(
+          {
+            owner: org.owner,
+            isBillingAnchor: false,
+            _id: { $ne: org._id },
+          },
+          {
+            $set: {
+              license: replicatedLicense,
+            },
+          }
+        );
+      }
+
+      return res.json({ ok: true });
+    } else if (isCanceledLike) {
       // ✅ IMPORTANTÍSSIMO: falha/cancelamento de um checkout (order.*) NÃO pode expirar o plano vigente.
       // O plano vigente só muda no isPaidLike (order.paid / subscription.active etc).
       if (!isOrderEvent) {
         org.license.status = 'expired';
         if (!org.license.planEnd) org.license.planEnd = startOfNow();
+
+        await org.save();
+
+        // ✅ replica expiração da âncora para as organizações filhas do mesmo owner
+        if (org.isBillingAnchor === true) {
+          const replicatedLicenseSource =
+            typeof org.license?.toObject === 'function'
+              ? org.license.toObject()
+              : org.license;
+
+          const replicatedLicense = {
+            ...replicatedLicenseSource,
+            pendingPayment: null,
+            trialStartsAt: null,
+            trialEndsAt: null,
+          };
+
+          await Organization.updateMany(
+            {
+              owner: org.owner,
+              isBillingAnchor: false,
+              _id: { $ne: org._id },
+            },
+            {
+              $set: {
+                license: replicatedLicense,
+              },
+            }
+          );
+        }
       }
+
+      return res.json({ ok: true });
     }
 
     await org.save();

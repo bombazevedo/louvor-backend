@@ -24,10 +24,6 @@ exports.createOrg = async (req, res) => {
     const ownerId = (req.user && (req.user.id || req.user._id)) || req.userId || (req.auth && req.auth.id);
     if (!ownerId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
 
-    // ✅ TRIAL determinístico: 14 dias a partir da criação da organização
-    const trialStartsAt = new Date();
-    const trialEndsAt = new Date(trialStartsAt.getTime() + 14 * 24 * 60 * 60 * 1000);
-
     // 🔐 LIMITE DE ORGANIZAÇÕES POR DONO, CONFORME PLANO
     const state = await getOwnerOrgsPlanState(ownerId);
     const ent = state?.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
@@ -57,21 +53,63 @@ exports.createOrg = async (req, res) => {
 
     const shouldBeBillingAnchor = existingOwnerOrgs.length === 0;
 
+    let licensePayload = null;
+
+    if (shouldBeBillingAnchor) {
+      // ✅ primeira organização do owner: mantém trial determinístico de 14 dias
+      const trialStartsAt = new Date();
+      const trialEndsAt = new Date(trialStartsAt.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      licensePayload = {
+        status: 'trial',
+        plan: 'FREE',
+        trialStartsAt,
+        trialEndsAt,
+      };
+    } else {
+      // ✅ organização filha: herda a licença da organização âncora
+      const billingAnchorRef =
+        existingOwnerOrgs.find((item) => item.isBillingAnchor === true) ||
+        existingOwnerOrgs[0] ||
+        null;
+
+      if (!billingAnchorRef?._id) {
+        return res.status(500).json({ error: 'BILLING_ANCHOR_NOT_FOUND' });
+      }
+
+      const billingAnchor = await Organization.findById(billingAnchorRef._id)
+        .select('license')
+        .lean();
+
+      if (!billingAnchor) {
+        return res.status(500).json({ error: 'BILLING_ANCHOR_NOT_FOUND' });
+      }
+
+      const anchorLicense = billingAnchor.license || {};
+      const anchorStatus = anchorLicense.status || 'active';
+      const isAnchorInTrial = anchorStatus === 'trial';
+
+      licensePayload = {
+        status: anchorStatus,
+        plan: anchorLicense.plan || 'FREE',
+        billingPeriod: anchorLicense.billingPeriod || null,
+        planStart: anchorLicense.planStart || anchorLicense.planStartsAt || null,
+        planEnd: anchorLicense.planEnd || anchorLicense.planExpiresAt || null,
+        trialStartsAt: isAnchorInTrial
+          ? (anchorLicense.trialStartsAt || null)
+          : null,
+        trialEndsAt: isAnchorInTrial
+          ? (anchorLicense.trialEndsAt || null)
+          : null,
+      };
+    }
+
     const org = await Organization.create({
       name,
       slug,
       owner: ownerId,
       isBillingAnchor: shouldBeBillingAnchor,
-      license: {
-        status: 'trial',
-        // plano base FREE: durante o trial, o entitlements eleva temporariamente
-        // para o plano mais alto (5) conforme src/utils/entitlements.js
-        plan: 'FREE',
-
-        // ✅ Datas reais do trial para contagem regressiva no app e cálculo consistente
-        trialStartsAt,
-        trialEndsAt,
-      },
+      license: licensePayload,
     });
 
     await OrgMember.create({ org: org._id, user: ownerId, role: 'coordenador' });
@@ -82,6 +120,7 @@ exports.createOrg = async (req, res) => {
     res.status(500).json({ error: 'CREATE_ORG_ERROR' });
   }
 };
+
 exports.generateInvite = async (req, res) => {
   try {
     const { id } = req.params; // orgId
