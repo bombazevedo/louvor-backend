@@ -184,9 +184,9 @@ exports.myOrgs = async (req, res) => {
 const ent = state.entitlements || getEntitlementsFor({ license: { plan: 'FREE' } });
 const lockedSet = new Set((state.lockedOrgIds || []).map(id => String(id)));
 
-    const memberships = await OrgMember.find({ user: userId })
-      .populate('org', 'name slug license logoUrl cloudinaryPublicId owner')
-      .lean();
+const memberships = await OrgMember.find({ user: userId })
+  .populate('org', 'name slug license logoUrl cloudinaryPublicId owner isBillingAnchor createdAt')
+  .lean();
 
      // 🔎 incluir também as orgs onde o usuário é owner (fallback caso não exista membership)
     const memberOrgIdsRaw = memberships.map(m => String(m.org?._id || m.org));
@@ -194,10 +194,12 @@ const lockedSet = new Set((state.lockedOrgIds || []).map(id => String(id)));
     // ✅ FIX: remove "null"/"undefined" e qualquer lixo antes do $nin (evita CastError)
     const memberOrgIds = memberOrgIdsRaw.filter(id => /^[0-9a-fA-F]{24}$/.test(String(id)));
 
-    const ownedButNotMember = await Organization.find({
-      owner: userId,
-      _id: { $nin: memberOrgIds }
-    }).lean();
+const ownedButNotMember = await Organization.find({
+  owner: userId,
+  _id: { $nin: memberOrgIds }
+})
+  .select('_id name slug license logoUrl cloudinaryPublicId owner isBillingAnchor createdAt')
+  .lean();
 
 const DEFAULT_PLAN = 'FREE';
 
@@ -218,6 +220,28 @@ const normalizeOrgForResponse = (orgDoc, lockedByPlan) => {
     license: normalizedLicense,
     lockedByPlan: !!lockedByPlan,
   };
+};
+
+const sortMyOrgsForResponse = (a, b) => {
+  const aLocked = !!a?.org?.lockedByPlan;
+  const bLocked = !!b?.org?.lockedByPlan;
+
+  // ✅ orgs válidas primeiro; travadas por plano ficam por último
+  if (aLocked !== bLocked) return aLocked ? 1 : -1;
+
+  const aAnchor = !!a?.org?.isBillingAnchor;
+  const bAnchor = !!b?.org?.isBillingAnchor;
+
+  // ✅ entre as válidas, a âncora vem primeiro
+  if (aAnchor !== bAnchor) return aAnchor ? -1 : 1;
+
+  const aCreatedAt = a?.org?.createdAt ? new Date(a.org.createdAt).getTime() : 0;
+  const bCreatedAt = b?.org?.createdAt ? new Date(b.org.createdAt).getTime() : 0;
+
+  // ✅ fallback determinístico: mais antigas primeiro
+  if (aCreatedAt !== bCreatedAt) return aCreatedAt - bCreatedAt;
+
+  return String(a?.org?._id || '').localeCompare(String(b?.org?._id || ''));
 };
 
 const response = [
@@ -259,6 +283,8 @@ const response = [
           logoUrl: o.logoUrl,
           cloudinaryPublicId: o.cloudinaryPublicId,
           owner: o.owner,
+          isBillingAnchor: o.isBillingAnchor,
+          createdAt: o.createdAt,
         },
         lockedSet.has(String(o._id))
       );
@@ -271,7 +297,7 @@ const response = [
       };
     })
     .filter(Boolean)
-];
+    .sort(sortMyOrgsForResponse);
 
     res.json({
       orgs: response,
