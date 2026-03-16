@@ -4,7 +4,12 @@ const { createPagarmeClient } = require('../services/pagarmeClient');
 const { addMonths, startOfNow } = require('../utils/dateUtils');
 const { getBillingPeriod, getPriceCents } = require('../utils/planCatalog');
 
+const APPLE_PRODUCT_ID = 'worshiphub.premium';
+const APPLE_VERIFY_RECEIPT_PROD_URL = 'https://buy.itunes.apple.com/verifyReceipt';
+const APPLE_VERIFY_RECEIPT_SANDBOX_URL = 'https://sandbox.itunes.apple.com/verifyReceipt';
+
 async function getOwnerOrganizationsOrdered(ownerId) {
+
   return Organization.find({ owner: ownerId })
     .sort({ createdAt: 1, _id: 1 })
     .select('_id name slug createdAt owner license isBillingAnchor');
@@ -72,6 +77,213 @@ async function getCurrentOwnerAnchorOrganization(ownerId) {
   return {
     orgs,
     currentAnchorOrg,
+  };
+}
+
+async function postAppleVerifyReceipt(url, receiptData) {
+  if (typeof fetch !== 'function') {
+    throw new Error('Global fetch is not available in this Node runtime');
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      'receipt-data': receiptData,
+      'exclude-old-transactions': false,
+    }),
+  });
+
+  const json = await response.json();
+  return json;
+}
+
+function extractAppleReceiptItems(verifyData) {
+  const latest = Array.isArray(verifyData?.latest_receipt_info)
+    ? verifyData.latest_receipt_info
+    : [];
+
+  const inApp = Array.isArray(verifyData?.receipt?.in_app)
+    ? verifyData.receipt.in_app
+    : [];
+
+  return [...latest, ...inApp];
+}
+
+async function verifyAppleReceiptWithApple({ transactionReceipt, transactionId, productId }) {
+  const expectedProductId = String(productId || APPLE_PRODUCT_ID);
+
+  if (!transactionReceipt) {
+    return {
+      ok: false,
+      reason: 'missing_receipt',
+      message: 'Comprovante Apple ausente.',
+    };
+  }
+
+  let verifyData = await postAppleVerifyReceipt(APPLE_VERIFY_RECEIPT_PROD_URL, transactionReceipt);
+
+  if (Number(verifyData?.status) === 21007) {
+    verifyData = await postAppleVerifyReceipt(APPLE_VERIFY_RECEIPT_SANDBOX_URL, transactionReceipt);
+  }
+
+  if (Number(verifyData?.status) !== 0) {
+    return {
+      ok: false,
+      reason: 'apple_verify_failed',
+      appleStatus: Number(verifyData?.status),
+      message: 'A Apple não confirmou a transação informada.',
+    };
+  }
+
+  const receiptItems = extractAppleReceiptItems(verifyData);
+
+  const matchingByProduct = receiptItems.filter(
+    (item) => String(item?.product_id || '') === expectedProductId
+  );
+
+  if (!matchingByProduct.length) {
+    return {
+      ok: false,
+      reason: 'product_not_found_in_receipt',
+      message: 'O productId informado não foi encontrado no recibo Apple.',
+    };
+  }
+
+  const matchedPurchase =
+    matchingByProduct.find(
+      (item) => transactionId && String(item?.transaction_id || '') === String(transactionId)
+    ) ||
+    matchingByProduct[matchingByProduct.length - 1];
+
+  if (!matchedPurchase) {
+    return {
+      ok: false,
+      reason: 'purchase_not_matched',
+      message: 'Não foi possível localizar a compra Apple no recibo informado.',
+    };
+  }
+
+  return {
+    ok: true,
+    environment: verifyData?.environment || null,
+    matchedPurchase,
+    verifyData,
+  };
+}
+
+function getMonthsFromBillingPeriod(periodKey) {
+  const key = String(periodKey || '').toUpperCase();
+
+  if (key === 'MONTHLY') return 1;
+  if (key === 'QUARTERLY') return 3;
+  if (key === 'YEARLY') return 12;
+
+  return null;
+}
+
+async function activateAppleLicenseForOrganization({
+  org,
+  planCode,
+  billingPeriod,
+}) {
+  const periodKey = getBillingPeriod(billingPeriod);
+  const months = getMonthsFromBillingPeriod(periodKey);
+
+  if (!periodKey || !months) {
+    throw new Error('Invalid billingPeriod for Apple activation');
+  }
+
+  org.license = org.license || {};
+
+  const now = startOfNow();
+
+  const prevPlanCode = String(org.license.plan || 'FREE');
+
+  const prevPlanEnd = (() => {
+    try {
+      const raw = org.license.planEnd || null;
+      if (!raw) return null;
+      const d = new Date(raw);
+      return !isNaN(d.getTime()) ? d : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const isSamePlan = prevPlanCode === String(planCode);
+  const canStack = isSamePlan && prevPlanEnd && prevPlanEnd.getTime() > now.getTime();
+  const baseDate = canStack ? prevPlanEnd : now;
+
+  org.license.plan = String(planCode);
+  org.license.billingPeriod = String(periodKey);
+  org.license.status = 'active';
+  org.license.planStart = now;
+  org.license.planEnd = addMonths(baseDate, months);
+
+  org.license.trialStartsAt = null;
+  org.license.trialEndsAt = null;
+
+  if (org.license.pendingPayment != null) {
+    org.license.pendingPayment = null;
+    if (typeof org.markModified === 'function') org.markModified('license');
+  }
+
+  const ownerAnchorState = await getCurrentOwnerAnchorOrganization(org.owner);
+  const currentAnchorOrg = ownerAnchorState.currentAnchorOrg || null;
+
+  let anchorChanged = false;
+
+  if (!currentAnchorOrg || String(currentAnchorOrg._id) !== String(org._id)) {
+    anchorChanged = true;
+
+    await Organization.updateMany(
+      { owner: org.owner, isBillingAnchor: true },
+      { $set: { isBillingAnchor: false } }
+    );
+
+    await Organization.updateOne(
+      { _id: org._id, owner: org.owner },
+      { $set: { isBillingAnchor: true } }
+    );
+
+    org.isBillingAnchor = true;
+  }
+
+  await org.save();
+
+  if (org.isBillingAnchor === true) {
+    const replicatedLicenseSource =
+      typeof org.license?.toObject === 'function'
+        ? org.license.toObject()
+        : org.license;
+
+    const replicatedLicense = {
+      ...replicatedLicenseSource,
+      pendingPayment: null,
+      trialStartsAt: null,
+      trialEndsAt: null,
+    };
+
+    await Organization.updateMany(
+      {
+        owner: org.owner,
+        isBillingAnchor: false,
+        _id: { $ne: org._id },
+      },
+      {
+        $set: {
+          license: replicatedLicense,
+        },
+      }
+    );
+  }
+
+  return {
+    anchorChanged,
+    currentAnchorOrgId: currentAnchorOrg?._id ? String(currentAnchorOrg._id) : null,
   };
 }
 
@@ -651,8 +863,125 @@ async function landingCheckout(req, res) {
       console.error('[billingController.landingCheckout] error DETAILS:', JSON.stringify(data, null, 2));
     }
 
-    return res.status(500).json({ error: 'Failed to create landing checkout link' });
+        return res.status(500).json({ error: 'Failed to create landing checkout link' });
   }
 }
 
-module.exports = { subscribe, catalog, checkout, landingCheckout };
+// POST /billing/apple/confirm
+// body: {
+//   productId: "worshiphub.premium",
+//   transactionId: "...",
+//   originalTransactionId?: "...",
+//   transactionReceipt: "...",
+//   purchaseDate?: "...",
+//   planCode: "1"|"2"|...,
+//   billingPeriod: "MONTHLY"|"QUARTERLY"|"YEARLY"
+// }
+async function confirmApplePurchase(req, res) {
+  try {
+    const orgId = req.orgId;
+
+    const {
+      productId,
+      transactionId,
+      originalTransactionId,
+      transactionReceipt,
+      purchaseDate,
+      planCode,
+      billingPeriod,
+    } = req.body || {};
+
+    const normalizedProductId = String(productId || '');
+    const periodKey = getBillingPeriod(billingPeriod);
+
+    if (!orgId) {
+      return res.status(400).json({ error: 'Missing orgId context' });
+    }
+
+    if (!planCode) {
+      return res.status(400).json({ error: 'Missing planCode' });
+    }
+
+    if (!periodKey) {
+      return res.status(400).json({ error: 'Invalid billingPeriod' });
+    }
+
+    if (!transactionReceipt) {
+      return res.status(400).json({ error: 'Missing transactionReceipt' });
+    }
+
+    if (!normalizedProductId || normalizedProductId !== APPLE_PRODUCT_ID) {
+      return res.status(400).json({
+        error: 'INVALID_APPLE_PRODUCT',
+        message: 'O productId Apple informado é inválido para este fluxo.',
+      });
+    }
+
+    if (String(req.orgRole || '').toLowerCase() !== 'coordenador') {
+      return res.status(403).json({
+        error: 'BILLING_FORBIDDEN',
+        message: 'Somente o coordenador da organização pode alterar ou assinar planos.',
+      });
+    }
+
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      return res.status(404).json({ error: 'Organization not found' });
+    }
+
+    const appleVerification = await verifyAppleReceiptWithApple({
+      transactionReceipt,
+      transactionId,
+      productId: normalizedProductId,
+    });
+
+    if (!appleVerification.ok) {
+      return res.status(400).json({
+        error: 'APPLE_RECEIPT_INVALID',
+        message:
+          appleVerification.message ||
+          'A Apple não confirmou a transação informada.',
+        appleStatus: appleVerification.appleStatus || null,
+      });
+    }
+
+    const activationResult = await activateAppleLicenseForOrganization({
+      org,
+      planCode: String(planCode),
+      billingPeriod: String(periodKey),
+    });
+
+    return res.json({
+      ok: true,
+      verified: true,
+      productId: normalizedProductId,
+      transactionId: transactionId || appleVerification?.matchedPurchase?.transaction_id || null,
+      originalTransactionId:
+        originalTransactionId ||
+        appleVerification?.matchedPurchase?.original_transaction_id ||
+        null,
+      purchaseDate:
+        purchaseDate ||
+        appleVerification?.matchedPurchase?.purchase_date_ms ||
+        appleVerification?.matchedPurchase?.purchase_date ||
+        null,
+      environment: appleVerification.environment || null,
+      anchorChanged: activationResult.anchorChanged === true,
+      previousAnchorOrgId: activationResult.currentAnchorOrgId || null,
+      license: {
+        status: org.license?.status || null,
+        plan: org.license?.plan || null,
+        billingPeriod: org.license?.billingPeriod || null,
+        planStart: org.license?.planStart || null,
+        planEnd: org.license?.planEnd || null,
+      },
+    });
+  } catch (err) {
+    console.error('[billingController.confirmApplePurchase] error:', err?.response?.data || err);
+    return res.status(500).json({
+      error: 'Failed to confirm Apple purchase',
+    });
+  }
+}
+
+module.exports = { subscribe, catalog, checkout, landingCheckout, confirmApplePurchase };
