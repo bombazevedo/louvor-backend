@@ -4,10 +4,16 @@ const { createPagarmeClient } = require('../services/pagarmeClient');
 const { addMonths, startOfNow } = require('../utils/dateUtils');
 const { getBillingPeriod, getPriceCents } = require('../utils/planCatalog');
 
-const APPLE_PRODUCT_ID = 'worshiphub.premium';
+const APPLE_PRODUCT_ID = 'com.worshiphub.plan1.monthly';
+const APPLE_PRODUCT_CONFIG = {
+  'com.worshiphub.plan1.monthly': {
+    planCode: '1',
+    billingPeriod: 'MONTHLY',
+  },
+};
+
 const APPLE_VERIFY_RECEIPT_PROD_URL = 'https://buy.itunes.apple.com/verifyReceipt';
 const APPLE_VERIFY_RECEIPT_SANDBOX_URL = 'https://sandbox.itunes.apple.com/verifyReceipt';
-
 async function getOwnerOrganizationsOrdered(ownerId) {
 
   return Organization.find({ owner: ownerId })
@@ -184,6 +190,10 @@ function getMonthsFromBillingPeriod(periodKey) {
   return null;
 }
 
+function getAppleProductConfig(productId) {
+  const normalizedProductId = String(productId || '');
+  return APPLE_PRODUCT_CONFIG[normalizedProductId] || null;
+}
 async function activateAppleLicenseForOrganization({
   org,
   planCode,
@@ -892,29 +902,34 @@ async function confirmApplePurchase(req, res) {
     } = req.body || {};
 
     const normalizedProductId = String(productId || '');
-    const periodKey = getBillingPeriod(billingPeriod);
+    const appleProductConfig = getAppleProductConfig(normalizedProductId);
+    const resolvedPlanCode = appleProductConfig?.planCode || null;
+    const periodKey = getBillingPeriod(appleProductConfig?.billingPeriod || billingPeriod);
 
     if (!orgId) {
       return res.status(400).json({ error: 'Missing orgId context' });
-    }
-
-    if (!planCode) {
-      return res.status(400).json({ error: 'Missing planCode' });
-    }
-
-    if (!periodKey) {
-      return res.status(400).json({ error: 'Invalid billingPeriod' });
     }
 
     if (!transactionReceipt) {
       return res.status(400).json({ error: 'Missing transactionReceipt' });
     }
 
-    if (!normalizedProductId || normalizedProductId !== APPLE_PRODUCT_ID) {
+    if (!normalizedProductId || !appleProductConfig || normalizedProductId !== APPLE_PRODUCT_ID) {
       return res.status(400).json({
         error: 'INVALID_APPLE_PRODUCT',
         message: 'O productId Apple informado é inválido para este fluxo.',
       });
+    }
+
+    if (!resolvedPlanCode) {
+      return res.status(400).json({
+        error: 'INVALID_APPLE_PLAN_MAPPING',
+        message: 'O productId Apple informado não possui mapeamento válido de plano.',
+      });
+    }
+
+    if (!periodKey) {
+      return res.status(400).json({ error: 'Invalid billingPeriod' });
     }
 
     if (String(req.orgRole || '').toLowerCase() !== 'coordenador') {
@@ -947,7 +962,7 @@ async function confirmApplePurchase(req, res) {
 
     const activationResult = await activateAppleLicenseForOrganization({
       org,
-      planCode: String(planCode),
+      planCode: String(resolvedPlanCode),
       billingPeriod: String(periodKey),
     });
 
@@ -974,6 +989,11 @@ async function confirmApplePurchase(req, res) {
         billingPeriod: org.license?.billingPeriod || null,
         planStart: org.license?.planStart || null,
         planEnd: org.license?.planEnd || null,
+      },
+      appliedPlan: {
+        productId: normalizedProductId,
+        planCode: resolvedPlanCode,
+        billingPeriod: periodKey,
       },
     });
   } catch (err) {
