@@ -194,10 +194,34 @@ function getAppleProductConfig(productId) {
   const normalizedProductId = String(productId || '');
   return APPLE_PRODUCT_CONFIG[normalizedProductId] || null;
 }
+
+function parseApplePurchaseDate(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      const parsed = new Date(raw.length > 10 ? numeric : numeric * 1000);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+  }
+
+  const parsed = new Date(raw);
+  return !isNaN(parsed.getTime()) ? parsed : null;
+}
+
 async function activateAppleLicenseForOrganization({
   org,
   planCode,
   billingPeriod,
+  productId,
+  transactionId,
+  originalTransactionId,
+  purchaseDate,
+  environment,
 }) {
   const periodKey = getBillingPeriod(billingPeriod);
   const months = getMonthsFromBillingPeriod(periodKey);
@@ -209,6 +233,11 @@ async function activateAppleLicenseForOrganization({
   org.license = org.license || {};
 
   const now = startOfNow();
+  const normalizedProductId = String(productId || APPLE_PRODUCT_ID);
+  const normalizedTransactionId = transactionId ? String(transactionId) : null;
+  const normalizedOriginalTransactionId =
+    originalTransactionId ? String(originalTransactionId) : (normalizedTransactionId || null);
+  const parsedPurchaseDate = parseApplePurchaseDate(purchaseDate);
 
   const prevPlanCode = String(org.license.plan || 'FREE');
 
@@ -222,24 +251,6 @@ async function activateAppleLicenseForOrganization({
       return null;
     }
   })();
-
-  const isSamePlan = prevPlanCode === String(planCode);
-  const canStack = isSamePlan && prevPlanEnd && prevPlanEnd.getTime() > now.getTime();
-  const baseDate = canStack ? prevPlanEnd : now;
-
-  org.license.plan = String(planCode);
-  org.license.billingPeriod = String(periodKey);
-  org.license.status = 'active';
-  org.license.planStart = now;
-  org.license.planEnd = addMonths(baseDate, months);
-
-  org.license.trialStartsAt = null;
-  org.license.trialEndsAt = null;
-
-  if (org.license.pendingPayment != null) {
-    org.license.pendingPayment = null;
-    if (typeof org.markModified === 'function') org.markModified('license');
-  }
 
   const ownerAnchorState = await getCurrentOwnerAnchorOrganization(org.owner);
   const currentAnchorOrg = ownerAnchorState.currentAnchorOrg || null;
@@ -260,6 +271,95 @@ async function activateAppleLicenseForOrganization({
     );
 
     org.isBillingAnchor = true;
+  }
+
+  const sameTransaction =
+    normalizedTransactionId &&
+    org.license.appleLastTransactionId &&
+    String(org.license.appleLastTransactionId) === normalizedTransactionId;
+
+  const sameOriginalTransaction =
+    normalizedOriginalTransactionId &&
+    org.license.appleOriginalTransactionId &&
+    String(org.license.appleOriginalTransactionId) === normalizedOriginalTransactionId;
+
+  const isSamePlan = prevPlanCode === String(planCode);
+  const isSameActivePlan = isSamePlan && String(org.license.status || '') === 'active';
+
+  if (sameTransaction && sameOriginalTransaction && isSameActivePlan) {
+    org.license.appleProductId = normalizedProductId;
+    org.license.appleOriginalTransactionId = normalizedOriginalTransactionId;
+    org.license.appleLastTransactionId = normalizedTransactionId;
+    org.license.appleEnvironment = environment || org.license.appleEnvironment || null;
+
+    if (parsedPurchaseDate) {
+      org.license.appleLastPurchaseDate = parsedPurchaseDate;
+    }
+
+    if (org.license.pendingPayment != null) {
+      org.license.pendingPayment = null;
+      if (typeof org.markModified === 'function') org.markModified('license');
+    }
+
+    await org.save();
+
+    if (org.isBillingAnchor === true) {
+      const replicatedLicenseSource =
+        typeof org.license?.toObject === 'function'
+          ? org.license.toObject()
+          : org.license;
+
+      const replicatedLicense = {
+        ...replicatedLicenseSource,
+        pendingPayment: null,
+        trialStartsAt: null,
+        trialEndsAt: null,
+      };
+
+      await Organization.updateMany(
+        {
+          owner: org.owner,
+          isBillingAnchor: false,
+          _id: { $ne: org._id },
+        },
+        {
+          $set: {
+            license: replicatedLicense,
+          },
+        }
+      );
+    }
+
+    return {
+      anchorChanged,
+      alreadyApplied: true,
+      currentAnchorOrgId: currentAnchorOrg?._id ? String(currentAnchorOrg._id) : null,
+    };
+  }
+
+  const canStack = isSamePlan && prevPlanEnd && prevPlanEnd.getTime() > now.getTime();
+  const baseDate = canStack ? prevPlanEnd : now;
+
+  org.license.plan = String(planCode);
+  org.license.billingPeriod = String(periodKey);
+  org.license.status = 'active';
+  org.license.planStart = now;
+  org.license.planEnd = addMonths(baseDate, months);
+  org.license.appleProductId = normalizedProductId;
+  org.license.appleOriginalTransactionId = normalizedOriginalTransactionId;
+  org.license.appleLastTransactionId = normalizedTransactionId;
+  org.license.appleEnvironment = environment || null;
+
+  if (parsedPurchaseDate) {
+    org.license.appleLastPurchaseDate = parsedPurchaseDate;
+  }
+
+  org.license.trialStartsAt = null;
+  org.license.trialEndsAt = null;
+
+  if (org.license.pendingPayment != null) {
+    org.license.pendingPayment = null;
+    if (typeof org.markModified === 'function') org.markModified('license');
   }
 
   await org.save();
@@ -293,6 +393,7 @@ async function activateAppleLicenseForOrganization({
 
   return {
     anchorChanged,
+    alreadyApplied: false,
     currentAnchorOrgId: currentAnchorOrg?._id ? String(currentAnchorOrg._id) : null,
   };
 }
@@ -964,9 +1065,21 @@ async function confirmApplePurchase(req, res) {
       org,
       planCode: String(resolvedPlanCode),
       billingPeriod: String(periodKey),
+      productId: normalizedProductId,
+      transactionId: transactionId || appleVerification?.matchedPurchase?.transaction_id || null,
+      originalTransactionId:
+        originalTransactionId ||
+        appleVerification?.matchedPurchase?.original_transaction_id ||
+        null,
+      purchaseDate:
+        purchaseDate ||
+        appleVerification?.matchedPurchase?.purchase_date_ms ||
+        appleVerification?.matchedPurchase?.purchase_date ||
+        null,
+      environment: appleVerification.environment || null,
     });
 
-    return res.json({
+       return res.json({
       ok: true,
       verified: true,
       productId: normalizedProductId,
@@ -982,6 +1095,7 @@ async function confirmApplePurchase(req, res) {
         null,
       environment: appleVerification.environment || null,
       anchorChanged: activationResult.anchorChanged === true,
+      alreadyApplied: activationResult.alreadyApplied === true,
       previousAnchorOrgId: activationResult.currentAnchorOrgId || null,
       license: {
         status: org.license?.status || null,
@@ -996,6 +1110,7 @@ async function confirmApplePurchase(req, res) {
         billingPeriod: periodKey,
       },
     });
+
   } catch (err) {
     console.error('[billingController.confirmApplePurchase] error:', err?.response?.data || err);
     return res.status(500).json({

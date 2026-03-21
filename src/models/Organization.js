@@ -37,6 +37,13 @@ const LicenseSchema = new Schema({
   // Quando o ciclo atual termina / expira (ex.: 31/01/2026 ou 31/12/2026)
   planEnd: { type: Date },
 
+  // ✅ rastreio Apple IAP (idempotência e restauração)
+  appleProductId: { type: String, default: null },
+  appleOriginalTransactionId: { type: String, default: null },
+  appleLastTransactionId: { type: String, default: null },
+  appleLastPurchaseDate: { type: Date, default: null },
+  appleEnvironment: { type: String, default: null },
+
   // ✅ TRIAL: datas para contagem regressiva (frontend) e cálculo determinístico (backend)
   trialStartsAt: { type: Date, default: null },
   trialEndsAt: { type: Date, default: null },
