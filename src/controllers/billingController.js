@@ -180,6 +180,86 @@ async function verifyAppleReceiptWithApple({ transactionReceipt, transactionId, 
   };
 }
 
+function decodeBase64UrlSegment(segment) {
+  const normalized = String(segment || '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const padding = normalized.length % 4;
+  const padded =
+    padding === 0
+      ? normalized
+      : normalized + '='.repeat(4 - padding);
+
+  return Buffer.from(padded, 'base64').toString('utf8');
+}
+
+function decodeAppleSignedTransactionInfo(signedTransactionInfo) {
+  try {
+    const raw = String(signedTransactionInfo || '').trim();
+    if (!raw) return null;
+
+    const parts = raw.split('.');
+    if (parts.length < 2) return null;
+
+    const payloadJson = decodeBase64UrlSegment(parts[1]);
+    const payload = JSON.parse(payloadJson);
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function verifyAppleSignedTransactionPayload({
+  signedTransactionInfo,
+  transactionId,
+  productId,
+}) {
+  const decoded = decodeAppleSignedTransactionInfo(signedTransactionInfo);
+
+  if (!decoded) {
+    return {
+      ok: false,
+      reason: 'invalid_signed_transaction_info',
+      message: 'Não foi possível decodificar a transação Apple.',
+    };
+  }
+
+  const decodedProductId =
+    decoded?.productId ||
+    decoded?.product_id ||
+    null;
+
+  if (decodedProductId !== productId) {
+    return {
+      ok: false,
+      reason: 'product_mismatch',
+      message: 'ProductId não confere com a transação Apple.',
+    };
+  }
+
+  return {
+    ok: true,
+    environment: decoded?.environment || null,
+    matchedPurchase: {
+      product_id: decodedProductId,
+      transaction_id:
+        decoded?.transactionId ||
+        decoded?.transaction_id ||
+        null,
+      original_transaction_id:
+        decoded?.originalTransactionId ||
+        decoded?.original_transaction_id ||
+        null,
+      purchase_date:
+        decoded?.purchaseDate ||
+        decoded?.purchase_date ||
+        null,
+    },
+  };
+}
+
 function getMonthsFromBillingPeriod(periodKey) {
   const key = String(periodKey || '').toUpperCase();
 
@@ -992,15 +1072,16 @@ async function confirmApplePurchase(req, res) {
   try {
     const orgId = req.orgId;
 
-    const {
-      productId,
-      transactionId,
-      originalTransactionId,
-      transactionReceipt,
-      purchaseDate,
-      planCode,
-      billingPeriod,
-    } = req.body || {};
+const {
+  productId,
+  transactionId,
+  originalTransactionId,
+  transactionReceipt,
+  signedTransactionInfo,
+  purchaseDate,
+  planCode,
+  billingPeriod,
+} = req.body || {};
 
     const normalizedProductId = String(productId || '');
     const appleProductConfig = getAppleProductConfig(normalizedProductId);
@@ -1011,10 +1092,12 @@ async function confirmApplePurchase(req, res) {
       return res.status(400).json({ error: 'Missing orgId context' });
     }
 
-    if (!transactionReceipt) {
-      return res.status(400).json({ error: 'Missing transactionReceipt' });
-    }
-
+if (!transactionReceipt && !signedTransactionInfo) {
+  return res.status(400).json({
+    error: 'MISSING_APPLE_PROOF',
+    message: 'Missing transactionReceipt or signedTransactionInfo',
+  });
+}
     if (!normalizedProductId || !appleProductConfig || normalizedProductId !== APPLE_PRODUCT_ID) {
       return res.status(400).json({
         error: 'INVALID_APPLE_PRODUCT',
@@ -1045,11 +1128,21 @@ async function confirmApplePurchase(req, res) {
       return res.status(404).json({ error: 'Organization not found' });
     }
 
-    const appleVerification = await verifyAppleReceiptWithApple({
-      transactionReceipt,
-      transactionId,
-      productId: normalizedProductId,
-    });
+let appleVerification;
+
+if (transactionReceipt) {
+  appleVerification = await verifyAppleReceiptWithApple({
+    transactionReceipt,
+    transactionId,
+    productId: normalizedProductId,
+  });
+} else {
+  appleVerification = verifyAppleSignedTransactionPayload({
+    signedTransactionInfo,
+    transactionId,
+    productId: normalizedProductId,
+  });
+}
 
     if (!appleVerification.ok) {
       return res.status(400).json({
