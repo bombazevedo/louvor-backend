@@ -365,8 +365,23 @@ async function activateAppleLicenseForOrganization({
 
   const isSamePlan = prevPlanCode === String(planCode);
   const isSameActivePlan = isSamePlan && String(org.license.status || '') === 'active';
+  const hasActiveFuturePlan =
+    prevPlanEnd instanceof Date &&
+    !isNaN(prevPlanEnd.getTime()) &&
+    prevPlanEnd.getTime() > now.getTime();
 
-  if (sameTransaction && sameOriginalTransaction && isSameActivePlan) {
+  // iOS não deve herdar a regra do Android de "comprar o mesmo plano ativo e somar tempo".
+  // No ecossistema Apple, restore/download/reinstalação da mesma assinatura ativa
+  // deve apenas reconciliar a licença existente da mesma cadeia (originalTransactionId),
+  // sem empurrar planEnd para frente.
+  const shouldTreatAsAlreadyApplied =
+    isSameActivePlan &&
+    (
+      (sameTransaction && sameOriginalTransaction) ||
+      (sameOriginalTransaction && hasActiveFuturePlan)
+    );
+
+  if (shouldTreatAsAlreadyApplied) {
     org.license.appleProductId = normalizedProductId;
     org.license.appleOriginalTransactionId = normalizedOriginalTransactionId;
     org.license.appleLastTransactionId = normalizedTransactionId;
@@ -417,8 +432,11 @@ async function activateAppleLicenseForOrganization({
     };
   }
 
-  const canStack = isSamePlan && prevPlanEnd && prevPlanEnd.getTime() > now.getTime();
-  const baseDate = canStack ? prevPlanEnd : now;
+  // Apple não deve acumular período neste fluxo de confirmação/restauração.
+  // Compra limpa, reativação após expiração e mudança de plano continuam funcionando,
+  // mas restauração da mesma assinatura ativa deixa de somar tempo indevidamente.
+  const canStack = false;
+  const baseDate = now;
 
   org.license.plan = String(planCode);
   org.license.billingPeriod = String(periodKey);
