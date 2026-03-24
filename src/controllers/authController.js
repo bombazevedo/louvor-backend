@@ -124,6 +124,21 @@ exports.updateUserRole = async (req, res) => {
 
     const targetUserId = req.params.id;
 
+// 🔒 BLOQUEIO ABSOLUTO: owner da org não pode ter role alterada
+try {
+  const Organization = require('../models/Organization');
+
+  const org = req._org || (req.orgId ? await Organization.findById(req.orgId).select('owner').lean() : null);
+
+  if (org && String(org.owner) === String(targetUserId)) {
+    return res.status(403).json({
+      message: 'O proprietário da organização não pode ter sua função alterada.'
+    });
+  }
+} catch (ownerCheckErr) {
+  console.error('[updateUserRole] erro ao validar owner:', ownerCheckErr);
+}
+
     // ✅ Trava por organização (quando promovendo para DM)
     
     if (nextRole === 'dm') {

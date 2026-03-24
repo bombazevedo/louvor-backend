@@ -483,12 +483,32 @@ res.json(clean(updatedEvent));
  */
 const updateEventSongOverrides = async (req, res) => {
   try {
-    const user = req.user;
-    const allowed = ['coordinator', 'coordenador', 'dm', 'dm_escalado'];
-    if (!user || !allowed.includes(String(user.role || '').toLowerCase())) {
-      return res.status(403).json({ message: 'Apenas Coordenador/DM escalado podem editar overrides.' });
-    }
+const user = req.user;
 
+// 🔒 usar role REAL da org (multi-org safe)
+const orgRole = String(req.orgRole || user?.role || '').toLowerCase();
+
+const allowed = ['coordinator', 'coordenador', 'dm', 'dm_escalado'];
+
+if (!user || !allowed.includes(orgRole)) {
+  return res.status(403).json({ message: 'Apenas Coordenador/DM escalado podem editar overrides.' });
+}
+
+// 🔒 Regra adicional: DM só pode editar se estiver na escala do evento
+if (orgRole === 'dm') {
+  const scale = await Scale.findOne({ eventId: req.params.eventId })
+    .select('members.user')
+    .lean();
+
+  const isInScale = Array.isArray(scale?.members)
+    && scale.members.some(m => String(m.user) === String(user._id));
+
+  if (!isInScale) {
+    return res.status(403).json({
+      message: 'DM só pode editar músicas de eventos em que esteja escalado.'
+    });
+  }
+}
     const { eventId, songId } = req.params;
     const { key, bpm, manualLink } = req.body; // todos opcionais
 

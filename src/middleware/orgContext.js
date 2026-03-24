@@ -47,7 +47,7 @@ module.exports = async function orgContext(req, res, next) {
     }
 
     req.orgId  = orgId;
-    req.orgRole = membership ? membership.role : 'coordenador';
+    req.orgRole = isOwner ? 'coordenador' : membership.role;
     req._org   = org; // cache p/ licenseGuard
 
     console.log('[orgContext] resolved orgId:', req.orgId, '| orgRole:', req.orgRole, '| license.plan:', req._org?.license?.plan);
