@@ -136,7 +136,7 @@ const getEventById = async (req, res) => {
  */
 const createEvent = async (req, res) => {
   try {
-    const {
+      const {
   title, description, date, location, type,
   musicLinks,
   colorPalette, primaryColor,
@@ -144,6 +144,32 @@ const createEvent = async (req, res) => {
   attachments, // ⬅️ ✅ (adição cirúrgica) incluir anexos do front
   dnNotes      // ⬅️ 📝 novo: Anotações do DM
 } = req.body;
+
+    const authUserId =
+      (req.user && (req.user._id || req.user.id)) ||
+      req.userId ||
+      (req.auth && req.auth.id);
+
+    const orgRole = String(req.orgRole || req.user?.role || '').toLowerCase();
+
+    if (orgRole !== 'coordenador') {
+      if (orgRole !== 'dm') {
+        return res.status(403).json({ message: 'Apenas coordenador ou DM escalado podem editar este evento.' });
+      }
+
+      const scale = await Scale.findOne({ eventId: req.params.id })
+        .select('members.user')
+        .lean();
+
+      const isInScale = Array.isArray(scale?.members) &&
+        scale.members.some((m) => String(m?.user) === String(authUserId));
+
+      if (!isInScale) {
+        return res.status(403).json({
+          message: 'DM só pode editar eventos em que esteja escalado.'
+        });
+      }
+    }
 
     const normalizedMusicLinks = [];
 

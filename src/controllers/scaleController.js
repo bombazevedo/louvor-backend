@@ -166,6 +166,48 @@ async function notifyUserRemovedFromScale(userId, eventDoc, orgId) {
 
 // ⬆️ FIM DOS HELPERS
 
+function membershipKey(member) {
+  return `${String(member?.user?._id || member?.user || '')}::${String(member?.function?._id || member?.function || '')}`;
+}
+
+function normalizeConfirmed(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  return null;
+}
+
+function isOnlySelfConfirmationUpdate(beforeMembers = [], afterMembers = [], authUserId) {
+  const before = [...(beforeMembers || [])]
+    .map((m) => ({
+      key: membershipKey(m),
+      userId: String(m?.user?._id || m?.user || ''),
+      confirmed: normalizeConfirmed(m?.confirmed),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  const after = [...(afterMembers || [])]
+    .map((m) => ({
+      key: membershipKey(m),
+      userId: String(m?.user?._id || m?.user || ''),
+      confirmed: normalizeConfirmed(m?.confirmed),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+
+  if (before.length !== after.length) return false;
+
+  for (let i = 0; i < before.length; i += 1) {
+    if (before[i].key !== after[i].key) return false;
+
+    const isSelf = String(after[i].userId) === String(authUserId);
+    if (!isSelf && before[i].confirmed !== after[i].confirmed) return false;
+  }
+
+  return after.some((item, index) =>
+    String(item.userId) === String(authUserId) &&
+    item.confirmed !== before[index].confirmed
+  );
+}
+
 exports.createScale = async (req, res) => {
   try {
     const scale = new Scale({
@@ -205,6 +247,37 @@ exports.updateScale = async (req, res) => {
     const scale = await Scale.findOne({ _id: req.params.id, org: req.orgId });
     if (!scale) return res.status(404).json({ message: 'Escala não encontrada' });
 
+    const authUserId =
+      (req.user && (req.user._id || req.user.id)) ||
+      req.userId ||
+      (req.auth && req.auth.id);
+
+    const orgRole = String(req.orgRole || req.user?.role || '').toLowerCase();
+    const isScheduled = Array.isArray(scale.members) &&
+      scale.members.some((m) => String(m?.user?._id || m?.user) === String(authUserId));
+
+    if (orgRole !== 'coordenador') {
+      if (orgRole === 'dm') {
+        if (!isScheduled) {
+          return res.status(403).json({ message: 'DM só pode editar escalas de eventos em que esteja escalado.' });
+        }
+      } else {
+        const membersPayload = Array.isArray(req.body.members) ? req.body.members : null;
+        const touchedTopLevel =
+          typeof req.body.notes === 'string' ||
+          typeof req.body.eventId !== 'undefined';
+
+        if (
+          !isScheduled ||
+          touchedTopLevel ||
+          !membersPayload ||
+          !isOnlySelfConfirmationUpdate(scale.members, membersPayload, authUserId)
+        ) {
+          return res.status(403).json({ message: 'Usuário comum só pode confirmar ou recusar a própria presença.' });
+        }
+      }
+    }
+
     // ⬇️⬇️⬇️ ALTERAÇÃO CIRÚRGICA: detectar novos **e removidos** membros ⬇️⬇️⬇️
 const beforeUserIds = pickUserIds(scale.members);
 let addedUserIds = [];
@@ -216,9 +289,8 @@ if (req.body.members) {
   removedUserIds = beforeUserIds.filter(id => !afterUserIds.includes(id));
   scale.members = req.body.members;
 }
+
 // ⬆️⬆️⬆️ FIM DA DETECÇÃO ⬆️⬆️⬆️
-
-
     if (typeof req.body.notes === 'string') scale.notes = req.body.notes;
     if (req.body.eventId) scale.eventId = req.body.eventId;
 
