@@ -496,12 +496,17 @@ if (!user || !allowed.includes(orgRole)) {
 
 // 🔒 Regra adicional: DM só pode editar se estiver na escala do evento
 if (orgRole === 'dm') {
+  const authUserId =
+    (user && (user._id || user.id)) ||
+    req.userId ||
+    (req.auth && req.auth.id);
+
   const scale = await Scale.findOne({ eventId: req.params.eventId })
     .select('members.user')
     .lean();
 
   const isInScale = Array.isArray(scale?.members)
-    && scale.members.some(m => String(m.user) === String(user._id));
+    && scale.members.some(m => String(m.user) === String(authUserId));
 
   if (!isInScale) {
     return res.status(403).json({
