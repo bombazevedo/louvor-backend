@@ -262,14 +262,16 @@ exports.updateScale = async (req, res) => {
           return res.status(403).json({ message: 'DM só pode editar escalas de eventos em que esteja escalado.' });
         }
       } else {
-        const membersPayload = Array.isArray(req.body.members) ? req.body.members : null;
-        const touchedTopLevel =
-          typeof req.body.notes === 'string' ||
-          typeof req.body.eventId !== 'undefined';
+         const membersPayload = Array.isArray(req.body.members) ? req.body.members : null;
+        const touchedNotes = typeof req.body.notes === 'string';
+        const touchedEventId =
+          typeof req.body.eventId !== 'undefined' &&
+          String(req.body.eventId) !== String(scale.eventId || '');
 
         if (
           !isScheduled ||
-          touchedTopLevel ||
+          touchedNotes ||
+          touchedEventId ||
           !membersPayload ||
           !isOnlySelfConfirmationUpdate(scale.members, membersPayload, authUserId)
         ) {
