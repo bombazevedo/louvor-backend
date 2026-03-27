@@ -256,6 +256,18 @@ function verifyAppleSignedTransactionPayload({
         decoded?.purchaseDate ||
         decoded?.purchase_date ||
         null,
+      purchase_date_ms:
+        decoded?.purchaseDate ||
+        decoded?.purchase_date ||
+        null,
+      expires_date:
+        decoded?.expiresDate ||
+        decoded?.expires_date ||
+        null,
+      expires_date_ms:
+        decoded?.expiresDate ||
+        decoded?.expires_date ||
+        null,
     },
   };
 }
@@ -293,6 +305,24 @@ function parseApplePurchaseDate(value) {
   return !isNaN(parsed.getTime()) ? parsed : null;
 }
 
+function parseAppleExpiresDate(value) {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d+$/.test(raw)) {
+    const numeric = Number(raw);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      const parsed = new Date(raw.length > 10 ? numeric : numeric * 1000);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+  }
+
+  const parsed = new Date(raw);
+  return !isNaN(parsed.getTime()) ? parsed : null;
+}
+
 async function activateAppleLicenseForOrganization({
   org,
   planCode,
@@ -301,6 +331,7 @@ async function activateAppleLicenseForOrganization({
   transactionId,
   originalTransactionId,
   purchaseDate,
+  expiresDate,
   environment,
 }) {
   const periodKey = getBillingPeriod(billingPeriod);
@@ -318,6 +349,7 @@ async function activateAppleLicenseForOrganization({
   const normalizedOriginalTransactionId =
     originalTransactionId ? String(originalTransactionId) : (normalizedTransactionId || null);
   const parsedPurchaseDate = parseApplePurchaseDate(purchaseDate);
+  const parsedExpiresDate = parseAppleExpiresDate(expiresDate);
 
   const prevPlanCode = String(org.license.plan || 'FREE');
 
@@ -370,10 +402,6 @@ async function activateAppleLicenseForOrganization({
     !isNaN(prevPlanEnd.getTime()) &&
     prevPlanEnd.getTime() > now.getTime();
 
-  // iOS não deve herdar a regra do Android de "comprar o mesmo plano ativo e somar tempo".
-  // No ecossistema Apple, restore/download/reinstalação da mesma assinatura ativa
-  // deve apenas reconciliar a licença existente da mesma cadeia (originalTransactionId),
-  // sem empurrar planEnd para frente.
   const shouldTreatAsAlreadyApplied =
     isSameActivePlan &&
     (
@@ -389,6 +417,10 @@ async function activateAppleLicenseForOrganization({
 
     if (parsedPurchaseDate) {
       org.license.appleLastPurchaseDate = parsedPurchaseDate;
+    }
+
+    if (parsedExpiresDate) {
+      org.license.planEnd = parsedExpiresDate;
     }
 
     if (org.license.pendingPayment != null) {
@@ -432,17 +464,22 @@ async function activateAppleLicenseForOrganization({
     };
   }
 
-  // Apple não deve acumular período neste fluxo de confirmação/restauração.
-  // Compra limpa, reativação após expiração e mudança de plano continuam funcionando,
-  // mas restauração da mesma assinatura ativa deixa de somar tempo indevidamente.
   const canStack = false;
   const baseDate = now;
+
+  const nextPlanStart =
+    parsedPurchaseDate ||
+    now;
+
+  const nextPlanEnd =
+    parsedExpiresDate ||
+    addMonths(baseDate, months);
 
   org.license.plan = String(planCode);
   org.license.billingPeriod = String(periodKey);
   org.license.status = 'active';
-  org.license.planStart = now;
-  org.license.planEnd = addMonths(baseDate, months);
+  org.license.planStart = nextPlanStart;
+  org.license.planEnd = nextPlanEnd;
   org.license.appleProductId = normalizedProductId;
   org.license.appleOriginalTransactionId = normalizedOriginalTransactionId;
   org.license.appleLastTransactionId = normalizedTransactionId;
@@ -1187,6 +1224,10 @@ if (transactionReceipt) {
         appleVerification?.matchedPurchase?.purchase_date_ms ||
         appleVerification?.matchedPurchase?.purchase_date ||
         null,
+      expiresDate:
+        appleVerification?.matchedPurchase?.expires_date_ms ||
+        appleVerification?.matchedPurchase?.expires_date ||
+        null,
       environment: appleVerification.environment || null,
     });
 
@@ -1203,6 +1244,10 @@ if (transactionReceipt) {
         purchaseDate ||
         appleVerification?.matchedPurchase?.purchase_date_ms ||
         appleVerification?.matchedPurchase?.purchase_date ||
+        null,
+      expiresDate:
+        appleVerification?.matchedPurchase?.expires_date_ms ||
+        appleVerification?.matchedPurchase?.expires_date ||
         null,
       environment: appleVerification.environment || null,
       anchorChanged: activationResult.anchorChanged === true,
