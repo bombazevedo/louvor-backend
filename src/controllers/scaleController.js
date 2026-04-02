@@ -447,6 +447,26 @@ function normalizeKey(s = '') {
     .trim();
 }
 
+function toExportAvatarUrl(url = '') {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+
+  // Mantém somente URLs http/https válidas para evitar src quebrado no HTML
+  if (!/^https?:\/\//i.test(raw)) return '';
+
+  // Avatares do Cloudinary: gera thumbnail premium pequena, com boa qualidade,
+  // sem inflar o PDF final. Visual continua bom porque o avatar no layout é pequeno.
+  if (raw.includes('res.cloudinary.com/') && raw.includes('/upload/')) {
+    return raw.replace(
+      '/upload/',
+      '/upload/f_auto,q_auto:good,c_fill,g_face,h_96,w_96,r_max/'
+    );
+  }
+
+  // Para qualquer outro provedor externo, mantém a URL original.
+  return raw;
+}
+
 function functionIconSvg(name) {
   if (!name) return SVG_ICONS.note;
   const n = name.toLowerCase();
@@ -571,18 +591,12 @@ function htmlTemplate({ events, label, coordinatorName, icons = {}, mode = 'full
             ? `<img class="role-icon" src="${roleImg}" />`
             : functionIconSvg(roleName);
           const userName = safe(m.user?.name);
-const avatarRaw = safe(
+const avatar = toExportAvatarUrl(
   m.user?.photoUrl ||
   m.user?.avatarUrl ||
   m.user?.avatar ||
   (m.user?.image && m.user?.image.url)
 );
-
-// 🔧 fallback inteligente para evitar travamento com muitos avatares externos
-const avatar = avatarRaw && avatarRaw.startsWith('http')
-  ? avatarRaw
-  : '';
- // pequeno fallback p/ garantir avatar
 
           // 🔀 Modo simples: só nome + função (sem ícone, sem avatar)
           const roleCell = mode === 'simple'
