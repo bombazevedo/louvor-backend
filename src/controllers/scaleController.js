@@ -571,12 +571,18 @@ function htmlTemplate({ events, label, coordinatorName, icons = {}, mode = 'full
             ? `<img class="role-icon" src="${roleImg}" />`
             : functionIconSvg(roleName);
           const userName = safe(m.user?.name);
-          const avatar = safe(
-            m.user?.photoUrl ||
-            m.user?.avatarUrl ||
-            m.user?.avatar ||
-            (m.user?.image && m.user?.image.url)
-          ); // pequeno fallback p/ garantir avatar
+const avatarRaw = safe(
+  m.user?.photoUrl ||
+  m.user?.avatarUrl ||
+  m.user?.avatar ||
+  (m.user?.image && m.user?.image.url)
+);
+
+// 🔧 fallback inteligente para evitar travamento com muitos avatares externos
+const avatar = avatarRaw && avatarRaw.startsWith('http')
+  ? avatarRaw
+  : '';
+ // pequeno fallback p/ garantir avatar
 
           // 🔀 Modo simples: só nome + função (sem ícone, sem avatar)
           const roleCell = mode === 'simple'
