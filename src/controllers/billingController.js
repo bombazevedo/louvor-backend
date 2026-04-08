@@ -4,11 +4,70 @@ const { createPagarmeClient } = require('../services/pagarmeClient');
 const { addMonths, startOfNow } = require('../utils/dateUtils');
 const { getBillingPeriod, getPriceCents } = require('../utils/planCatalog');
 
-const APPLE_PRODUCT_ID = 'com.worshiphub.plan1.monthly';
-const APPLE_PRODUCT_CONFIG = {
+	const APPLE_PRODUCT_CONFIG = {
   'com.worshiphub.plan1.monthly': {
     planCode: '1',
     billingPeriod: 'MONTHLY',
+  },
+  'com.worshiphub.plan1.quarterly': {
+    planCode: '1',
+    billingPeriod: 'QUARTERLY',
+  },
+  'com.worshiphub.plan1.yearly': {
+    planCode: '1',
+    billingPeriod: 'YEARLY',
+  },
+
+  'com.worshiphub.plan2.monthly': {
+    planCode: '2',
+    billingPeriod: 'MONTHLY',
+  },
+  'com.worshiphub.plan2.quarterly': {
+    planCode: '2',
+    billingPeriod: 'QUARTERLY',
+  },
+  'com.worshiphub.plan2.yearly': {
+    planCode: '2',
+    billingPeriod: 'YEARLY',
+  },
+
+  'com.worshiphub.plan3.monthly': {
+    planCode: '3',
+    billingPeriod: 'MONTHLY',
+  },
+  'com.worshiphub.plan3.quarterly': {
+    planCode: '3',
+    billingPeriod: 'QUARTERLY',
+  },
+  'com.worshiphub.plan3.yearly': {
+    planCode: '3',
+    billingPeriod: 'YEARLY',
+  },
+
+  'com.worshiphub.plan4.monthly': {
+    planCode: '4',
+    billingPeriod: 'MONTHLY',
+  },
+  'com.worshiphub.plan4.quarterly': {
+    planCode: '4',
+    billingPeriod: 'QUARTERLY',
+  },
+  'com.worshiphub.plan4.yearly': {
+    planCode: '4',
+    billingPeriod: 'YEARLY',
+  },
+
+  'com.worshiphub.plan5.monthly': {
+    planCode: '5',
+    billingPeriod: 'MONTHLY',
+  },
+  'com.worshiphub.plan5.quarterly': {
+    planCode: '5',
+    billingPeriod: 'QUARTERLY',
+  },
+  'com.worshiphub.plan5.yearly': {
+    planCode: '5',
+    billingPeriod: 'YEARLY',
   },
 };
 
@@ -119,7 +178,7 @@ function extractAppleReceiptItems(verifyData) {
 }
 
 async function verifyAppleReceiptWithApple({ transactionReceipt, transactionId, productId }) {
-  const expectedProductId = String(productId || APPLE_PRODUCT_ID);
+  const expectedProductId = String(productId || '');
 
   if (!transactionReceipt) {
     return {
@@ -344,7 +403,7 @@ async function activateAppleLicenseForOrganization({
   org.license = org.license || {};
 
   const now = startOfNow();
-  const normalizedProductId = String(productId || APPLE_PRODUCT_ID);
+  const normalizedProductId = String(productId || '');
   const normalizedTransactionId = transactionId ? String(transactionId) : null;
   const normalizedOriginalTransactionId =
     originalTransactionId ? String(originalTransactionId) : (normalizedTransactionId || null);
@@ -471,9 +530,12 @@ async function activateAppleLicenseForOrganization({
     parsedPurchaseDate ||
     now;
 
-  const nextPlanEnd =
-    parsedExpiresDate ||
-    addMonths(baseDate, months);
+const nextPlanEnd =
+  parsedExpiresDate || null;
+
+if (!nextPlanEnd) {
+  throw new Error('APPLE_EXPIRES_DATE_REQUIRED');
+}
 
   org.license.plan = String(planCode);
   org.license.billingPeriod = String(periodKey);
@@ -1153,7 +1215,7 @@ if (!transactionReceipt && !signedTransactionInfo) {
     message: 'Missing transactionReceipt or signedTransactionInfo',
   });
 }
-    if (!normalizedProductId || !appleProductConfig || normalizedProductId !== APPLE_PRODUCT_ID) {
+        if (!normalizedProductId || !appleProductConfig) {
       return res.status(400).json({
         error: 'INVALID_APPLE_PRODUCT',
         message: 'O productId Apple informado é inválido para este fluxo.',
@@ -1269,10 +1331,17 @@ if (transactionReceipt) {
 
   } catch (err) {
     console.error('[billingController.confirmApplePurchase] error:', err?.response?.data || err);
+
+    if (err?.message === 'APPLE_EXPIRES_DATE_REQUIRED') {
+      return res.status(400).json({
+        error: 'APPLE_EXPIRES_DATE_REQUIRED',
+        message: 'A Apple não retornou a data de expiração necessária para confirmar esta assinatura.',
+      });
+    }
+
     return res.status(500).json({
       error: 'Failed to confirm Apple purchase',
     });
   }
 }
-
 module.exports = { subscribe, catalog, checkout, landingCheckout, confirmApplePurchase };
