@@ -7,6 +7,8 @@ const Team = require('../models/Team');
 const { getEntitlementsFor } = require('../utils/entitlements'); // ✅ adição pontual
 const { getOwnerOrgsPlanState } = require('../utils/orgPlanUtils');
 const { getPlanLabel } = require('../utils/planCatalog'); // ✅ NOVO (nome fantasia)
+const User = require('../models/User');
+const { syncTrialContactToBrevo } = require('../services/brevoService');
 
 const slugify = (s) => s.normalize('NFKD')
   .replace(/[\u0300-\u036f]/g, '')
@@ -112,9 +114,20 @@ exports.createOrg = async (req, res) => {
       license: licensePayload,
     });
 
-    await OrgMember.create({ org: org._id, user: ownerId, role: 'coordenador' });
+await OrgMember.create({ org: org._id, user: ownerId, role: 'coordenador' });
 
-    res.status(201).json({ org });
+if (shouldBeBillingAnchor && org?.license?.status === 'trial') {
+  const ownerUser = await User.findById(ownerId).select('name email').lean();
+
+  syncTrialContactToBrevo({
+    user: ownerUser,
+    org,
+  }).catch((err) => {
+    console.warn('[createOrg] Brevo sync async error:', err?.message || err);
+  });
+}
+
+res.status(201).json({ org });
   } catch (err) {
     console.error('[createOrg] err', err);
     res.status(500).json({ error: 'CREATE_ORG_ERROR' });
