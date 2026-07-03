@@ -3,6 +3,7 @@ const Scale = require('../models/Scale');
 const Event = require('../models/Event');
 const moment = require('moment');
 const puppeteer = require('puppeteer');
+const { getExportInstrumentIcon } = require('../utils/exportInstrumentIcons');
 
 // ⬇️⬇️⬇️ ALTERAÇÕES CIRÚRGICAS (imports de notificação/push) ⬇️⬇️⬇️
 const Notification = require('../models/Notification');
@@ -586,11 +587,17 @@ function htmlTemplate({ events, label, coordinatorName, icons = {}, mode = 'full
       ? members.map(m => {
           const roleName = safe(m.function?.name);
           const iconKey = normalizeKey(roleName);
-          const roleImg = icons[iconKey];
+          const roleImg =
+            icons[iconKey] ||
+            getExportInstrumentIcon(iconKey) ||
+            getExportInstrumentIcon(roleName);
+
           const roleIconHtml = roleImg
             ? `<img class="role-icon" src="${roleImg}" />`
             : functionIconSvg(roleName);
+
           const userName = safe(m.user?.name);
+
 const avatar = toExportAvatarUrl(
   m.user?.photoUrl ||
   m.user?.avatarUrl ||
