@@ -14,12 +14,22 @@ const NotificationSchema = new Schema(
       index: true,
     },
 
+    // --- Organização da notificação ---
+    // Campo já usado pelos controllers/filtros multi-igrejas; declarar no schema garante persistência real.
+    org: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      index: true,
+      default: null,
+    },
+
     // --- Conteúdo principal (compatível com o seu front) ---
     title: {
       type: String,
       required: true,
       trim: true,
     },
+
     message: {
       type: String,
       required: true,

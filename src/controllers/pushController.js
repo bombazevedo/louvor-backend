@@ -114,16 +114,66 @@ exports.sendTest = async (req, res, next) => {
   try {
     const { userIds = [], title = 'Teste', body = 'Notificação de teste', data = {} } = req.body;
 
-    const query = userIds.length ? { user: { $in: userIds } } : {};
-    const tokens = (await DeviceToken.find(query).select('token -_id')).map(t => t.token);
+    // 🔒 Blindagem compatível: remove userIds vazios/duplicados sem alterar o contrato da rota.
+    const requestedUserIds = Array.isArray(userIds)
+      ? [...new Set(userIds.filter(Boolean).map((id) => String(id)))]
+      : [];
+
+    const query = requestedUserIds.length ? { user: { $in: requestedUserIds } } : {};
+
+    const tokenDocs = await DeviceToken.find(query)
+      .select('user token platform -_id')
+      .lean();
+
+    // 🔒 Blindagem compatível: evita push duplicado para o mesmo token.
+    const tokens = [
+      ...new Set(
+        tokenDocs
+          .map((doc) => doc?.token)
+          .filter(Boolean)
+      )
+    ];
+
+    const usersWithTokenSet = new Set(
+      tokenDocs
+        .map((doc) => doc?.user)
+        .filter(Boolean)
+        .map((id) => String(id))
+    );
+
+    const usersWithoutToken = requestedUserIds.filter(
+      (id) => !usersWithTokenSet.has(String(id))
+    );
+
+    // 🧾 Log mínimo, sem expor tokens.
+    console.log('[push/test] diagnóstico:', {
+      requestedUsers: requestedUserIds.length,
+      tokenDocs: tokenDocs.length,
+      uniqueTokens: tokens.length,
+      usersWithToken: usersWithTokenSet.size,
+      usersWithoutToken: usersWithoutToken.length,
+    });
 
     // 🔧 Evita chamar provedor quando não há tokens
     if (!tokens.length) {
-      return res.json({ sent: 0, result: { successCount: 0, failureCount: 0, responses: [] } });
+      return res.json({
+        sent: 0,
+        result: { successCount: 0, failureCount: 0, responses: [] },
+        requestedUsers: requestedUserIds.length,
+        usersWithToken: usersWithTokenSet.size,
+        usersWithoutToken: usersWithoutToken.length,
+      });
     }
 
     const result = await sendToTokens(tokens, { title, body, data });
-    res.json({ sent: tokens.length, result });
+
+    return res.json({
+      sent: tokens.length,
+      result,
+      requestedUsers: requestedUserIds.length,
+      usersWithToken: usersWithTokenSet.size,
+      usersWithoutToken: usersWithoutToken.length,
+    });
   } catch (err) {
     next(err);
   }
