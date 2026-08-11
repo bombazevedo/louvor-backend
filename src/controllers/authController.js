@@ -66,7 +66,7 @@ exports.loginUser = async (req, res) => {
 
 // 📋 Registro
 exports.registerUser = async (req, res) => {
-  const { name, email, password, role } = req.body || {};
+  const { name, email, phone, password, role } = req.body || {};
   try {
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Campos obrigatórios ausentes' });
@@ -79,6 +79,7 @@ exports.registerUser = async (req, res) => {
     user = new User({
       name,
       email,
+      phone,
       password: hashed,
       role: (role || 'usuario').toLowerCase()
     });
