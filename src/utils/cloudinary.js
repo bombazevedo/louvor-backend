@@ -14,9 +14,15 @@ const allowedMimeTypes = [
   "application/octet-stream",
   "application/zip",
   "audio/mpeg",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+  "text/plain",
   "image/jpeg",
   "image/png",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ];
 
 function resolveResourceType(mimeType) {
