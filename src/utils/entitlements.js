@@ -203,7 +203,7 @@ const PLAN_MATRIX = {
       teamsPerOrg: 15,
       membersPerTeam: null,
       repertoireHistoryDays: 365,
-      dmsPerOrg: 10,
+      dmsPerOrg: null,
       orgsPerOwner: 5,
     },
   },
